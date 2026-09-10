@@ -1,0 +1,133 @@
+{
+  "engine only": {
+    "accuracy": 0.6610169491525424,
+    "uar": 0.6537037037037037,
+    "macro_f1": 0.6286337825239426,
+    "confusion": {
+      "disgust": {
+        "disgust": 13,
+        "neutral": 3,
+        "fearful": 1,
+        "angry": 3
+      },
+      "happy": {
+        "happy": 16,
+        "neutral": 4
+      },
+      "angry": {
+        "angry": 18,
+        "neutral": 1,
+        "disgust": 1
+      },
+      "neutral": {
+        "neutral": 20
+      },
+      "fearful": {
+        "fearful": 4,
+        "sad": 8,
+        "neutral": 3,
+        "angry": 3
+      },
+      "sad": {
+        "neutral": 6,
+        "angry": 1,
+        "happy": 4,
+        "disgust": 2,
+        "sad": 7
+      }
+    }
+  },
+  "full pipeline": {
+    "accuracy": 0.652542372881356,
+    "uar": 0.6462962962962963,
+    "macro_f1": 0.6195189011045789,
+    "confusion": {
+      "disgust": {
+        "angry": 4,
+        "disgust": 11,
+        "neutral": 3,
+        "happy": 1,
+        "fearful": 1
+      },
+      "happy": {
+        "happy": 17,
+        "neutral": 3
+      },
+      "angry": {
+        "angry": 18,
+        "neutral": 1,
+        "disgust": 1
+      },
+      "neutral": {
+        "neutral": 20
+      },
+      "fearful": {
+        "fearful": 5,
+        "sad": 7,
+        "neutral": 3,
+        "angry": 3
+      },
+      "sad": {
+        "neutral": 6,
+        "angry": 1,
+        "happy": 4,
+        "disgust": 2,
+        "sad": 6,
+        "fearful": 1
+      }
+    }
+  },
+  "pipeline + headline policy": {
+    "accuracy": 0.652542372881356,
+    "uar": 0.6462962962962963,
+    "macro_f1": 0.6195189011045789,
+    "confusion": {
+      "disgust": {
+        "angry": 4,
+        "disgust": 11,
+        "neutral": 3,
+        "happy": 1,
+        "fearful": 1
+      },
+      "happy": {
+        "happy": 17,
+        "neutral": 3
+      },
+      "angry": {
+        "angry": 18,
+        "neutral": 1,
+        "disgust": 1
+      },
+      "neutral": {
+        "neutral": 20
+      },
+      "fearful": {
+        "fearful": 5,
+        "sad": 7,
+        "neutral": 3,
+        "angry": 3
+      },
+      "sad": {
+        "neutral": 6,
+        "angry": 1,
+        "happy": 4,
+        "disgust": 2,
+        "sad": 6,
+        "fearful": 1
+      }
+    }
+  },
+  "meta": {
+    "engine": "emotion2vec+ base",
+    "clips_scored": 118,
+    "clips_skipped_by_vad": [
+      "1010_IEO_FEA_HI.wav",
+      "1024_TSI_FEA_XX.wav"
+    ],
+    "calibration": {
+      "temperature": 1.5,
+      "blend": 0.06,
+      "strength": 1.2
+    }
+  }
+}

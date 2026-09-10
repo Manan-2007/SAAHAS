@@ -1,0 +1,100 @@
+{
+  "engine only": {
+    "accuracy": 0.660377358490566,
+    "uar": 0.6368826477959605,
+    "macro_f1": 0.6282154882154882,
+    "confusion": {
+      "disgust": {
+        "angry": 4,
+        "disgust": 7,
+        "sad": 1,
+        "neutral": 5
+      },
+      "happy": {
+        "happy": 14,
+        "neutral": 5
+      },
+      "angry": {
+        "angry": 19,
+        "neutral": 1
+      },
+      "neutral": {
+        "neutral": 19
+      },
+      "fearful": {
+        "fearful": 5,
+        "happy": 2,
+        "sad": 4,
+        "neutral": 5,
+        "disgust": 1
+      },
+      "sad": {
+        "neutral": 6,
+        "angry": 1,
+        "sad": 6,
+        "happy": 1
+      }
+    }
+  },
+  "full pipeline": {
+    "accuracy": 0.6698113207547169,
+    "uar": 0.6466865693645879,
+    "macro_f1": 0.6446405369926397,
+    "confusion": {
+      "disgust": {
+        "angry": 4,
+        "disgust": 7,
+        "neutral": 6
+      },
+      "happy": {
+        "happy": 14,
+        "neutral": 5
+      },
+      "angry": {
+        "angry": 19,
+        "neutral": 1
+      },
+      "neutral": {
+        "neutral": 19
+      },
+      "fearful": {
+        "fearful": 6,
+        "happy": 2,
+        "sad": 3,
+        "neutral": 5,
+        "disgust": 1
+      },
+      "sad": {
+        "neutral": 6,
+        "angry": 1,
+        "sad": 6,
+        "happy": 1
+      }
+    }
+  },
+  "meta": {
+    "engine": "emotion2vec+ base",
+    "clips_scored": 106,
+    "clips_skipped_by_vad": [
+      "1009_IEO_SAD_LO.wav",
+      "1011_ITH_SAD_XX.wav",
+      "1017_DFA_DIS_XX.wav",
+      "1024_IWW_NEU_XX.wav",
+      "1028_TSI_DIS_XX.wav",
+      "1054_IEO_SAD_MD.wav",
+      "1055_IEO_DIS_LO.wav",
+      "1055_IEO_FEA_MD.wav",
+      "1063_IEO_SAD_HI.wav",
+      "1066_IEO_HAP_LO.wav",
+      "1066_TSI_SAD_XX.wav",
+      "1068_IEO_FEA_LO.wav",
+      "1076_IEO_SAD_LO.wav",
+      "1079_IEO_FEA_MD.wav"
+    ],
+    "calibration": {
+      "temperature": 1.5,
+      "blend": 0.06,
+      "strength": 1.2
+    }
+  }
+}

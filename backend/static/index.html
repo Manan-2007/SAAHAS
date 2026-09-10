@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Voice Emotion Detection</title>
+  <style>
+    :root {
+      --primary: #c8a97e;
+      --primary-deep: #ab8a5c;
+      --secondary: #837562;
+      --tertiary: #9fafca;
+      --neutral: #f5f1e8;
+      --ink: #352e24;
+      --body-text: #5c5142;
+      --muted: #8a7d68;
+      --glass: rgba(255, 255, 255, 0.42);
+      --glass-strong: rgba(255, 255, 255, 0.6);
+      --glass-border: rgba(255, 255, 255, 0.65);
+      --glass-shadow: 0 8px 32px rgba(131, 117, 98, 0.16);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--neutral);
+      color: var(--body-text);
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* Ambient background blobs */
+    .blob {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(90px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .blob-1 { width: 520px; height: 520px; top: -140px; left: -120px; background: rgba(200, 169, 126, 0.5); animation: drift1 22s ease-in-out infinite alternate; }
+    .blob-2 { width: 460px; height: 460px; bottom: -160px; right: -120px; background: rgba(159, 175, 202, 0.48); animation: drift2 26s ease-in-out infinite alternate; }
+    .blob-3 { width: 380px; height: 380px; top: 42%; left: 58%; background: rgba(131, 117, 98, 0.24); animation: drift3 30s ease-in-out infinite alternate; }
+
+    @keyframes drift1 { to { transform: translate(70px, 50px); } }
+    @keyframes drift2 { to { transform: translate(-60px, -50px); } }
+    @keyframes drift3 { to { transform: translate(-80px, 40px); } }
+
+    .container { position: relative; z-index: 1; max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+
+    /* Nav */
+    nav {
+      position: sticky;
+      top: 16px;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 16px;
+      padding: 12px 22px;
+      background: var(--glass);
+      backdrop-filter: blur(20px) saturate(140%);
+      -webkit-backdrop-filter: blur(20px) saturate(140%);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      box-shadow: var(--glass-shadow);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      font-weight: 700;
+      font-size: 16.5px;
+      color: var(--ink);
+      letter-spacing: 0.2px;
+    }
+
+    .brand-orb {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #d9bf97 0%, #a99578 52%, var(--tertiary) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: inset 0 -3px 6px rgba(131, 117, 98, 0.4), inset 0 3px 5px rgba(255, 255, 255, 0.5), 0 3px 8px rgba(131, 117, 98, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+
+    .brand-orb span {
+      width: 2.5px; height: 9px;
+      border-radius: 999px;
+      background: #fffdf7;
+      box-shadow: 0 0 3px rgba(255, 255, 255, 0.9);
+    }
+
+    .nav-links { display: flex; gap: 8px; }
+
+    .nav-links a {
+      color: var(--body-text);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 10px;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .nav-links a:hover { background: rgba(255, 255, 255, 0.5); color: var(--ink); }
+
+    /* Hero */
+    .hero { padding: 92px 0 56px; text-align: center; }
+
+    .hero-badge {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1.6px;
+      text-transform: uppercase;
+      color: var(--secondary);
+      background: var(--glass-strong);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--glass-border);
+      border-radius: 999px;
+      padding: 8px 18px;
+      margin-bottom: 28px;
+      box-shadow: var(--glass-shadow);
+    }
+
+    h1 {
+      font-family: "New York", ui-serif, Georgia, "Times New Roman", serif;
+      font-size: clamp(36px, 5.6vw, 60px);
+      font-weight: 600;
+      line-height: 1.14;
+      letter-spacing: -0.8px;
+      color: var(--ink);
+      max-width: 800px;
+      margin: 0 auto 22px;
+    }
+
+    h1 .grad {
+      background: linear-gradient(100deg, var(--primary-deep), var(--primary) 45%, var(--tertiary));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      font-style: italic;
+    }
+
+    .hero p {
+      color: var(--muted);
+      font-size: 18px;
+      max-width: 620px;
+      margin: 0 auto 38px;
+    }
+
+    .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #d5b990, var(--primary-deep));
+      color: #33291a;
+      font-weight: 700;
+      font-size: 15.5px;
+      padding: 14px 30px;
+      border-radius: 12px;
+      text-decoration: none;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      transition: transform 0.15s, box-shadow 0.15s;
+      box-shadow: 0 10px 30px rgba(200, 169, 126, 0.45);
+    }
+
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 14px 36px rgba(200, 169, 126, 0.55); }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      color: var(--ink);
+      font-weight: 600;
+      font-size: 15.5px;
+      padding: 14px 26px;
+      border-radius: 12px;
+      border: 1px solid var(--glass-border);
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      text-decoration: none;
+      box-shadow: var(--glass-shadow);
+      transition: background 0.2s, transform 0.15s;
+    }
+
+    .btn-secondary:hover { background: var(--glass-strong); transform: translateY(-2px); }
+
+    /* Decorative hero orb */
+    .hero-orb-wrap { display: flex; justify-content: center; padding: 58px 0 8px; }
+
+    .orb {
+      position: relative;
+      width: 170px; height: 170px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+    }
+
+    .orb-glow {
+      position: absolute;
+      inset: 8px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(200, 169, 126, 0.55) 0%, rgba(159, 175, 202, 0.3) 55%, transparent 75%);
+      filter: blur(22px);
+      animation: glowPulse 4s ease-in-out infinite;
+    }
+
+    @keyframes glowPulse {
+      0%, 100% { opacity: 0.65; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.08); }
+    }
+
+    .orb-core {
+      position: relative;
+      width: 140px; height: 140px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(217, 191, 151, 0.96) 0%, rgba(174, 153, 124, 0.94) 42%, rgba(159, 175, 202, 0.96) 85%);
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      box-shadow:
+        inset 0 -12px 26px rgba(125, 146, 182, 0.42),
+        inset 0 10px 20px rgba(255, 255, 255, 0.45),
+        0 16px 36px rgba(131, 117, 98, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      overflow: hidden;
+      animation: orbFloat 4s ease-in-out infinite;
+    }
+
+    @keyframes orbFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-12px); }
+    }
+
+    .orb-sheen {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: linear-gradient(160deg, rgba(255, 255, 255, 0.5) 0%, transparent 42%);
+      pointer-events: none;
+    }
+
+    .orb-spec {
+      position: absolute;
+      top: 14px; left: 26px;
+      width: 46px; height: 20px;
+      background: rgba(255, 255, 255, 0.4);
+      border-radius: 999px;
+      filter: blur(7px);
+      transform: rotate(-38deg);
+      pointer-events: none;
+    }
+
+    .orb-eye {
+      width: 8px; height: 34px;
+      border-radius: 999px;
+      background: #fffdf7;
+      box-shadow: 0 0 10px rgba(255, 255, 255, 0.85);
+      transition: transform 0.15s ease;
+    }
+
+    .orb.blink .orb-eye { transform: scaleY(0.08); }
+
+    .hero-orb-caption {
+      text-align: center;
+      color: var(--muted);
+      font-size: 13.5px;
+      margin-bottom: 26px;
+    }
+
+    /* Stats */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      padding: 26px 0 70px;
+    }
+
+    .glass-card {
+      background: var(--glass);
+      backdrop-filter: blur(20px) saturate(140%);
+      -webkit-backdrop-filter: blur(20px) saturate(140%);
+      border: 1px solid var(--glass-border);
+      border-radius: 18px;
+      box-shadow: var(--glass-shadow);
+    }
+
+    .stat { padding: 26px; text-align: center; }
+    .stat .num { font-family: "New York", ui-serif, Georgia, serif; font-size: 34px; font-weight: 600; color: var(--ink); }
+    .stat .lbl { color: var(--muted); font-size: 14px; margin-top: 4px; }
+
+    /* Sections */
+    section { padding: 58px 0; }
+
+    .eyebrow {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1.8px;
+      text-transform: uppercase;
+      color: var(--primary-deep);
+      margin-bottom: 10px;
+    }
+
+    h2 {
+      font-family: "New York", ui-serif, Georgia, serif;
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: -0.4px;
+      color: var(--ink);
+      margin-bottom: 12px;
+    }
+
+    .section-sub { color: var(--muted); max-width: 600px; margin-bottom: 38px; }
+
+    .emotion-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .emotion-card {
+      padding: 22px;
+      transition: transform 0.18s, box-shadow 0.18s;
+    }
+
+    .emotion-card:hover { transform: translateY(-4px); box-shadow: 0 14px 40px rgba(131, 117, 98, 0.22); }
+
+    .emotion-dot { width: 12px; height: 12px; border-radius: 50%; margin-bottom: 14px; box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.45); }
+
+    .emotion-card h3 { font-size: 16.5px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
+    .emotion-card p { color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+    .step { padding: 26px; }
+
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px; height: 34px;
+      border-radius: 10px;
+      background: rgba(200, 169, 126, 0.25);
+      border: 1px solid rgba(200, 169, 126, 0.4);
+      color: var(--primary-deep);
+      font-weight: 800;
+      font-size: 15px;
+      margin-bottom: 16px;
+    }
+
+    .step h3 { font-size: 16.5px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+    .step p { color: var(--muted); font-size: 14px; }
+
+    footer {
+      border-top: 1px solid rgba(131, 117, 98, 0.2);
+      margin-top: 26px;
+      padding: 30px 0 42px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13.5px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    @media (max-width: 800px) {
+      .emotion-grid { grid-template-columns: repeat(2, 1fr); }
+      .steps, .stats { grid-template-columns: 1fr; }
+      .nav-links { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+
+  <div class="container">
+    <nav>
+      <div class="brand">
+        <div class="brand-orb"><span></span><span></span></div>
+        Voice Emotion Detection
+      </div>
+      <div class="nav-links">
+        <a href="/app">Live Experience</a>
+        <a href="/docs">API Reference</a>
+      </div>
+    </nav>
+
+    <div class="hero">
+      <div class="hero-badge">Deep Learning &middot; Speech Analysis</div>
+      <h1>Understand the <span class="grad">emotion</span> behind every voice, in real time</h1>
+      <p>
+        Speak, and an ambient orb assistant listens and reacts as the emotion2vec+
+        foundation model - trained on 42,500 hours of real emotional speech -
+        classifies the emotional tone of your voice, checked in real time by a
+        second model trained on natural conversation.
+      </p>
+      <div class="cta-row">
+        <a class="btn-primary" href="/app">
+          Start Live Experience
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+        <a class="btn-secondary" href="/docs">Explore the API</a>
+      </div>
+
+      <div class="hero-orb-wrap">
+        <a class="orb" id="hero-orb" href="/app" aria-label="Open the live experience">
+          <div class="orb-glow"></div>
+          <div class="orb-core">
+            <div class="orb-sheen"></div>
+            <div class="orb-spec"></div>
+            <div class="orb-eye"></div>
+            <div class="orb-eye"></div>
+          </div>
+        </a>
+      </div>
+      <div class="hero-orb-caption">Meet the orb &mdash; it listens, thinks, and reacts while you speak.</div>
+    </div>
+
+    <div class="stats">
+      <div class="glass-card stat"><div class="num">8</div><div class="lbl">Recognizable emotions</div></div>
+      <div class="glass-card stat"><div class="num">42,500h</div><div class="lbl">Real speech behind the emotion model</div></div>
+      <div class="glass-card stat"><div class="num">&lt;1s</div><div class="lbl">Prediction latency while you speak</div></div>
+    </div>
+
+    <section id="emotions">
+      <div class="eyebrow">Capabilities</div>
+      <h2>Eight emotions, one model</h2>
+      <p class="section-sub">
+        The classifier maps the acoustic signature of your speech onto eight emotional
+        states, each with a confidence score updated continuously as you talk.
+      </p>
+      <div class="emotion-grid">
+        <div class="glass-card emotion-card"><div class="emotion-dot" style="background:#b3654a"></div><h3>Angry</h3><p>Elevated intensity and sharp, forceful articulation.</p></div>
+        <div class="glass-card emotion-card"><div class="emotion-dot" style="background:#9fafca"></div><h3>Calm</h3><p>Low arousal with a steady, even delivery.</p></div>
+        <div class="glass-card emotion-card"><div class="emotion-dot" style="background:#999465"></div><h3>Disgust</h3><p>Tense phonation and a strained vocal quality.</p></div>
+        <div class="glass-card emotion-card"><div class="emotion-dot" style="background:#9484ad"></div><h3>Fearful</h3><p>Tremulous pitch and hurried, unsteady pacing.</p></div>
+        <div class="glass-card emotion-card"><div class="emotion-dot" style="background:#c8a97e"></div><h3>Happy</h3><p>Bright timbre with rising, energetic intonation.</p></div>
+        <div class="glass-card emotion-card"><div class="emotion-dot" style="background:#837562"></div><h3>Neutral</h3><p>Baseline delivery with balanced prosody.</p></div>
+        <div class="glass-card emotion-card"><div class="emotion-dot" style="background:#7d92b6"></div><h3>Sad</h3><p>Lowered pitch, reduced energy, slower tempo.</p></div>
+        <div class="glass-card emotion-card"><div class="emotion-dot" style="background:#bb8a9c"></div><h3>Surprised</h3><p>Sudden pitch shifts and raised vocal energy.</p></div>
+      </div>
+    </section>
+
+    <section id="how">
+      <div class="eyebrow">Under the hood</div>
+      <h2>How it works</h2>
+      <p class="section-sub">
+        Audio never leaves your machine &mdash; the browser streams your microphone to a
+        local FastAPI server, which analyzes it on the fly.
+      </p>
+      <div class="steps">
+        <div class="glass-card step">
+          <div class="step-num">1</div>
+          <h3>Capture</h3>
+          <p>The Web Audio API streams raw microphone samples to the server over a WebSocket connection with no recording step.</p>
+        </div>
+        <div class="glass-card step">
+          <div class="step-num">2</div>
+          <h3>Segment</h3>
+          <p>A neural voice activity detector marks where speech begins and ends, closing each utterance at a natural pause so the models score complete phrases.</p>
+        </div>
+        <div class="glass-card step">
+          <div class="step-num">3</div>
+          <h3>Classify</h3>
+          <p>Two emotion models score the utterance together while a third measures arousal and valence, and the fused result is returned with an honest confidence.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div>Voice Emotion Detection &mdash; Speech Emotion Recognition System</div>
+      <div>FastAPI &middot; PyTorch &middot; Silero VAD &middot; Librosa &middot; Web Audio API</div>
+    </footer>
+  </div>
+
+  <script>
+    // Random blinking for the decorative hero orb
+    const heroOrb = document.getElementById('hero-orb');
+    (function scheduleBlink() {
+      setTimeout(() => {
+        heroOrb.classList.add('blink');
+        setTimeout(() => heroOrb.classList.remove('blink'), 150);
+        scheduleBlink();
+      }, Math.random() * 3000 + 3000);
+    })();
+  </script>
+</body>
+</html>

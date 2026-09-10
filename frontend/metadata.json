@@ -1,0 +1,6 @@
+{
+  "name": "SAHAAS - Empathetic Sanctuary",
+  "description": "A trauma-informed sanctuary app providing confidential support, safe check-ins, well-being tracking, legal preparation, and empathetic care.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

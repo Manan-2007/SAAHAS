@@ -1,0 +1,34 @@
+# Core requirements
+fastapi>=0.115
+uvicorn>=0.30
+websockets>=12.0
+python-multipart>=0.0.9
+
+# Machine Learning (TF >=2.16 required for Python 3.12)
+tensorflow>=2.16
+
+# Emotion foundation model (emotion2vec+ via FunASR)
+funasr>=1.2
+torch>=2.1
+torchaudio>=2.1
+
+# Dimensional model (audeering) + ensemble member (Odyssey WavLM)
+transformers>=5.0
+huggingface_hub>=0.20
+safetensors>=0.4
+
+# ASR + text-emotion branch
+faster-whisper>=1.0
+
+# Audio processing
+silero-vad>=5.1
+librosa>=0.10
+resampy>=0.4
+soundfile>=0.12
+audioread>=3.0
+numpy
+scikit-learn>=1.4
+joblib
+
+# Audio file support
+pydub>=0.25

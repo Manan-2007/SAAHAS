@@ -1,0 +1,142 @@
+{
+  "engine only": {
+    "accuracy": 0.6610169491525424,
+    "uar": 0.6537037037037037,
+    "macro_f1": 0.6286337825239426,
+    "confusion": {
+      "disgust": {
+        "disgust": 13,
+        "neutral": 3,
+        "fearful": 1,
+        "angry": 3
+      },
+      "happy": {
+        "happy": 16,
+        "neutral": 4
+      },
+      "angry": {
+        "angry": 18,
+        "neutral": 1,
+        "disgust": 1
+      },
+      "neutral": {
+        "neutral": 20
+      },
+      "fearful": {
+        "fearful": 4,
+        "sad": 8,
+        "neutral": 3,
+        "angry": 3
+      },
+      "sad": {
+        "neutral": 6,
+        "angry": 1,
+        "happy": 4,
+        "disgust": 2,
+        "sad": 7
+      }
+    }
+  },
+  "full pipeline": {
+    "accuracy": 0.3813559322033898,
+    "uar": 0.3796296296296296,
+    "macro_f1": 0.31188922586772055,
+    "confusion": {
+      "disgust": {
+        "neutral": 6,
+        "surprised": 2,
+        "sad": 7,
+        "angry": 4,
+        "happy": 1
+      },
+      "happy": {
+        "fearful": 4,
+        "surprised": 3,
+        "neutral": 8,
+        "angry": 4,
+        "disgust": 1
+      },
+      "angry": {
+        "fearful": 3,
+        "angry": 9,
+        "neutral": 4,
+        "surprised": 2,
+        "happy": 1,
+        "disgust": 1
+      },
+      "neutral": {
+        "neutral": 15,
+        "sad": 5
+      },
+      "fearful": {
+        "angry": 2,
+        "fearful": 5,
+        "neutral": 5,
+        "sad": 6
+      },
+      "sad": {
+        "sad": 16,
+        "neutral": 4
+      }
+    }
+  },
+  "pipeline + headline policy": {
+    "accuracy": 0.3898305084745763,
+    "uar": 0.38611111111111107,
+    "macro_f1": 0.3171463114850796,
+    "confusion": {
+      "disgust": {
+        "neutral": 6,
+        "surprised": 2,
+        "sad": 7,
+        "angry": 4,
+        "happy": 1
+      },
+      "happy": {
+        "fearful": 3,
+        "surprised": 3,
+        "neutral": 8,
+        "angry": 5,
+        "happy": 1
+      },
+      "angry": {
+        "angry": 11,
+        "neutral": 4,
+        "fearful": 2,
+        "surprised": 2,
+        "happy": 1
+      },
+      "neutral": {
+        "neutral": 15,
+        "sad": 5
+      },
+      "fearful": {
+        "angry": 2,
+        "fearful": 3,
+        "neutral": 7,
+        "sad": 6
+      },
+      "sad": {
+        "sad": 16,
+        "neutral": 4
+      }
+    }
+  },
+  "meta": {
+    "engine": "emotion2vec+ base",
+    "dimensional": "audeering w2v2 MSP-Dim",
+    "ensemble": "Odyssey WavLM (e2v weight 0.0)",
+    "e2v_weight": 0.0,
+    "valence_strength": 0.5,
+    "clips_scored": 118,
+    "clips_skipped_by_vad": [
+      "1010_IEO_FEA_HI.wav",
+      "1024_TSI_FEA_XX.wav"
+    ],
+    "calibration": {
+      "temperature": 1.5,
+      "blend": 0.06,
+      "strength": 1.2
+    }
+  }
+}
