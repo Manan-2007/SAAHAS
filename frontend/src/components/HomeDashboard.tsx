@@ -22,7 +22,7 @@ import {
 import { AppView, LanguageCode, WellBeingMetric } from '../types';
 import { TRANSLATIONS } from '../data/mockData';
 import { useAuth } from '../auth/AuthProvider';
-import { CaseEvent, DueCheckin, EventKind, api } from '../lib/api';
+import { CaseUpcoming, DueCheckin, EventKind, api } from '../lib/api';
 
 const TREND_COLORS: Record<WellBeingMetric['trend'], string> = {
   Improving: '#9c6743',
@@ -31,18 +31,25 @@ const TREND_COLORS: Record<WellBeingMetric['trend'], string> = {
   Elevated: '#9a5b13',
 };
 
+// Gentle, non-clinical tags. For the justice-calendar kinds (bail/parole/…) the
+// backend already sends a softened `label`; the tag never says bail, accused or
+// released — victims see dates and reassurance, never legal alarm.
 const EVENT_TAGS: Record<EventKind, string> = {
   hearing: 'Preparation help is available',
-  fir: 'FIR',
-  chargesheet: 'Chargesheet',
+  fir: 'A step in your case',
+  chargesheet: 'A step in your case',
   compensation: 'Ask your advocate about the next step',
   counselling: 'With your counsellor',
   other: 'Case date',
+  bail_hearing: 'Preparation help is available',
+  parole: 'Preparation help is available',
+  adjournment: 'Your date has changed',
+  trial_end: 'An important date',
 };
 
-const eventDate = (ev: CaseEvent) => new Date(`${ev.date}T00:00:00`);
+const eventDate = (ev: { date: string }) => new Date(`${ev.date}T00:00:00`);
 
-function whenLabel(ev: CaseEvent): string {
+function whenLabel(ev: { date: string; days_until: number }): string {
   const weekday = eventDate(ev).toLocaleDateString(undefined, { weekday: 'long' });
   const relative = ev.days_until === 0 ? 'Today' : ev.days_until === 1 ? 'Tomorrow' : `In ${ev.days_until} days`;
   return `${weekday} · ${relative}`;
@@ -81,17 +88,27 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const firstName = user.name.trim().split(' ')[0] || user.name;
   // Personalize the localized greeting by swapping the demo name for the user's.
   const greeting = t.greeting.replace(/Sunita|सुनीता|ਸੁਨੀਤਾ/, firstName);
-  const [events, setEvents] = useState<CaseEvent[] | null>(null);
+  const [events, setEvents] = useState<CaseUpcoming[] | null>(null);
   const [due, setDue] = useState<DueCheckin[] | null>(null);
 
-  // Case dates come from the counsellor; check-ins are scheduled by the backend
+  // "What's coming up" (backend.md §5a): GET /me/case gives gentle, pre-translated
+  // labels and the justice-calendar dates. Falls back to /me/events if unavailable.
   useEffect(() => {
     if (!isVictim) return;
     let live = true;
+    const take = (list: CaseUpcoming[]) => list.filter((e) => e.days_until >= 0).slice(0, 3);
     api
-      .events()
-      .then((list) => live && setEvents(list.filter((e) => e.days_until >= 0).slice(0, 3)))
-      .catch(() => live && setEvents([]));
+      .case()
+      .then((info) => live && setEvents(take(info.upcoming)))
+      .catch(() =>
+        api
+          .events()
+          .then((list) =>
+            live &&
+            setEvents(take(list.map((e) => ({ id: e.id, kind: e.kind, date: e.date, days_until: e.days_until, label: e.title })))),
+          )
+          .catch(() => live && setEvents([])),
+      );
     api
       .due()
       .then((list) => live && setDue(list))
@@ -374,7 +391,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     </span>
                   </div>
                   <div className="flex flex-col min-w-0">
-                    <span className="text-sm font-semibold text-[#352e24] truncate">{ev.title}</span>
+                    <span className="text-sm font-semibold text-[#352e24] truncate">{ev.label}</span>
                     <span className="text-xs text-[#5c5142]">{whenLabel(ev)}</span>
                     <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#9c6743] mt-1">
                       <Shield className="w-3 h-3 text-[#9c6743]" />

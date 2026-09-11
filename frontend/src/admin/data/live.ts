@@ -14,6 +14,10 @@ export const REASON_TITLES: Record<AlertReason, string> = {
   rising_distress: 'Rising Distress',
   gone_quiet: 'Silent Deterioration Detected',
   upcoming_event: 'Court Stress Alert',
+  hearing_soon: 'Hearing Soon',
+  bail_no_notice: 'Bail Hearing · No s.15A Notice',
+  entitlement_unpaid: 'Relief Overdue',
+  adjournment_streak: 'Repeated Adjournments',
 };
 
 const LEVEL_RANK: Record<Alert['level'], number> = { crisis: 0, high: 1, watch: 2 };
@@ -25,6 +29,10 @@ const EVENT_LABELS: Record<EventKind, string> = {
   compensation: 'Compensation',
   counselling: 'Counselling',
   other: 'Case date',
+  bail_hearing: 'Bail hearing',
+  parole: 'Parole hearing',
+  adjournment: 'Adjournment',
+  trial_end: 'Trial verdict',
 };
 
 const TIER_LABELS: Record<Tier, string> = {
@@ -222,6 +230,7 @@ function toCase(row: CaseloadRow, detail: VictimDetail, timeline: Timeline, coun
     distressAfterLabel: row.tier ? TIER_LABELS[row.tier] : 'No score yet',
     distressDelta: first && row.score != null ? `(${points(row.score - first.score)})` : '',
     trendPoints: timeline.scores.map((s) => s.score),
+    forecast: detail.forecast ?? null,
     currentStep: recoveryStep(row, alerts),
   };
 }

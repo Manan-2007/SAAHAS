@@ -19,7 +19,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const navItems: { id: NavigationTab; label: string; icon: string; badge?: string }[] = [
     { id: 'overview', label: 'Overview', icon: 'grid_view' },
-    { id: 'priority-cases', label: 'Priority Cases', icon: 'emergency', badge: '4 High' },
+    { id: 'priority-cases', label: 'Priority Cases', icon: 'emergency' },
+    { id: 'forecast', label: 'This Week', icon: 'calendar_month' },
     { id: 'case-detail-signals', label: 'Case Detail & Signals', icon: 'neurology' },
     { id: 'interventions', label: 'Interventions', icon: 'health_and_safety' },
     { id: 'recovery-outcomes', label: 'Recovery & Outcomes', icon: 'trending_up' },

@@ -180,7 +180,10 @@ export interface Wellbeing {
   has_data: boolean;
 }
 
-export type EventKind = 'hearing' | 'fir' | 'chargesheet' | 'compensation' | 'counselling' | 'other';
+export type EventKind =
+  | 'hearing' | 'fir' | 'chargesheet' | 'compensation' | 'counselling' | 'other'
+  // case-aware distress (backend.md §5): the justice calendar
+  | 'bail_hearing' | 'parole' | 'adjournment' | 'trial_end';
 
 export interface CaseEvent {
   id: number;
@@ -273,7 +276,10 @@ export interface LatestScore {
 }
 
 export type AlertLevel = 'crisis' | 'high' | 'watch';
-export type AlertReason = 'crisis_signal' | 'high_distress' | 'rising_distress' | 'gone_quiet' | 'upcoming_event';
+export type AlertReason =
+  | 'crisis_signal' | 'high_distress' | 'rising_distress' | 'gone_quiet' | 'upcoming_event'
+  // case-aware distress (backend.md §5e)
+  | 'hearing_soon' | 'bail_no_notice' | 'entitlement_unpaid' | 'adjournment_streak';
 
 export interface Alert {
   id: number;
@@ -312,10 +318,52 @@ export interface VictimDetail {
   }[];
   alerts: Alert[];
   events: CaseEvent[];
+  // present when a hearing is within 14 days (backend.md §5a)
+  forecast?: Forecast | null;
 }
 
 export interface Timeline {
   scores: { at: string; score: number; tier: Tier; crisis: boolean }[];
+}
+
+// --- Case-aware distress: the calendar is the stressor (backend.md §5) ---
+
+// Counsellor-only forecast that rides on a victim detail / caseload row when a
+// hearing is within 14 days. Turns the score from a thermometer into a forecast.
+export interface Forecast {
+  peak_score: number;
+  peak_on: string;   // YYYY-MM-DD
+  driver: string;    // short human string, e.g. "Hearing on 2026-09-18"
+}
+
+// GET /me/case — victim's own calendar. Gentle, pre-translated, NO numbers.
+export interface CaseUpcoming {
+  id: number;
+  kind: EventKind;
+  date: string;
+  days_until: number;
+  label: string;     // already written in the victim's language, non-clinical
+}
+export interface Entitlement {
+  id: number;
+  stage: string;
+  label: string;
+  due_on: string | null;
+  status: 'due' | 'received' | 'not_received' | 'unknown';
+}
+export interface CaseInfo {
+  upcoming: CaseUpcoming[];
+  entitlements: Entitlement[];
+}
+
+// GET /counsellor/forecast — "who needs attention this week", by predicted peak.
+export interface ForecastRow {
+  victim_id: string;
+  name: string;
+  score: number | null;
+  peak_score: number;
+  peak_on: string;
+  driver: string;
 }
 
 // ---------------------------------------------------------------- endpoints
@@ -344,6 +392,7 @@ export const api = {
   // victim screens
   wellbeing: () => apiFetch<Wellbeing>('/me/wellbeing'),
   events: () => apiFetch<CaseEvent[]>('/me/events'),
+  case: () => apiFetch<CaseInfo>('/me/case'),
   due: () => apiFetch<DueCheckin[]>('/me/due'),
   questionnaire: (instrument: string, lang: LanguageCode) =>
     apiFetch<Questionnaire>(`/questionnaires/${encodeURIComponent(instrument)}?lang=${lang}`, { auth: false }),
@@ -354,6 +403,7 @@ export const api = {
 
   // counsellor dashboard
   caseload: () => apiFetch<CaseloadRow[]>('/counsellor/victims'),
+  forecast: () => apiFetch<ForecastRow[]>('/counsellor/forecast'),
   victim: (id: string) => apiFetch<VictimDetail>(`/counsellor/victims/${id}`),
   timeline: (id: string, days = 30) => apiFetch<Timeline>(`/counsellor/victims/${id}/timeline?days=${days}`),
   alerts: (status: 'open' | 'acknowledged' | 'resolved' | 'all' = 'open') =>
