@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CaseData } from '../types';
 import {
-  Alert, ApiError, Entitlement, EntitlementStatus, EventKind, Recording, ScoreComponent, Timeline, VictimDetail,
-  api, fetchAudioUrl,
+  Alert, ApiError, Entitlement, EntitlementStage, EntitlementStatus, EventKind, Recording, ReliefEntry,
+  ScoreComponent, Timeline, VictimDetail, api, fetchAudioUrl,
 } from '../../lib/api';
 import { REASON_ICONS, REASON_TITLES, timeAgo } from '../data/live';
 
@@ -148,6 +148,11 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
     kind: 'hearing', date: '', title: '', notice_given: false,
   });
   const [showAddEvent, setShowAddEvent] = useState(false);
+  const [relief, setRelief] = useState<ReliefEntry[] | null>(null);
+  const [reliefSection, setReliefSection] = useState('');
+  const [manualEnt, setManualEnt] = useState<{ stage: EntitlementStage; amount: string; due_on: string }>({
+    stage: 'tame', amount: '', due_on: '',
+  });
 
   const load = useCallback(async () => {
     try {
@@ -173,6 +178,12 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
     api.victimRecordings(caseData.id).then(setRecordings).catch((err) => setError(errorText(err)));
   }, [activeTab, detail, recordings, caseData.id]);
 
+  // The SC/ST relief schedule, loaded the first time the Relief tab opens (§5b).
+  useEffect(() => {
+    if (activeTab !== 'Entitlements' || relief) return;
+    api.reliefSchedule().then((r) => setRelief(r.entries)).catch(() => setRelief([]));
+  }, [activeTab, relief]);
+
   useEffect(() => () => {
     if (playing) URL.revokeObjectURL(playing.url);
   }, [playing]);
@@ -192,6 +203,36 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
   const setEntitlementStatus = async (id: number, status: EntitlementStatus) => {
     try {
       await api.updateEntitlement(id, { status });
+      await load();
+      onChanged?.();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  };
+
+  // §5b: create the whole staged relief set from the SC/ST gazette schedule.
+  const addReliefFromSchedule = async () => {
+    if (!reliefSection) return;
+    try {
+      await api.addReliefFromSchedule(caseData.id, reliefSection);
+      setReliefSection('');
+      await load();
+      onChanged?.();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  };
+
+  // §5b: manual add, for TAME and anything off-schedule.
+  const addManualEntitlement = async () => {
+    const amount = manualEnt.amount ? Number(manualEnt.amount) : null;
+    try {
+      await api.addEntitlement(caseData.id, {
+        stage: manualEnt.stage,
+        amount: amount != null && !Number.isNaN(amount) ? amount : null,
+        due_on: manualEnt.due_on || null,
+      });
+      setManualEnt({ stage: 'tame', amount: '', due_on: '' });
       await load();
       onChanged?.();
     } catch (err) {
@@ -539,6 +580,60 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
                   Staged relief under the SC/ST (PoA) Rules. What the victim reported is shown — a
                   <strong className="text-[#93000a]"> not received</strong> answer is the one to chase.
                 </p>
+              </div>
+
+              {/* §5b: create the whole staged set from the gazette, or add TAME manually */}
+              <div className="rounded-xl border border-[#e5dac4] bg-[#f5f1e8] p-3 space-y-3">
+                <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                  <select
+                    value={reliefSection}
+                    onChange={(e) => setReliefSection(e.target.value)}
+                    className="flex-1 px-2.5 py-2 rounded-lg border border-[#e5dac4] bg-white text-xs outline-none focus:border-[#9c6743]"
+                  >
+                    <option value="">Add relief from the SC/ST schedule…</option>
+                    {(relief ?? []).map((r) => (
+                      <option key={r.section} value={r.section}>
+                        {r.offence} — ₹{Math.round(r.amount).toLocaleString('en-IN')} ({r.section})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={addReliefFromSchedule}
+                    disabled={!reliefSection}
+                    className="px-3.5 py-2 rounded-lg bg-[#9c6743] text-white text-xs font-semibold hover:bg-[#835636] disabled:opacity-50 transition-colors shrink-0"
+                  >
+                    Create staged set
+                  </button>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 sm:items-center pt-1 border-t border-[#e5dac4]">
+                  <span className="text-[11px] text-[#837562] shrink-0">Or off-schedule:</span>
+                  <select
+                    value={manualEnt.stage}
+                    onChange={(e) => setManualEnt((s) => ({ ...s, stage: e.target.value as EntitlementStage }))}
+                    className="px-2.5 py-1.5 rounded-lg border border-[#e5dac4] bg-white text-xs outline-none focus:border-[#9c6743]"
+                  >
+                    {(['tame', 'fir', 'chargesheet', 'conviction', 'trial_end', 'medical_report', 'post_mortem', 'other'] as EntitlementStage[]).map((s) => (
+                      <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number" min="0" value={manualEnt.amount}
+                    onChange={(e) => setManualEnt((s) => ({ ...s, amount: e.target.value }))}
+                    placeholder="Amount ₹"
+                    className="w-28 px-2.5 py-1.5 rounded-lg border border-[#e5dac4] bg-white text-xs outline-none focus:border-[#9c6743]"
+                  />
+                  <input
+                    type="date" value={manualEnt.due_on}
+                    onChange={(e) => setManualEnt((s) => ({ ...s, due_on: e.target.value }))}
+                    className="px-2.5 py-1.5 rounded-lg border border-[#e5dac4] bg-white text-xs outline-none focus:border-[#9c6743]"
+                  />
+                  <button
+                    onClick={addManualEntitlement}
+                    className="px-3 py-1.5 rounded-lg bg-white border border-[#e5dac4] text-[#7a5a3f] text-xs font-semibold hover:bg-[#efe7d6] transition-colors shrink-0"
+                  >
+                    Add
+                  </button>
+                </div>
               </div>
               {!detail.entitlements || detail.entitlements.length === 0 ? (
                 <p className="text-xs text-[#837562]">
