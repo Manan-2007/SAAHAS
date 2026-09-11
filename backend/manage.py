@@ -4,6 +4,7 @@
   ./venv/bin/python manage.py create-counsellor "Dr. Ananya Sharma" --username ananya
   ./venv/bin/python manage.py set-password --user-id <id>   # reset a lost password
   ./venv/bin/python manage.py sign-out --user-id <id>       # revoke every session
+  ./venv/bin/python manage.py storage-status   # which recordings bucket is configured
   ./venv/bin/python manage.py seed-demo        # demo counsellor + 4 synthetic victims, 30 days of history
   ./venv/bin/python manage.py recompute-all    # rescore every victim now
 
@@ -16,7 +17,7 @@ import argparse
 import getpass
 import random
 
-from monitoring import auth, db, service
+from monitoring import auth, db, service, storage
 
 DAY = service.DAY
 
@@ -135,6 +136,7 @@ def main():
     pw.add_argument("--username")
     so = sub.add_parser("sign-out", help="revoke every session token on an account")
     so.add_argument("--user-id", required=True)
+    sub.add_parser("storage-status")
     sub.add_parser("seed-demo")
     sub.add_parser("recompute-all")
     args = ap.parse_args()
@@ -153,6 +155,8 @@ def main():
     elif args.command == "sign-out":
         with db.connect() as conn:
             print(f"Revoked {auth.revoke_all_sessions(conn, args.user_id)} session(s).")
+    elif args.command == "storage-status":
+        print(f"Recordings bucket: {storage.status()}")
     elif args.command == "seed-demo":
         seed_demo()
     elif args.command == "recompute-all":

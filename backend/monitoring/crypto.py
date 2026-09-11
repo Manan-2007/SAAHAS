@@ -1,5 +1,6 @@
 """Field-level encryption for personal data at rest: names, phone numbers,
-case references, questionnaire answers, stored messages and counsellor notes.
+case references, questionnaire answers, stored messages, counsellor notes and
+stored recordings.
 
 Key: SAHAAS_DATA_KEY env var (a Fernet key), or generated once into
 data/secret.key. Back that key up - without it the data can't be read.
@@ -53,6 +54,15 @@ def dec(token):
     if token is None:
         return None
     return _cipher().decrypt(token.encode()).decode()
+
+
+def enc_bytes(data):
+    """Raw bytes in, ciphertext bytes out - for stored recordings."""
+    return _cipher().encrypt(bytes(data))
+
+
+def dec_bytes(token):
+    return _cipher().decrypt(bytes(token))
 
 
 def blind_index(value, domain):

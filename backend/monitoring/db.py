@@ -1,5 +1,8 @@
 """SQLite storage for the monitoring timeline (data/sahaas.db).
 
+Recordings themselves live in the storage bucket (monitoring.storage); the
+attachments table here only points at them.
+
 Every call opens its own short-lived connection, which keeps it safe from
 FastAPI's worker threads. Set SAHAAS_DATA_DIR to put the data elsewhere.
 """
@@ -9,6 +12,7 @@ import sqlite3
 import time
 import uuid
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 DATA_DIR = Path(os.environ.get("SAHAAS_DATA_DIR", Path(__file__).resolve().parent.parent / "data"))
@@ -48,6 +52,19 @@ CREATE TABLE IF NOT EXISTS sessions (
     revoked_at REAL
 );
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id, revoked_at);
+CREATE TABLE IF NOT EXISTS attachments (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL,
+    kind TEXT NOT NULL,            -- voice_note | voice_checkin
+    bucket_key TEXT NOT NULL,      -- object key inside the storage bucket
+    content_type TEXT NOT NULL,
+    bytes INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    duration_s REAL,
+    detail_enc TEXT                -- emotion / transcript snapshot, encrypted
+);
+CREATE INDEX IF NOT EXISTS attachments_user_time ON attachments(user_id, created_at);
 CREATE TABLE IF NOT EXISTS observations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -132,3 +149,7 @@ def new_id():
 
 def now():
     return time.time()
+
+
+def iso(ts):
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(timespec="seconds") if ts else None

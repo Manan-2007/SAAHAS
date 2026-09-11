@@ -2,7 +2,7 @@
 
   public       GET  /questionnaires, /questionnaires/{id}
   accounts     POST /auth/register, /auth/login, /auth/logout
-  victims      /me/*   (profile, consent, check-ins, sessions)
+  victims      /me/*   (profile, consent, check-ins, sessions, recordings)
   counsellors  /counsellor/*   (accounts created with `python manage.py create-counsellor`)
 
 Every authenticated route takes `Authorization: Bearer <token>`, where the
@@ -13,10 +13,10 @@ session token from /auth/login. See monitoring.auth for the difference.
 import datetime as dt
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
-from . import auth, questionnaires, service
+from . import auth, questionnaires, service, storage
 
 router = APIRouter(tags=["monitoring"])
 Language = Literal["en", "hi", "pa"]
@@ -26,6 +26,9 @@ class Consent(BaseModel):
     data_storage: bool = Field(description="Required: store check-ins so trends can be tracked")
     voice_analysis: bool = True
     store_messages: bool = False
+    store_recordings: bool = Field(default=False,
+                                   description="Keep the audio of voice check-ins in the storage bucket")
+
 
 class RegisterRequest(BaseModel):
     name: str = Field(min_length=1, max_length=80)
@@ -62,6 +65,7 @@ class LogoutRequest(BaseModel):
 class ConsentUpdate(BaseModel):
     voice_analysis: bool | None = None
     store_messages: bool | None = None
+    store_recordings: bool | None = None
 
 
 class AnswersRequest(BaseModel):
@@ -93,6 +97,14 @@ def _or_auth_error(fn, *args, **kwargs):
     except auth.AuthError as exc:
         raise HTTPException(status_code=exc.status, detail=str(exc))
 
+
+def _audio_response(data, content_type, filename):
+    # attachment, private, no-store: a recording should never sit in a shared
+    # cache or be rendered inline by a browser that guessed the type.
+    return Response(content=data, media_type=content_type, headers={
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Cache-Control": "no-store, private",
+    })
 
 
 # ---------------------------------------------------------------- public
@@ -175,8 +187,27 @@ def update_consent(req: ConsentUpdate, user=Depends(auth.victim)):
 
 @router.delete("/me")
 def delete_me(user=Depends(auth.current_user)):
-    service.delete_account(user)
-    return {"deleted": True}
+    return service.delete_account(user)
+
+
+# ---------------------------------------------------------------- recordings
+
+@router.get("/me/recordings")
+def my_recordings(user=Depends(auth.victim)):
+    return service.list_recordings(user["id"])
+
+
+@router.get("/me/recordings/{attachment_id}/audio")
+def my_recording_audio(attachment_id: str, user=Depends(auth.victim)):
+    found = storage.load_recording(user["id"], attachment_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="No such recording")
+    return _audio_response(*found)
+
+
+@router.delete("/me/recordings/{attachment_id}")
+def delete_my_recording(attachment_id: str, user=Depends(auth.victim)):
+    return _or_404(service.delete_recording, user, attachment_id)
 
 
 @router.post("/me/questionnaires/{instrument}")
@@ -230,6 +261,16 @@ def add_event(victim_id: str, req: EventRequest, user=Depends(auth.counsellor)):
 def delete_event(event_id: int, user=Depends(auth.counsellor)):
     _or_404(service.delete_event, user, event_id)
     return {"deleted": True}
+
+
+@router.get("/counsellor/victims/{victim_id}/recordings")
+def victim_recordings(victim_id: str, user=Depends(auth.counsellor)):
+    return _or_404(service.victim_recordings, user, victim_id)
+
+
+@router.get("/counsellor/victims/{victim_id}/recordings/{attachment_id}/audio")
+def victim_recording_audio(victim_id: str, attachment_id: str, user=Depends(auth.counsellor)):
+    return _audio_response(*_or_404(service.victim_recording_bytes, user, victim_id, attachment_id))
 
 
 @router.get("/counsellor/alerts")
