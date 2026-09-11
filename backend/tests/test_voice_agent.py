@@ -187,6 +187,11 @@ def test_reply_style_meets_distress_gently():
     assert "Devanagari" in style.spoken_instructions({"delivery": "steady"}, "hi")
 
 
+def test_unsure_emotion_guess_keeps_a_normal_tone():
+    assert style.reply_style({"emotion": "sad", "certainty": "low", "arousal": 0.5})["delivery"] == "steady"
+    assert style.reply_style({"emotion": "sad", "certainty": "high", "arousal": 0.5})["delivery"] == "gentle"
+
+
 def test_clean_for_speech_strips_markdown_and_emoji():
     assert style.clean_for_speech("**You're safe** here 💛") == "You're safe here"
     assert style.clean_for_speech("1. Breathe in slowly") == "Breathe in slowly"

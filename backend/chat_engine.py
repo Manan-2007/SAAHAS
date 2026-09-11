@@ -45,6 +45,10 @@ SAFETY_INSTRUCTION = (
     "gently ask whether they are safe right now, and encourage reaching emergency help or their counsellor "
     "immediately. Do not list phone numbers; they are shown separately.")
 
+VOICE_HINT_RULE = (
+    " Their words decide what kind of reply this is: if the words are casual, reply casually. Let the voice "
+    "shape only your pacing; never announce, label or ask about their emotions because of it.")
+
 TRANSLATION_INSTRUCTION = (
     "\n\nLanguage: the person writes in Hindi. You see their messages translated into English. Reply only "
     "in English, in short, simple sentences; your reply is translated into Hindi before they see it.")
@@ -116,13 +120,12 @@ class ChatModel:
         crisis = at_risk or bool(CRISIS_RE.search(last_user))
 
         system = self.system_prompt
+        # The voice is only a hint: their words decide whether the reply is casual or supportive
         if voice_context:
-            system += (f"\n\nVoice context: {voice_context} Let it shape your warmth and pacing; never "
-                       f"announce or label their emotions from it.")
+            system += f"\n\nVoice context (a soft hint only): {voice_context}" + VOICE_HINT_RULE
         elif tone in TONE_WORDS:
-            system += (f"\n\nVoice context: in their latest voice note this person's tone sounded "
-                       f"{TONE_WORDS[tone]}. Let it shape your warmth; do not announce or label "
-                       f"their emotions from it.")
+            system += (f"\n\nVoice context (a soft hint only): in their latest voice note this person's "
+                       f"tone sounded {TONE_WORDS[tone]}." + VOICE_HINT_RULE)
         if spoken:
             system += "\n\n" + spoken
         if translated_from:

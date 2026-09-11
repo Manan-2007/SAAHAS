@@ -254,7 +254,8 @@ class ConversationSession:
         translate = language != "en" and self.deps.chat.translation_ready(language)
         job = self.deps.chat.submit_stream(
             list(self.history), on_text, cancel.is_set,
-            voice_context=voice["description"] if voice else None,
+            # only a confident read of their voice reaches the chat model
+            voice_context=voice["description"] if voice and voice["certainty"] == "high" else None,
             spoken=style.spoken_instructions(tone, "en" if translate else language),
             at_risk=crisis, max_tokens=self.max_tokens,
             reply_language=language if translate else None)

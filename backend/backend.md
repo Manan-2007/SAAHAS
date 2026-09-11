@@ -262,5 +262,9 @@ with a voice that adapts to how you sound, and you can talk over it to interrupt
   greeting is casual too. No frontend change needed, except the Safe Chat
   history item in section 2.
 - `/health` → `chat.translation.hindi`: `ready`, `unavailable` or `not loaded yet`.
+- Less forced empathy: voice tone is now only a hint, so casual words get casual replies
+  even when the voice sounded low. The voice call ignores unsure emotion guesses. Frontend:
+  send `tone` on `/chat` only for the reply to that voice note, not for every later message
+  (Safe Chat does this now).
 - Repo docs for everyone (and their Claude sessions): `CLAUDE.md` (project context and rules) and
   `CHANGES.md` (history) at the repo root.

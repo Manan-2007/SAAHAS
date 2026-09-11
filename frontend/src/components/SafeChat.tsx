@@ -62,7 +62,7 @@ function scriptedReply(text: string): string {
   if (t.includes('ground') || t.includes('breathe')) {
     return `Let's ground together: Feel the solid surface beneath you. Plant both feet flat. Inhale gently for 4 counts... 1, 2, 3, 4. Hold gently... 2, 3. Exhale like blowing through a straw... 1, 2, 3, 4, 5, 6. You are safe in this present second.`;
   }
-  return `Thank you for sharing that with me. It takes courage to put feelings into words. Take all the time you need. I am here with you, completely without judgment.`;
+  return `Sorry, I'm having trouble connecting right now. Could you send that again in a moment?`;
 }
 
 const COUNSELLOR_REPLY = `Sunita, Dr. Ananya here. I read your words carefully. Your feelings are 100% valid and protective. You don't have to face this alone. I will be reviewing our prep notes with you before the session on Saturday, and our court liaison is confirmed for Thursday. Take a slow sip of water right now.`;
@@ -149,8 +149,11 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
   const askSahaas = async (fallback: () => string) => {
     setIsTyping(true);
     let reply: string;
+    // A voice note's tone only shapes the reply to that note, not every message after it
+    const tone = lastToneRef.current;
+    lastToneRef.current = null;
     try {
-      const res = await chatReply(toChatTurns(messagesRef.current), lastToneRef.current);
+      const res = await chatReply(toChatTurns(messagesRef.current), tone);
       reply = res.reply;
       if (res.crisis) setCrisisMessage(res.crisis_message || DEFAULT_CRISIS_MESSAGE);
     } catch {

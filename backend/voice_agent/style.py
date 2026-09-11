@@ -17,7 +17,7 @@ DELIVERY = {
     "gentle": ("Speak gently and unhurriedly: short, soft sentences, with small pauses where commas fit.", 0.9),
     "calm": ("Be calm and steady and grounding; don't match their intensity.", 0.92),
     "warm": ("Let some warmth and lightness come through.", 1.04),
-    "steady": ("Keep an even, caring tone.", 1.0),
+    "steady": ("Keep it relaxed and natural, like a friend on the phone.", 1.0),
 }
 
 LANGUAGE_HINTS = {
@@ -74,8 +74,9 @@ def describe(v):
 
 
 def reply_style(voice):
-    """Co-regulation: meet distress with a slower, gentler voice rather than mirroring it."""
-    if voice is None:
+    """Co-regulation: meet distress with a slower, gentler voice rather than mirroring it.
+    A low-certainty emotion guess doesn't change the delivery (a plain "hello" often reads as sad)."""
+    if voice is None or voice.get("certainty") == "low":
         delivery = "steady"
     elif voice["emotion"] in ("sad", "fearful"):
         delivery = "gentle"
@@ -95,8 +96,8 @@ def reply_style(voice):
 
 
 def spoken_instructions(style, language):
-    return ("This is a live spoken conversation. Talk the way a caring person talks on a call: 1 to 3 short "
-            "sentences, no lists, no headings, no emojis, no markdown, and at most one gentle question. "
+    return ("This is a live spoken conversation. Talk the way a friend talks on a call: 1 to 3 short "
+            "sentences, no lists, no headings, no emojis, no markdown, and at most one question. "
             f"{DELIVERY[style['delivery']][0]} {LANGUAGE_HINTS.get(language, LANGUAGE_HINTS['en'])}")
 
 

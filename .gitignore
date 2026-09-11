@@ -1,11 +1,67 @@
+# What gets pushed: source code, configs, docs, scripts, small result files, and the
+# two runtime files main.py loads (voice_emotion_model.h5, label_encoder.pkl).
+# What never gets pushed: personal data, secrets, environments, datasets, trained
+# models, downloaded audio. `git add .` is safe - anything below is skipped.
+
+# ---- Personal data and secrets (NEVER commit) ----
+backend/data/
+.env*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
+*.key
+*.pem
+
+# ---- Environments and dependencies ----
 venv/
+.venv/
+env/
+node_modules/
+
+# ---- Datasets (re-download with ./train_all.sh or the fetch scripts) ----
+**/datasets/*
+!**/datasets/README.md
+backend/eval/data/
+backend/chat_training/data/
+backend/distress_training/data/
+
+# ---- Trained models and weights (share via Hugging Face, not git) ----
+backend/distress_training/model*/
+backend/chat_training/adapters*/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.gguf
+*.npz
+*.h5
+*.pkl
+!backend/voice_emotion_model.h5
+!backend/label_encoder.pkl
+
+# ---- Audio (voice notes, eval clips, recordings) ----
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+*.webm
+
+# ---- Build output, caches, logs ----
 __pycache__/
 *.pyc
-node_modules/
+.pytest_cache/
+.ipynb_checkpoints/
 dist/
 build/
 coverage/
 *.log
-.env*
-!.env.example
+
+# ---- Editor / OS / local tooling ----
 .DS_Store
+.idea/
+.vscode/
+.claude/settings.local.json

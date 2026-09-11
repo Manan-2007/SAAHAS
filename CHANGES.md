@@ -11,6 +11,10 @@ every notable change. Backend changes also go in `backend/backend.md` → Update
   proxies `/health`, `/predict`, `/chat` and `/ws` to the backend.
 - Two portability fixes for running the backend inside another project: `static/` is
   optional, and CORS origins are configurable (`CORS_ORIGINS`).
+- Root `.gitignore` rewritten so `git add .` only picks up code: personal data,
+  secrets, envs, datasets, trained models and audio are all skipped. The 356 MELD
+  eval clips (`backend/eval/data/`) are no longer tracked; `eval/download_eval_set.py`
+  re-downloads them.
 
 ### Monitoring: the core of the problem statement
 - Victim accounts with consent. Personal data is encrypted at rest; `DELETE /me`
@@ -57,6 +61,12 @@ every notable change. Backend changes also go in `backend/backend.md` → Update
   rejected as too literal.
 - Chat fine-tuning pipeline built (`./train_chat.sh`, LoRA) but off: on public
   datasets it made replies worse.
+- Replies were still empathetic to "hello". Causes: Safe Chat re-sent an old voice
+  note's tone with every later message, the voice call passed unsure emotion guesses
+  ("sounded heavy") plus "talk like a caring person" every turn, and the offline
+  fallback was always therapy-speak. Now the tone applies once, voice is framed as a
+  soft hint (words decide casual vs supportive), unsure guesses are dropped, and the
+  fallback just says it can't connect.
 
 ### Voice
 - Live voice call `/ws/converse`:
