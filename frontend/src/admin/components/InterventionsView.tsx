@@ -17,7 +17,11 @@ export const InterventionsView: React.FC<InterventionsViewProps> = ({
   const [selectedCaseId, setSelectedCaseId] = useState<string>(cases[0].id);
   const activeCase = cases.find((c) => c.id === selectedCaseId) || cases[0];
   const [newTitle, setNewTitle] = useState('');
-  const [newAssignedTo, setNewAssignedTo] = useState('Dr. Ananya Sharma');
+  const [newAssignedTo, setNewAssignedTo] = useState('Counsellor');
+  // Items added here are a checklist on this screen only; alerts and case dates come from the backend
+  const [custom, setCustom] = useState<Record<string, InterventionItem[]>>({});
+
+  const itemsFor = (c: CaseData) => [...c.interventions, ...(custom[c.id] ?? [])];
 
   const handleAddIntervention = (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,15 +30,28 @@ export const InterventionsView: React.FC<InterventionsViewProps> = ({
     const newItem: InterventionItem = {
       id: `custom-${Date.now()}`,
       title: newTitle.trim(),
-      subtitle: `Assigned to ${newAssignedTo} • Custom Protocol`,
+      subtitle: `Assigned to ${newAssignedTo} • Added here`,
       assignedTo: newAssignedTo,
       priority: 'Priority 2',
       status: 'Pending',
       completed: false,
     };
 
-    activeCase.interventions.push(newItem);
+    setCustom((prev) => ({ ...prev, [activeCase.id]: [...(prev[activeCase.id] ?? []), newItem] }));
     setNewTitle('');
+  };
+
+  const toggle = (item: InterventionItem) => {
+    if (!item.id.startsWith('custom-')) {
+      onToggleIntervention(activeCase.id, item.id);
+      return;
+    }
+    setCustom((prev) => ({
+      ...prev,
+      [activeCase.id]: (prev[activeCase.id] ?? []).map((i) =>
+        i.id === item.id ? { ...i, completed: !i.completed, status: i.completed ? 'Pending' : 'Completed' } : i,
+      ),
+    }));
   };
 
   return (
@@ -100,15 +117,15 @@ export const InterventionsView: React.FC<InterventionsViewProps> = ({
                   <span className="text-xs font-mono text-[#837562]">{c.number}</span>
                 </div>
                 <div className="mt-1 flex items-center justify-between text-xs text-[#837562]">
-                  <span>{c.interventions.length} items planned</span>
+                  <span>{itemsFor(c).length} items planned</span>
                   <span
                     className={`font-semibold ${
-                      c.interventions.filter((i) => i.completed).length === c.interventions.length
+                      itemsFor(c).filter((i) => i.completed).length === itemsFor(c).length
                         ? 'text-[#8a6a4a]'
                         : 'text-[#ba1a1a]'
                     }`}
                   >
-                    {c.interventions.filter((i) => i.completed).length} / {c.interventions.length} done
+                    {itemsFor(c).filter((i) => i.completed).length} / {itemsFor(c).length} done
                   </span>
                 </div>
               </div>
@@ -134,7 +151,7 @@ export const InterventionsView: React.FC<InterventionsViewProps> = ({
 
           {/* Intervention Items */}
           <div className="space-y-3">
-            {activeCase.interventions.map((item) => (
+            {itemsFor(activeCase).map((item) => (
               <div
                 key={item.id}
                 className="p-3.5 rounded-xl border border-[#e5dac4] bg-[#f5f1e8] hover:bg-[#efe7d6] transition-colors flex items-center justify-between"
@@ -143,7 +160,7 @@ export const InterventionsView: React.FC<InterventionsViewProps> = ({
                   <input
                     type="checkbox"
                     checked={item.completed}
-                    onChange={() => onToggleIntervention(activeCase.id, item.id)}
+                    onChange={() => toggle(item)}
                     className="w-5 h-5 rounded text-[#9c6743] focus:ring-[#9c6743] accent-[#9c6743]"
                   />
                   <div className="flex flex-col">
@@ -196,10 +213,10 @@ export const InterventionsView: React.FC<InterventionsViewProps> = ({
                 onChange={(e) => setNewAssignedTo(e.target.value)}
                 className="p-2.5 rounded-lg border border-[#e5dac4] bg-white text-xs text-[#352e24]"
               >
-                <option>Dr. Ananya Sharma</option>
-                <option>Advocate Meera Sen</option>
-                <option>Security Coordinator Tarun</option>
-                <option>Finance Desk</option>
+                <option>Counsellor</option>
+                <option>Legal advocate</option>
+                <option>Case worker</option>
+                <option>Compensation desk</option>
               </select>
             </div>
             <button

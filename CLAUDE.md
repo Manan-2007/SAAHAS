@@ -120,9 +120,12 @@ cd backend && ./venv/bin/python -m pytest -q tests        # must pass before com
   need clinical review.
 - IndicTrans2 hasn't been tested on this stack yet; that waits on the terms.
 - Voice-call emotion adaptation hasn't been tested with real (non-synthetic) voices.
-- The frontend isn't wired to the monitoring features yet: see `backend/backend.md`
-  sections 1–4.
-- Not built: SMS/IVRS outreach, NHAA 14566 / Integrated Portal integration, real
-  counsellor login (tokens are pasted for now), and a knowledge base for legal questions.
+- The frontend has no voice call screen yet (`/ws/converse`, `backend/backend.md` 3b);
+  the other open boxes in that file are small.
+- Not built: messaging a counsellor from the app, reassigning cases, SMS/IVRS outreach,
+  NHAA 14566 / Integrated Portal integration, and a knowledge base for legal questions.
+  Where the UI offers these, it says they aren't available rather than faking them.
+- Frontend rule: no mock data on real screens. Anything the backend doesn't measure
+  shows "—" (see `frontend/src/admin/data/live.ts`).
 - ⚠ Non-commercial licenses: the audeering arousal/valence model, and the ESConv and
   EmpatheticDialogues chat data.

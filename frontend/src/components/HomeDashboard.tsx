@@ -1,28 +1,28 @@
-import React, { useState } from 'react';
-import { 
-  Lock, 
-  ArrowRight, 
-  Mic, 
-  CheckCircle2, 
-  Sparkles, 
-  Cloud, 
-  SunMedium, 
-  Calendar, 
-  Phone, 
-  MessageSquare, 
-  TrendingDown, 
-  TrendingUp, 
-  Bed, 
-  Info, 
-  Shield, 
-  Clock, 
-  ArrowUpDown, 
+import React, { useEffect, useState } from 'react';
+import {
+  Lock,
+  ArrowRight,
+  Mic,
+  CheckCircle2,
+  Sparkles,
+  Cloud,
+  SunMedium,
+  Calendar,
+  Phone,
+  MessageSquare,
+  TrendingDown,
+  TrendingUp,
+  Bed,
+  Info,
+  Shield,
+  Clock,
   CheckCheck,
   Headphones
 } from 'lucide-react';
-import { AppView, LanguageCode, UserPersona, WellBeingMetric } from '../types';
-import { TRANSLATIONS, USER_PROFILE, SCHEDULED_EVENTS } from '../data/mockData';
+import { AppView, LanguageCode, WellBeingMetric } from '../types';
+import { TRANSLATIONS } from '../data/mockData';
 import { useAuth } from '../auth/AuthProvider';
+import { CaseEvent, DueCheckin, EventKind, api } from '../lib/api';
 
 const TREND_COLORS: Record<WellBeingMetric['trend'], string> = {
   Improving: '#9c6743',
@@ -31,71 +31,95 @@ const TREND_COLORS: Record<WellBeingMetric['trend'], string> = {
   Elevated: '#9a5b13',
 };
 
+const EVENT_TAGS: Record<EventKind, string> = {
+  hearing: 'Preparation help is available',
+  fir: 'FIR',
+  chargesheet: 'Chargesheet',
+  compensation: 'Ask your advocate about the next step',
+  counselling: 'With your counsellor',
+  other: 'Case date',
+};
+
+const eventDate = (ev: CaseEvent) => new Date(`${ev.date}T00:00:00`);
+
+function whenLabel(ev: CaseEvent): string {
+  const weekday = eventDate(ev).toLocaleDateString(undefined, { weekday: 'long' });
+  const relative = ev.days_until === 0 ? 'Today' : ev.days_until === 1 ? 'Tomorrow' : `In ${ev.days_until} days`;
+  return `${weekday} · ${relative}`;
+}
+
+// null while loading; 'ready' when a questionnaire is due; otherwise the next date
+function nextCheckin(due: DueCheckin[] | null): 'ready' | string | null {
+  if (!due) return null;
+  if (due.some((d) => d.due)) return 'ready';
+  const next = due.map((d) => d.next_due_at).filter((d): d is string => !!d).sort()[0];
+  return next ? new Date(next).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }) : null;
+}
+
 interface HomeDashboardProps {
   language: LanguageCode;
   onNavigate: (view: AppView) => void;
-  onPersonaChange: (persona: UserPersona) => void;
   onOpenCall: () => void;
   selectedMood: string;
   onMoodSelect: (mood: string) => void;
   metrics: WellBeingMetric[];
+  wellbeingMessage: string | null;
 }
 
 export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   language,
   onNavigate,
-  onPersonaChange,
   onOpenCall,
   selectedMood,
   onMoodSelect,
   metrics,
+  wellbeingMessage,
 }) => {
   const t = TRANSLATIONS[language];
-  const { user } = useAuth();
+  const { user, lock } = useAuth();
+  const isVictim = user.role === 'victim';
   const firstName = user.name.trim().split(' ')[0] || user.name;
   // Personalize the localized greeting by swapping the demo name for the user's.
   const greeting = t.greeting.replace(/Sunita|सुनीता|ਸੁਨੀਤਾ/, firstName);
-  const [snoozeState, setSnoozeState] = useState<'normal' | 'snoozed'>('normal');
+  const [events, setEvents] = useState<CaseEvent[] | null>(null);
+  const [due, setDue] = useState<DueCheckin[] | null>(null);
 
-  const handleSnooze = () => {
-    if (snoozeState === 'normal') {
-      setSnoozeState('snoozed');
-    } else {
-      setSnoozeState('normal');
-    }
-  };
+  // Case dates come from the counsellor; check-ins are scheduled by the backend
+  useEffect(() => {
+    if (!isVictim) return;
+    let live = true;
+    api
+      .events()
+      .then((list) => live && setEvents(list.filter((e) => e.days_until >= 0).slice(0, 3)))
+      .catch(() => live && setEvents([]));
+    api
+      .due()
+      .then((list) => live && setDue(list))
+      .catch(() => live && setDue([]));
+    return () => {
+      live = false;
+    };
+  }, [isVictim]);
+
+  const next = nextCheckin(due);
+  const counsellorInitials = (user.counsellor ?? 'C')
+    .replace(/^Dr\.?\s+/i, '')
+    .split(/\s+/)
+    .map((w) => w.charAt(0))
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <div className="flex flex-col w-full max-w-md md:max-w-2xl lg:max-w-3xl mx-auto px-4 gap-5 pb-8 animate-fadeIn">
-      {/* 1. Aura Greeting & Persona Switcher */}
+      {/* 1. Aura Greeting */}
       <section className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-[#efe7d6] via-[#ece2ce] to-[#e7d3b5]/25 p-5 sm:p-6 shadow-xs border border-[#e5dac4]/60">
         {/* Subtle Animated Soothing Aura Ambient */}
         <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-[#e7d3b5]/45 blur-2xl pointer-events-none animate-pulse"></div>
         <div className="absolute -bottom-8 -left-8 w-40 h-40 rounded-full bg-[#d9bf97]/30 blur-2xl pointer-events-none"></div>
 
         <div className="relative z-10 flex flex-col gap-3">
-          {/* Persona preview chip & Switcher */}
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/85 backdrop-blur-sm text-[#5c5142] shadow-2xs text-xs font-medium">
-              <span className="w-2 h-2 rounded-full bg-[#9c6743] animate-ping"></span>
-              <span>
-                {t.viewingAs} <strong className="text-[#352e24] font-semibold">{t.victimUser}</strong>
-              </span>
-            </div>
-
-            <button
-              onClick={() => {
-                onPersonaChange('admin');
-                onNavigate('counsellor-command-centre');
-              }}
-              className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#e2d6c0] text-[#352e24] text-xs font-semibold hover:bg-[#cbbda4] transition-all active:scale-95 shadow-2xs"
-            >
-              <span>{t.switchAdmin}</span>
-              <ArrowUpDown className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="mt-1 flex flex-col">
+          <div className="flex flex-col">
             <span className="text-sm font-semibold text-[#9c6743] tracking-wide">
               {greeting}
             </span>
@@ -225,7 +249,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             </div>
           </button>
 
-          {/* Quick Daily Check-in Card */}
+          {/* Check-in Card */}
           <button
             onClick={() => onNavigate('well-being')}
             className="group text-left rounded-2xl bg-white p-4 shadow-xs hover:shadow-md transition-all active:scale-[0.99] flex flex-col justify-between gap-3 border border-[#e5dac4]/60 focus:outline-none"
@@ -235,7 +259,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 <CheckCircle2 className="w-5 h-5" />
               </div>
               <span className="text-[11px] text-[#5c5142] font-semibold bg-[#efe7d6] px-2 py-0.5 rounded-full border border-[#e5dac4]/50">
-                3 questions
+                {next === 'ready' ? 'Ready for you' : '2 minutes'}
               </span>
             </div>
             <div className="flex flex-col">
@@ -267,6 +291,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             <span>{t.stableToday}</span>
           </span>
         </div>
+
+        {wellbeingMessage && <p className="text-sm text-[#5c5142] leading-relaxed -mt-1">{wellbeingMessage}</p>}
 
         {/* 3 Non-alarmist Indicator Rows */}
         <div className="flex flex-col gap-2.5">
@@ -313,91 +339,95 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             </div>
             <h3 className="text-base font-bold text-[#352e24]">{t.upcomingEvents}</h3>
           </div>
-          <button 
+          <button
             onClick={() => onNavigate('legal-prep')}
             className="text-xs text-[#9c6743] font-semibold hover:underline"
           >
-            View timeline
+            Hearing guide
           </button>
         </div>
 
         <div className="flex flex-col gap-3">
-          {/* Court Hearing Row */}
-          <div className="flex items-start justify-between gap-3 p-3.5 rounded-xl bg-[#efe7d6]/50 transition-all hover:bg-[#efe7d6] border border-[#e5dac4]/40">
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="flex flex-col items-center justify-center w-11 h-11 rounded-lg bg-white shadow-2xs shrink-0 text-center border border-[#e5dac4]">
-                <span className="text-[10px] uppercase font-bold text-[#9c6743] tracking-wide leading-none">
-                  SEP
-                </span>
-                <span className="text-base font-bold text-[#352e24] leading-none mt-1">
-                  14
-                </span>
+          {!isVictim ? (
+            <p className="text-xs text-[#5c5142] leading-relaxed">
+              With an account, your counsellor can add your hearings and sessions here.
+            </p>
+          ) : events === null ? (
+            <p className="text-xs text-[#8a7d68]">Loading your dates…</p>
+          ) : events.length === 0 ? (
+            <p className="text-xs text-[#5c5142] leading-relaxed">
+              Nothing scheduled right now. Your counsellor adds hearings and sessions here as they're set.
+            </p>
+          ) : (
+            events.map((ev) => (
+              <div
+                key={ev.id}
+                className="flex items-start justify-between gap-3 p-3.5 rounded-xl bg-[#efe7d6]/50 transition-all hover:bg-[#efe7d6] border border-[#e5dac4]/40"
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="flex flex-col items-center justify-center w-11 h-11 rounded-lg bg-white shadow-2xs shrink-0 text-center border border-[#e5dac4]">
+                    <span className="text-[10px] uppercase font-bold text-[#9c6743] tracking-wide leading-none">
+                      {eventDate(ev).toLocaleDateString(undefined, { month: 'short' })}
+                    </span>
+                    <span className="text-base font-bold text-[#352e24] leading-none mt-1">
+                      {eventDate(ev).getDate()}
+                    </span>
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm font-semibold text-[#352e24] truncate">{ev.title}</span>
+                    <span className="text-xs text-[#5c5142]">{whenLabel(ev)}</span>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#9c6743] mt-1">
+                      <Shield className="w-3 h-3 text-[#9c6743]" />
+                      <span>{EVENT_TAGS[ev.kind]}</span>
+                    </span>
+                  </div>
+                </div>
+                {ev.kind === 'hearing' && (
+                  <button
+                    onClick={() => onNavigate('legal-prep')}
+                    className="px-3 py-1.5 rounded-lg bg-white text-[#352e24] hover:bg-[#9c6743] hover:text-white text-xs font-semibold shadow-2xs transition-colors shrink-0 border border-[#e5dac4]"
+                  >
+                    Prep Guide
+                  </button>
+                )}
               </div>
-              <div className="flex flex-col min-w-0">
-                <span className="text-sm font-semibold text-[#352e24] truncate">
-                  Court Hearing (District Session)
-                </span>
-                <span className="text-xs text-[#5c5142]">Thursday · 10:30 AM</span>
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#9c6743] mt-1">
-                  <Shield className="w-3 h-3 text-[#9c6743]" />
-                  <span>Preparation assistance available</span>
-                </span>
-              </div>
-            </div>
-            <button
-              onClick={() => onNavigate('legal-prep')}
-              className="px-3 py-1.5 rounded-lg bg-white text-[#352e24] hover:bg-[#9c6743] hover:text-white text-xs font-semibold shadow-2xs transition-colors shrink-0 border border-[#e5dac4]"
-            >
-              Prep Guide
-            </button>
-          </div>
-
-          {/* Counsellor Follow-up Row */}
-          <div className="flex items-start justify-between gap-3 p-3.5 rounded-xl bg-[#efe7d6]/50 transition-all hover:bg-[#efe7d6] border border-[#e5dac4]/40">
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="flex flex-col items-center justify-center w-11 h-11 rounded-lg bg-white shadow-2xs shrink-0 text-center border border-[#e5dac4]">
-                <span className="text-[10px] uppercase font-bold text-[#8a6a4a] tracking-wide leading-none">
-                  SEP
-                </span>
-                <span className="text-base font-bold text-[#352e24] leading-none mt-1">
-                  16
-                </span>
-              </div>
-              <div className="flex flex-col min-w-0">
-                <span className="text-sm font-semibold text-[#352e24] truncate">
-                  Follow-up with Counsellor Dr. Ananya
-                </span>
-                <span className="text-xs text-[#5c5142]">Saturday · 4:00 PM (30 min)</span>
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#8a6a4a] mt-1">
-                  <CheckCircle2 className="w-3 h-3 text-[#8a6a4a]" />
-                  <span>Confirmed virtual session</span>
-                </span>
-              </div>
-            </div>
-            <span className="px-2.5 py-1 rounded-full bg-[#e7d3b5]/50 text-[#7a5a3f] text-xs font-semibold shrink-0">
-              Ready
-            </span>
-          </div>
+            ))
+          )}
         </div>
 
-        {/* Next Gentle Check-in schedule card */}
-        <div className="flex items-center justify-between pt-1 px-1 text-xs">
+        {/* Next gentle check-in (scheduled by the backend) */}
+        <div className="flex items-center justify-between pt-1 px-1 text-xs gap-2">
           <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-[#9c6743]" />
+            <Clock className="w-4 h-4 text-[#9c6743] shrink-0" />
             <span className="text-[#352e24]">
-              Next Gentle Check-in:{' '}
-              <strong className="font-semibold text-[#9c6743]">
-                {snoozeState === 'normal' ? 'Tomorrow · 7:30 PM' : 'Tomorrow · 9:30 PM (Snoozed +2h)'}
-              </strong>
+              {!isVictim ? (
+                'Check-ins are kept when you have an account'
+              ) : next === 'ready' ? (
+                <strong className="font-semibold text-[#9c6743]">A gentle check-in is ready for you</strong>
+              ) : next ? (
+                <>
+                  Next gentle check-in: <strong className="font-semibold text-[#9c6743]">{next}</strong>
+                </>
+              ) : (
+                'Your check-ins will appear here'
+              )}
             </span>
           </div>
-          <button
-            onClick={handleSnooze}
-            className="text-xs text-[#9c6743] font-semibold hover:underline focus:outline-none"
-            type="button"
-          >
-            {snoozeState === 'normal' ? 'Change time / Snooze' : 'Undo Snooze'}
-          </button>
+          {!isVictim ? (
+            <button onClick={lock} className="text-xs text-[#9c6743] font-semibold hover:underline shrink-0" type="button">
+              Create account
+            </button>
+          ) : (
+            next === 'ready' && (
+              <button
+                onClick={() => onNavigate('well-being')}
+                className="text-xs text-[#9c6743] font-semibold hover:underline shrink-0"
+                type="button"
+              >
+                Begin
+              </button>
+            )
+          )}
         </div>
       </section>
 
@@ -424,17 +454,15 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         {/* Counsellor Direct Action Row */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-white/15 backdrop-blur-md border border-white/20">
           <div className="flex items-center gap-3">
-            <img
-              alt="Counsellor Dr. Ananya"
-              className="w-12 h-12 rounded-full object-cover shadow-sm ring-2 ring-white/50"
-              src={USER_PROFILE.counsellorAvatar}
-            />
+            <span className="w-12 h-12 rounded-full bg-white/25 text-white text-base font-bold flex items-center justify-center shadow-sm ring-2 ring-white/50">
+              {counsellorInitials}
+            </span>
             <div className="flex flex-col">
               <span className="text-sm font-bold text-white">
-                {USER_PROFILE.assignedCounsellor}
+                {user.counsellor ?? (isVictim ? 'Counsellor not assigned yet' : 'Support lines')}
               </span>
               <span className="text-xs text-white/80">
-                {USER_PROFILE.counsellorRole}
+                {user.counsellor ? 'Your trauma-informed counsellor' : 'Free helplines, open 24x7'}
               </span>
             </div>
           </div>
@@ -458,11 +486,11 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         </div>
       </section>
 
-      {/* 6. Safe Guard Footnote & Zero-storage Guarantee */}
+      {/* 6. Safe Guard Footnote */}
       <footer className="flex flex-col items-center justify-center text-center gap-1.5 pt-2 pb-6 text-[#5c5142]">
         <div className="flex items-center gap-1.5 text-[#9c6743] text-xs">
           <Shield className="w-4 h-4" />
-          <span className="font-semibold">Confidential & Ephemeral Storage</span>
+          <span className="font-semibold">Confidential & Encrypted</span>
         </div>
         <p className="text-xs text-[#8a7d68] max-w-md leading-relaxed">
           {t.confidentialFooter}

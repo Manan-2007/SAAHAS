@@ -16,6 +16,28 @@ every notable change. Backend changes also go in `backend/backend.md` → Update
   eval clips (`backend/eval/data/`) are no longer tracked; `eval/download_eval_set.py`
   re-downloads them.
 
+### Team merge: auth, storage and the frontend wired together
+- Merged Swagat's `feat/backend-auth` (username + password sign-in, sessions,
+  lockout, encrypted usernames) and `feat/recordings-storage` (encrypted audio
+  behind a `store_recordings` consent, off by default) with Manan's frontend revamp.
+- Fixed in the merge: `PUT /me/credentials` replaced a password without the current
+  one (account takeover from an unlocked phone); `/predict` read whole uploads before
+  the 25 MB check; the bucket's escape check was a string prefix. New encrypted
+  `PUT /me/profile` for onboarding answers.
+- Frontend sign-in was a local mock (accounts and password hashes in `localStorage`).
+  It now uses `/auth`, keeps only the token in `sessionStorage`, signs out on 401,
+  and Quick Exit wipes it. Sign-up has plain-language consent toggles and a
+  "continue without an account" path.
+- Wired: token on chat/voice notes/live voice, real questionnaires with the crisis
+  banner, home well-being rows, case dates and next check-in, and a Privacy & account
+  panel (consent, devices, recordings, password, delete everything).
+- Counsellors sign in to the Command Centre with their real caseload, alerts,
+  score history and recordings. Victims can no longer open it (it shows scores).
+- Removed things that pretended: a simulated counsellor call (now real helplines,
+  incl. NHAA 14566), invented counsellor chat replies, the demo chat history sent
+  to the model, a fake-PIN lock, a fake audit ledger, made-up KPIs and clinical
+  notes, "end-to-end encrypted" claims, and settings sliders that did nothing.
+
 ### Monitoring: the core of the problem statement
 - Victim accounts with consent. Personal data is encrypted at rest; `DELETE /me`
   erases everything.

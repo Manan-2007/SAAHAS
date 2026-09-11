@@ -25,7 +25,7 @@ export const PriorityCasesView: React.FC<PriorityCasesViewProps> = ({
 
     if (filter === 'HIGH') return c.escalationRisk === 'HIGH';
     if (filter === 'DETERIORATION') return c.status.includes('Deterioration');
-    if (filter === 'ACOUSTIC') return c.status.includes('Acoustic') || c.keyHighlight.includes('Acoustic') || c.keyHighlight.includes('Tremor');
+    if (filter === 'ACOUSTIC') return typeof c.fatigueMarker === 'number' && c.fatigueMarker >= 60;   // voice signal high
     if (filter === 'COURT') return c.escalationReason.toLowerCase().includes('court') || c.keyHighlight.toLowerCase().includes('hearing');
 
     return true;
@@ -43,11 +43,11 @@ export const PriorityCasesView: React.FC<PriorityCasesViewProps> = ({
                 Priority Triage Queue
               </h2>
               <span className="px-2.5 py-0.5 rounded-full bg-[#ffdad6] text-[#ba1a1a] font-['Inter'] text-xs font-bold">
-                4 High Alert
+                {cases.filter((c) => c.escalationRisk === 'HIGH').length} High Attention
               </span>
             </div>
             <p className="font-['Plus_Jakarta_Sans'] text-xs text-[#837562] mt-1">
-              Real-time ranked by passive multimodal divergence Z-score under Protocol v3.2.
+              Most urgent first: crisis signals, then the highest Distress Score.
             </p>
           </div>
 
@@ -73,7 +73,7 @@ export const PriorityCasesView: React.FC<PriorityCasesViewProps> = ({
             { id: 'ALL', label: 'All Cases' },
             { id: 'HIGH', label: 'High Attention' },
             { id: 'DETERIORATION', label: 'Silent Deterioration' },
-            { id: 'ACOUSTIC', label: 'Acoustic Tension' },
+            { id: 'ACOUSTIC', label: 'Voice Distress' },
             { id: 'COURT', label: 'Upcoming Court Dates' },
           ].map((tab) => (
             <button
@@ -150,11 +150,11 @@ export const PriorityCasesView: React.FC<PriorityCasesViewProps> = ({
               {/* Mini Vitals */}
               <div className="grid grid-cols-3 gap-2 mt-3 text-center">
                 <div className="p-2 bg-[#f5f1e8] rounded-lg border border-[#e5dac4]">
-                  <span className="text-[10px] text-[#837562] block font-['Inter']">Well-being</span>
+                  <span className="text-[10px] text-[#837562] block font-['Inter']">Distress</span>
                   <span className="font-bold text-sm text-[#352e24]">{c.wellbeingIndex}</span>
                 </div>
                 <div className="p-2 bg-[#f5f1e8] rounded-lg border border-[#e5dac4]">
-                  <span className="text-[10px] text-[#837562] block font-['Inter']">Fatigue Marker</span>
+                  <span className="text-[10px] text-[#837562] block font-['Inter']">Voice</span>
                   <span className="font-bold text-sm text-[#352e24]">{c.fatigueMarker}</span>
                 </div>
                 <div className="p-2 bg-[#f5f1e8] rounded-lg border border-[#e5dac4]">

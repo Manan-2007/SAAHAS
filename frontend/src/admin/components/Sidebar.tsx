@@ -77,10 +77,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </span>
               <div className="flex flex-col">
                 <span className="font-['Inter'] text-[11px] text-[#352e24] font-semibold">
-                  Clinical Protocol 3.2
+                  Distress Score v1
                 </span>
                 <span className="font-['Inter'] text-[11px] text-[#837562]">
-                  HIPAA • Encrypted Vault
+                  Personal data encrypted at rest
                 </span>
               </div>
             </div>
@@ -136,12 +136,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 Explainable AI
               </span>
               <span className="font-['Inter'] text-[11px] text-[#837562]">
-                Audited Safety Triggers
+                Rules you can read
               </span>
             </div>
           </div>
           <p className="font-['Plus_Jakarta_Sans'] text-[12px] text-[#5c5142] leading-relaxed">
-            Signals derived strictly from opt-in voice & written assessments under trauma-informed rubric.
+            Scores use only what the client consented to: check-ins, chat and voice. See How SAHAAS Scores.
           </p>
         </div>
       </aside>

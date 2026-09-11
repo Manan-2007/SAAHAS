@@ -1,163 +1,182 @@
-// Lightweight client-side auth for the SAAHAS prototype.
+// Sign-in against the SAHAAS backend (/auth, /me).
 //
-// IMPORTANT: this is DEMO-grade auth. The demo account store lives in
-// localStorage (passwords only as salted SHA-256 hashes, never plain text) so a
-// signed-up user can sign in again. The ACTIVE SESSION lives in sessionStorage,
-// per the project safety rule (frontend session never in localStorage): it does
-// not persist across browser sessions, so the app never silently auto-logs-in on
-// a shared or abuser-controlled device.
-// A production deployment MUST replace this with the backend's real token auth.
+// The token itself lives in lib/api: sessionStorage only, never localStorage,
+// so nothing outlives the browser session on a shared phone. Nothing about
+// the account (name, answers, password) is kept in the browser.
 
-export type LanguageCode = 'en' | 'hi' | 'pa';
+import { ApiError, Consent, Me, api, clearSession, getToken, setToken } from '../lib/api';
+import type { LanguageCode } from '../types';
+
+export type { LanguageCode };
 
 // A gentle "getting to know you" baseline, captured once at sign-up. It gives
-// SAAHAS the person's OWN normal to measure future mood shifts against — the
+// SAHAAS the person's OWN normal to measure future mood shifts against - the
 // same baseline idea the Dynamic Distress Score relies on.
 export interface OnboardingProfile {
   displayName: string;
   language: LanguageCode;
   coping: string;          // how they usually cope when things feel heavy
   lowTime: string;         // time of day they most often feel low
-  channel: string;         // voice / text / both — preferred way to open up
+  channel: string;         // voice / text / both - preferred way to open up
   baselineMood: number;    // 1-5, how the past week has felt
   comfort: string;         // what helps them feel safe
   completedAt: string;
 }
 
-export interface Account {
-  id: string;
-  name: string;
-  email: string;
-  salt: string;
-  passHash: string;
-  createdAt: string;
-  profile: OnboardingProfile | null;
-}
-
 export interface SessionUser {
   id: string;
   name: string;
-  email: string;
-  profile: OnboardingProfile | null;
+  // guest: using the app without an account - nothing is saved
+  role: 'victim' | 'counsellor' | 'guest';
+  username: string | null;
+  language: LanguageCode;
+  counsellor: string | null;
+  consent: Partial<Consent>;
+  hasPassword: boolean;
+  onboarded: boolean;
 }
 
-const ACCOUNTS_KEY = 'saahas_accounts_v1';
-const SESSION_KEY = 'saahas_session_v1';
-
-type AccountMap = Record<string, Account>; // keyed by lowercased email
-
-function readAccounts(): AccountMap {
-  try {
-    const raw = localStorage.getItem(ACCOUNTS_KEY);
-    return raw ? (JSON.parse(raw) as AccountMap) : {};
-  } catch {
-    return {};
-  }
+export interface SignUpInput {
+  name: string;
+  username: string;
+  password: string;
+  consent: Consent;
 }
 
-function writeAccounts(map: AccountMap): void {
-  try {
-    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(map));
-  } catch {
-    /* storage unavailable (private mode etc.) — auth simply won't persist */
-  }
-}
-
-function randomSalt(): string {
-  const bytes = new Uint8Array(16);
-  (globalThis.crypto || ({} as Crypto)).getRandomValues?.(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function hashPassword(password: string, salt: string): Promise<string> {
-  const data = new TextEncoder().encode(`${salt}:${password}`);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-function toSessionUser(a: Account): SessionUser {
-  return { id: a.id, name: a.name, email: a.email, profile: a.profile };
-}
+export const MIN_PASSWORD_LENGTH = 8;       // matches the backend (monitoring/auth.py)
 
 export class AuthError extends Error {}
 
-export async function signUp(name: string, email: string, password: string): Promise<SessionUser> {
-  const key = email.trim().toLowerCase();
-  if (!name.trim()) throw new AuthError('Please share a name we can greet you by.');
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) throw new AuthError('Please enter a valid email address.');
-  if (password.length < 6) throw new AuthError('Please use at least 6 characters for your password.');
+const OFFLINE_MESSAGE = "We can't reach SAHAAS right now. Please check your connection and try again.";
 
-  const accounts = readAccounts();
-  if (accounts[key]) throw new AuthError('An account with this email already exists. Try signing in.');
-
-  const salt = randomSalt();
-  const passHash = await hashPassword(password, salt);
-  const account: Account = {
-    id: `u_${Date.now().toString(36)}`,
-    name: name.trim(),
-    email: key,
-    salt,
-    passHash,
-    createdAt: new Date().toISOString(),
-    profile: null,
+function toUser(me: Me): SessionUser {
+  return {
+    id: me.user_id,
+    name: me.name,
+    role: me.role,
+    username: me.username,
+    language: me.language ?? 'en',
+    counsellor: me.counsellor,
+    consent: me.consent ?? {},
+    hasPassword: me.has_password,
+    onboarded: me.role !== 'victim' || me.profile !== null,
   };
-  accounts[key] = account;
-  writeAccounts(accounts);
-  setSession(key);
-  return toSessionUser(account);
 }
 
-export async function signIn(email: string, password: string): Promise<SessionUser> {
-  const key = email.trim().toLowerCase();
-  const accounts = readAccounts();
-  const account = accounts[key];
-  if (!account) throw new AuthError('No account found for this email. Please sign up first.');
-  const hash = await hashPassword(password, account.salt);
-  if (hash !== account.passHash) throw new AuthError('That password does not match. Please try again.');
-  setSession(key);
-  return toSessionUser(account);
+// Backend errors become sentences a person can act on
+function asAuthError(err: unknown, messages: Partial<Record<number, string>> = {}): AuthError {
+  if (err instanceof AuthError) return err;
+  if (err instanceof ApiError) return new AuthError(messages[err.status] ?? err.message);
+  return new AuthError(OFFLINE_MESSAGE);
 }
 
-export function setSession(email: string): void {
+async function currentUser(): Promise<SessionUser> {
+  return toUser(await api.me());
+}
+
+export async function signUp({ name, username, password, consent }: SignUpInput): Promise<SessionUser> {
+  if (!name.trim()) throw new AuthError('Please share a name we can greet you by.');
+  if (username.trim().length < 3) throw new AuthError('Please choose a username with at least 3 characters.');
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    throw new AuthError(`Please use at least ${MIN_PASSWORD_LENGTH} characters for your password.`);
+  }
+  if (!consent.data_storage) throw new AuthError('An account needs permission to save your check-ins.');
   try {
-    sessionStorage.setItem(SESSION_KEY, email.toLowerCase());
-  } catch {
-    /* ignore */
+    await api.register({
+      name: name.trim(),
+      language: 'en',
+      consent,
+      username: username.trim(),
+      password,
+    });
+    // Keep a session token, not the registration's access token: a session
+    // expires, shows up under "Where I'm signed in", and signing out ends it.
+    const session = await api.login(username.trim(), password);
+    setToken(session.token);
+    return await currentUser();
+  } catch (err) {
+    clearSession();
+    throw asAuthError(err, { 409: 'That username is already taken. Please try another one.' });
   }
 }
 
-export function signOut(): void {
+export async function signIn(username: string, password: string): Promise<SessionUser> {
+  if (!username.trim() || !password) throw new AuthError('Please enter your username and password.');
   try {
-    sessionStorage.removeItem(SESSION_KEY);
-  } catch {
-    /* ignore */
+    const res = await api.login(username.trim(), password);
+    setToken(res.token);
+    return await currentUser();
+  } catch (err) {
+    clearSession();
+    throw asAuthError(err, { 401: 'Incorrect username or password.' });
   }
 }
 
-export function getCurrentUser(): SessionUser | null {
+// For accounts made with an access token (manage.py, or registration without a password)
+export async function signInWithToken(token: string): Promise<SessionUser> {
+  if (!token.trim()) throw new AuthError('Please paste your access token.');
+  setToken(token.trim());
   try {
-    const email = sessionStorage.getItem(SESSION_KEY);
-    if (!email) return null;
-    const account = readAccounts()[email];
-    return account ? toSessionUser(account) : null;
-  } catch {
-    return null;
+    return await currentUser();
+  } catch (err) {
+    clearSession();
+    throw asAuthError(err, { 401: "That access token didn't work. Please check it and try again." });
   }
 }
 
-export function saveProfile(profile: OnboardingProfile): SessionUser | null {
+// null when there's no usable token. Throws when the backend can't be reached,
+// so the caller can offer a retry instead of silently signing the person out.
+export async function restoreSession(): Promise<SessionUser | null> {
+  if (!getToken()) return null;
   try {
-    const email = sessionStorage.getItem(SESSION_KEY);
-    if (!email) return null;
-    const accounts = readAccounts();
-    const account = accounts[email];
-    if (!account) return null;
-    account.profile = profile;
-    if (profile.displayName.trim()) account.name = profile.displayName.trim();
-    accounts[email] = account;
-    writeAccounts(accounts);
-    return toSessionUser(account);
-  } catch {
-    return null;
+    return await currentUser();
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) return null;
+    throw err;
   }
+}
+
+export async function signOut(): Promise<void> {
+  try {
+    if (getToken()) await api.logout();
+  } catch {
+    /* already signed out on the server, or offline: forget the token either way */
+  }
+  clearSession();
+}
+
+export async function saveProfile(profile: OnboardingProfile): Promise<SessionUser> {
+  try {
+    await api.saveProfile({
+      display_name: profile.displayName.trim() || null,
+      language: profile.language,
+      coping: profile.coping || null,
+      low_time: profile.lowTime || null,
+      channel: profile.channel || null,
+      baseline_mood: profile.baselineMood || null,
+      comfort: profile.comfort || null,
+    });
+    return await currentUser();
+  } catch (err) {
+    throw asAuthError(err);
+  }
+}
+
+export async function refreshUser(): Promise<SessionUser> {
+  return currentUser();
+}
+
+// Using SAHAAS without an account: chat and voice work, nothing is stored.
+export function guestUser(): SessionUser {
+  return {
+    id: 'guest',
+    name: 'Friend',
+    role: 'guest',
+    username: null,
+    language: 'en',
+    counsellor: null,
+    consent: {},
+    hasPassword: false,
+    onboarded: true,
+  };
 }

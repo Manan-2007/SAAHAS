@@ -27,10 +27,21 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
   isSyncing,
 }) => {
   const activeCase = cases.find((c) => c.id === selectedCaseId) || cases[0];
-  const [acknowledged, setAcknowledged] = useState(false);
+  const [acknowledgedId, setAcknowledgedId] = useState<string | null>(null);
+  const acknowledged = acknowledgedId === activeCase.id;     // per case, not for the whole list
+
+  // Caseload tiles, from the real cases (data/live.ts)
+  const pct = (part: number) => (cases.length ? `${Math.round((part / cases.length) * 100)}%` : '0%');
+  const scored = cases.filter((c) => typeof c.wellbeingIndex === 'number').length;
+  const highAttention = cases.filter((c) => c.escalationRisk === 'HIGH').length;
+  const crisisCases = cases.filter((c) => c.status === 'Crisis Signal').length;
+  const pendingAlerts = cases.flatMap((c) => c.interventions).filter((i) => i.id.startsWith('alert-') && i.status === 'Pending').length;
+  const withAlerts = cases.filter((c) => c.alertTitle !== 'No open alerts').length;
+  const datesSoon = cases.filter((c) => c.signals.some((s) => s.type === 'legal' && s.status === 'High Stress')).length;
+  const improving = cases.filter((c) => c.statusType === 'success').length;
 
   const handleAcknowledge = () => {
-    setAcknowledged(true);
+    setAcknowledgedId(activeCase.id);
     onAcknowledgePlan();
   };
 
@@ -48,7 +59,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 SAHAAS Command Dashboard
               </span>
               <span className="px-2 py-0.5 rounded-full bg-[#ddd0b8] text-[#5c5142] font-['Inter'] text-[11px] font-semibold">
-                Protocol v3.2
+                Distress Score v1
               </span>
             </div>
             <p className="font-['Plus_Jakarta_Sans'] text-xs text-[#5c5142] flex items-center gap-1.5 mt-0.5">
@@ -65,7 +76,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         <div className="flex items-center gap-2.5 self-end md:self-auto">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white text-[#9c6743] font-['Inter'] text-xs font-semibold shadow-xs border border-[#e5dac4]">
             <span className="w-2 h-2 rounded-full bg-[#9c6743] animate-ping"></span>
-            Multimodal Live Feed
+            Refreshes every minute
           </span>
           <button
             id="btn-sync-baselines"
@@ -77,7 +88,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <span className={`material-symbols-outlined text-[16px] ${isSyncing ? 'animate-spin' : ''}`}>
               sync
             </span>
-            <span>{isSyncing ? 'Syncing...' : 'Sync Baselines'}</span>
+            <span>{isSyncing ? 'Refreshing...' : 'Refresh'}</span>
           </button>
         </div>
       </div>
@@ -88,7 +99,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         <div className="bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce] flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition-all">
           <div className="flex items-center justify-between">
             <span className="font-['Inter'] text-sm text-[#837562] font-medium">
-              Active Monitored Cases
+              My Caseload
             </span>
             <div className="w-8 h-8 rounded-lg bg-[#ece2ce] flex items-center justify-center text-[#9c6743]">
               <span className="material-symbols-outlined text-[20px]">groups</span>
@@ -96,14 +107,14 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
           <div className="mt-4 flex items-baseline justify-between">
             <span className="font-['Plus_Jakarta_Sans'] text-3xl text-[#352e24] font-bold tracking-tight">
-              846
+              {cases.length}
             </span>
             <span className="font-['Inter'] text-xs text-[#8a6a4a] bg-[#efe7d6] px-2 py-0.5 rounded-full font-semibold">
-              +12 this week
+              {scored} with a score
             </span>
           </div>
           <div className="mt-3 w-full bg-[#ece2ce] h-1.5 rounded-full overflow-hidden">
-            <div className="bg-[#9c6743] h-full rounded-full" style={{ width: '78%' }}></div>
+            <div className="bg-[#9c6743] h-full rounded-full" style={{ width: pct(scored) }}></div>
           </div>
         </div>
 
@@ -117,7 +128,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
           <div className="mt-4 flex items-baseline justify-between">
             <span className="font-['Plus_Jakarta_Sans'] text-3xl text-[#ba1a1a] font-bold tracking-tight">
-              42
+              {highAttention}
             </span>
             <span className="font-['Inter'] text-[11px] text-[#ba1a1a] font-semibold flex items-center gap-0.5 bg-[#ffdad6]/60 px-2 py-0.5 rounded-full">
               <span className="material-symbols-outlined text-[14px]">trending_up</span> Requires Human Review
@@ -125,28 +136,30 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
           <div className="mt-3 text-[#5c5142] font-['Plus_Jakarta_Sans'] text-xs flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-[#ba1a1a]"></span>
-            <span>4 acute acoustic spikes in last 6h</span>
+            <span>
+              {crisisCases} with a crisis signal
+            </span>
           </div>
         </div>
 
         {/* Follow-ups Due */}
         <div className="bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce] flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition-all">
           <div className="flex items-center justify-between">
-            <span className="font-['Inter'] text-sm text-[#837562] font-medium">Follow-ups Due Today</span>
+            <span className="font-['Inter'] text-sm text-[#837562] font-medium">Alerts to Follow Up</span>
             <div className="w-8 h-8 rounded-lg bg-[#e5dac4] flex items-center justify-center text-[#837562]">
               <span className="material-symbols-outlined text-[20px]">calendar_clock</span>
             </div>
           </div>
           <div className="mt-4 flex items-baseline justify-between">
             <span className="font-['Plus_Jakarta_Sans'] text-3xl text-[#352e24] font-bold tracking-tight">
-              87
+              {pendingAlerts}
             </span>
             <span className="font-['Inter'] text-xs text-[#837562] font-medium bg-[#ece2ce] px-2 py-0.5 rounded-full">
-              23 Priority Legal
+              {datesSoon} case date{datesSoon === 1 ? '' : 's'} in 3 days
             </span>
           </div>
           <div className="mt-3 w-full bg-[#ece2ce] h-1.5 rounded-full overflow-hidden">
-            <div className="bg-[#9a8b76] h-full rounded-full" style={{ width: '45%' }}></div>
+            <div className="bg-[#9a8b76] h-full rounded-full" style={{ width: pct(withAlerts) }}></div>
           </div>
         </div>
 
@@ -160,14 +173,14 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
           </div>
           <div className="mt-4 flex items-baseline justify-between">
             <span className="font-['Plus_Jakarta_Sans'] text-3xl text-[#8a6a4a] font-bold tracking-tight">
-              314
+              {improving}
             </span>
             <span className="font-['Inter'] text-xs text-[#9c6743] font-semibold bg-[#e7d3b5]/40 px-2 py-0.5 rounded-full">
-              37.1% Overall
+              {pct(improving)} of caseload
             </span>
           </div>
           <div className="mt-3 w-full bg-[#ece2ce] h-1.5 rounded-full overflow-hidden">
-            <div className="bg-[#8a6a4a] h-full rounded-full" style={{ width: '62%' }}></div>
+            <div className="bg-[#8a6a4a] h-full rounded-full" style={{ width: pct(improving) }}></div>
           </div>
         </div>
       </div>
@@ -183,7 +196,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                   Priority Cases & Triage Queue
                 </h2>
                 <p className="font-['Plus_Jakarta_Sans'] text-xs text-[#5c5142]">
-                  Real-time passive divergence & distress cues
+                  Crisis first, then the highest Distress Score
                 </p>
               </div>
               <div className="flex items-center gap-1 bg-[#efe7d6] px-2.5 py-1 rounded-lg">
@@ -274,10 +287,10 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               <span className="material-symbols-outlined text-[#8a6a4a] text-[20px] mt-0.5">shield</span>
               <div className="flex flex-col">
                 <span className="font-['Inter'] text-xs text-[#352e24] font-semibold">
-                  Trauma-Informed Safe Protocol
+                  Decision support, not a diagnosis
                 </span>
                 <p className="font-['Plus_Jakarta_Sans'] text-xs text-[#5c5142] mt-0.5 leading-relaxed">
-                  Divergence metrics evaluate behavioral drift without exposing raw text logs to third parties. All notes maintain client legal privilege.
+                  Scores help you notice who may need you first. The weights are fixed and not yet clinically validated, so use your own judgement. Clients never see scores.
                 </p>
               </div>
             </div>
@@ -336,7 +349,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <div className="grid grid-cols-3 gap-3 p-4 bg-[#efe7d6] rounded-xl border border-[#e5dac4]">
               <div className="flex flex-col">
                 <span className="font-['Inter'] text-[11px] text-[#837562] uppercase tracking-wider font-semibold">
-                  Well-being Index
+                  Distress Score
                 </span>
                 <div className="flex items-baseline gap-2 mt-1">
                   <span className="font-['Plus_Jakarta_Sans'] text-2xl text-[#352e24] font-bold">
@@ -346,12 +359,12 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                     {activeCase.wellbeingDelta}
                   </span>
                 </div>
-                <span className="font-['Inter'] text-xs text-[#837562] mt-0.5">Elevated distress</span>
+                <span className="font-['Inter'] text-xs text-[#837562] mt-0.5">0-100 · change over 7 days</span>
               </div>
 
               <div className="flex flex-col">
                 <span className="font-['Inter'] text-[11px] text-[#837562] uppercase tracking-wider font-semibold">
-                  Fatigue Marker
+                  Voice Signal
                 </span>
                 <div className="flex items-baseline gap-2 mt-1">
                   <span className="font-['Plus_Jakarta_Sans'] text-2xl text-[#352e24] font-bold">
@@ -361,7 +374,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                     {activeCase.fatigueDelta}
                   </span>
                 </div>
-                <span className="font-['Inter'] text-xs text-[#837562] mt-0.5">Sleep & pause drift</span>
+                <span className="font-['Inter'] text-xs text-[#837562] mt-0.5">0-100 from voice check-ins</span>
               </div>
 
               <div className="flex flex-col">
@@ -406,10 +419,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3">
                     <div className="bg-white p-2.5 rounded-lg shadow-xs border border-[#ffdad6]/60">
                       <span className="font-['Inter'] text-[11px] text-[#837562] block">
-                        Response Length
+                        Questionnaires
                       </span>
                       <span className="font-['Plus_Jakarta_Sans'] text-base text-[#ba1a1a] font-bold flex items-center gap-1 mt-0.5">
-                        <span className="material-symbols-outlined text-[16px]">arrow_downward</span>{' '}
                         {activeCase.metrics.responseLengthDelta}
                       </span>
                       <span className="font-['Inter'] text-[10px] text-[#837562]">
@@ -419,10 +431,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
                     <div className="bg-white p-2.5 rounded-lg shadow-xs border border-[#ffdad6]/60">
                       <span className="font-['Inter'] text-[11px] text-[#837562] block">
-                        Response Latency
+                        Chat Distress
                       </span>
                       <span className="font-['Plus_Jakarta_Sans'] text-base text-[#ba1a1a] font-bold flex items-center gap-1 mt-0.5">
-                        <span className="material-symbols-outlined text-[16px]">arrow_upward</span>{' '}
                         {activeCase.metrics.responseLatencyDelta}
                       </span>
                       <span className="font-['Inter'] text-[10px] text-[#837562]">
@@ -432,10 +443,9 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
                     <div className="bg-white p-2.5 rounded-lg shadow-xs border border-[#ffdad6]/60">
                       <span className="font-['Inter'] text-[11px] text-[#837562] block">
-                        Voice Duration
+                        Voice Distress
                       </span>
                       <span className="font-['Plus_Jakarta_Sans'] text-base text-[#ba1a1a] font-bold flex items-center gap-1 mt-0.5">
-                        <span className="material-symbols-outlined text-[16px]">arrow_downward</span>{' '}
                         {activeCase.metrics.voiceDurationDelta}
                       </span>
                       <span className="font-['Inter'] text-[10px] text-[#837562]">
@@ -445,7 +455,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
                     <div className="bg-white p-2.5 rounded-lg shadow-xs border border-[#ffdad6]/60">
                       <span className="font-['Inter'] text-[11px] text-[#837562] block">
-                        Missed Check-ins
+                        Last Contact
                       </span>
                       <span className="font-['Plus_Jakarta_Sans'] text-base text-[#ba1a1a] font-bold flex items-center gap-1 mt-0.5">
                         {activeCase.metrics.missedCheckins}
@@ -463,10 +473,10 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <div className="space-y-2.5 pt-1">
               <div className="flex items-center justify-between">
                 <h4 className="font-['Plus_Jakarta_Sans'] text-sm text-[#352e24] font-semibold">
-                  Multimodal Signal Consistency Matrix
+                  Signals Behind the Score
                 </h4>
                 <span className="font-['Inter'] text-xs text-[#837562]">
-                  Opt-in Trauma-Informed Sensors
+                  Only what the client consented to
                 </span>
               </div>
 
@@ -540,7 +550,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                   </div>
                   <div>
                     <span className="font-['Inter'] text-xs text-[#352e24] font-semibold block">
-                      AI Confidence: {activeCase.aiConfidenceLabel}
+                      Signal coverage: {activeCase.aiConfidenceLabel}
                     </span>
                     <p className="font-['Plus_Jakarta_Sans'] text-[11px] text-[#5c5142]">
                       {activeCase.aiConfidenceDescription}
@@ -667,7 +677,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               <span className="material-symbols-outlined text-[18px]">
                 {acknowledged ? 'task_alt' : 'check_circle'}
               </span>
-              <span>{acknowledged ? 'Certified & Logged' : 'Mark Reviewed & Acknowledge'}</span>
+              <span>{acknowledged ? 'Alerts Acknowledged' : 'Acknowledge Open Alerts'}</span>
             </button>
           </div>
         </div>
@@ -683,11 +693,11 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 </h3>
               </div>
               <span className="px-2 py-0.5 rounded bg-[#efe7d6] text-[#8a6a4a] font-['Inter'] text-xs font-semibold">
-                Audited
+                Last 30 days
               </span>
             </div>
             <p className="font-['Plus_Jakarta_Sans'] text-xs text-[#5c5142]">
-              5-Stage Trajectory Tracker ensuring intervention efficacy without re-traumatizing check-in burdens.
+              Where this case is in the care loop, and how the Distress Score has moved.
             </p>
 
             {/* 5 Step Flow Horizontal Indicator */}
@@ -736,7 +746,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <div className="mt-3 p-4 bg-[#efe7d6] rounded-xl space-y-2.5 border border-[#e5dac4]">
               <div className="flex items-center justify-between">
                 <span className="font-['Inter'] text-xs font-semibold text-[#352e24]">
-                  Distress Score Trajectory (Cohort Baseline)
+                  Distress Score, last 30 days (caseload improving)
                 </span>
                 <span className="font-['Inter'] text-xs text-[#8a6a4a] font-bold">
                   {activeCase.cohortImprovementPct}
@@ -746,7 +756,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               {/* Comparison Columns */}
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <div className="p-3 bg-white rounded-lg border border-[#e5dac4] shadow-xs">
-                  <span className="font-['Inter'] text-[11px] text-[#837562] block">Before Intervention</span>
+                  <span className="font-['Inter'] text-[11px] text-[#837562] block">30 Days Ago</span>
                   <div className="flex items-baseline gap-1 mt-1">
                     <span className="font-['Plus_Jakarta_Sans'] text-2xl text-[#ba1a1a] font-bold">
                       {activeCase.distressBefore}
@@ -759,7 +769,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 </div>
 
                 <div className="p-3 bg-[#e7d3b5]/30 rounded-lg border border-[#e7d3b5] shadow-xs">
-                  <span className="font-['Inter'] text-[11px] text-[#837562] block">After 48h Follow-up</span>
+                  <span className="font-['Inter'] text-[11px] text-[#837562] block">Now</span>
                   <div className="flex items-baseline gap-1 mt-1">
                     <span className="font-['Plus_Jakarta_Sans'] text-2xl text-[#8a6a4a] font-bold">
                       {activeCase.distressAfter}
@@ -776,20 +786,26 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
 
               {/* Sparkline / Trend visual inline SVG */}
               <div className="pt-2">
-                <svg className="w-full h-12 text-[#8a6a4a]" fill="none" viewBox="0 0 300 50">
-                  <path
-                    d="M0 15 Q 40 10, 80 40 T 160 30 T 240 15 T 300 38"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeWidth="2.5"
-                  ></path>
-                  <circle cx="80" cy="40" fill="#ba1a1a" r="3.5"></circle>
-                  <circle cx="300" cy="38" fill="#8a6a4a" r="4.5"></circle>
-                </svg>
+                {activeCase.trendPoints.length >= 2 ? (
+                  <svg className="w-full h-12 text-[#8a6a4a]" fill="none" viewBox="0 0 300 50" preserveAspectRatio="none">
+                    <polyline
+                      points={activeCase.trendPoints
+                        .map((s, i, all) => `${(i / (all.length - 1)) * 300},${48 - (s / 100) * 46}`)
+                        .join(' ')}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2.5"
+                      vectorEffect="non-scaling-stroke"
+                    ></polyline>
+                  </svg>
+                ) : (
+                  <p className="text-[11px] text-[#837562]">Not enough scores yet for a trend line.</p>
+                )}
                 <div className="flex justify-between text-[#837562] font-['Inter'] text-[11px] mt-1">
-                  <span>Day 1 (Triage Spike)</span>
-                  <span>Day 3 (Post Follow-up Call)</span>
+                  <span>30 days ago</span>
+                  <span>Now</span>
                 </div>
               </div>
             </div>
@@ -800,7 +816,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-[#8a6a4a] text-[20px]">verified_user</span>
               <span className="font-['Inter'] text-xs text-[#8a6a4a] font-semibold">
-                Verified by Clinical Counsellor
+                Decision support · you make the call
               </span>
             </div>
             <button
@@ -809,7 +825,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
               onClick={onOpenAuditTrail}
               className="text-[#837562] hover:text-[#352e24] font-['Inter'] text-xs underline transition-colors"
             >
-              View Protocol Audit Trail
+              View case history
             </button>
           </div>
         </div>

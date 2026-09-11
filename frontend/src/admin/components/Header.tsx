@@ -1,8 +1,9 @@
 import React from 'react';
 
 interface HeaderProps {
+  counsellorName: string;
   onToggleMobileSidebar: () => void;
-  onSwitchToClientMode: () => void;
+  onSignOut: () => void;
   onQuickLock: () => void;
   onToggleNotifications: () => void;
   unreadCount: number;
@@ -12,8 +13,9 @@ const BRAND_LOGO_URL =
   'https://lh3.googleusercontent.com/aida/AEtjO1VEyAdYi5Yksnru_1OPhZWlg32VyMC0WRPb4X8Naj0MQOI-8GTGIf1Mx6rXvVJWsTNdlrdTv96zLXRdSrcTP6VtrfmngLPaP3j2DhTlNYBF-xw1BYXZs0Q-uuKtD6UTqmrSM8Slh_orJ2lYlKMLzEPUoPI1J0L_5py49yNtv1tcmxxrnD0MjPETL0amsM-j7HUx7DnUF8JelwHSzUIcbDfU3NBsR-yIc9bGj_EiGAkrrfGdiSyqC9brAYA';
 
 export const Header: React.FC<HeaderProps> = ({
+  counsellorName,
   onToggleMobileSidebar,
-  onSwitchToClientMode,
+  onSignOut,
   onQuickLock,
   onToggleNotifications,
   unreadCount,
@@ -50,16 +52,15 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Switch to User Interface button */}
+        {/* Sign out */}
         <button
-          id="btn-switch-user-interface"
-          onClick={onSwitchToClientMode}
+          id="btn-sign-out"
+          onClick={onSignOut}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#ece2ce] hover:bg-[#e5dac4] text-[#352e24] font-['Inter'] text-[12px] font-semibold transition-colors shadow-xs"
           type="button"
         >
-          <span className="material-symbols-outlined text-[#8a6a4a] text-[18px]">swap_horiz</span>
-          <span className="hidden sm:inline">Switch to User Interface</span>
-          <span className="sm:hidden">Client View</span>
+          <span className="material-symbols-outlined text-[#8a6a4a] text-[18px]">logout</span>
+          <span className="hidden sm:inline">Sign out</span>
         </button>
 
         {/* Quick Lock button */}
@@ -92,10 +93,10 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2 pl-1 border-l border-[#e5dac4] ml-1">
           <div className="hidden md:flex flex-col text-right">
             <span className="font-['Inter'] text-[12px] text-[#352e24] font-semibold leading-tight">
-              Dr. Ananya Rao
+              {counsellorName}
             </span>
             <span className="font-['Inter'] text-[11px] text-[#837562] leading-tight">
-              Lead Trauma Specialist
+              Counsellor
             </span>
           </div>
           <div className="w-8 h-8 rounded-full bg-[#9c6743] flex items-center justify-center text-white shadow-xs">

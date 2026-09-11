@@ -17,7 +17,7 @@ import {
   PenLine,
   Clock,
 } from 'lucide-react';
-import { SessionUser, OnboardingProfile, LanguageCode, saveProfile } from './authStore';
+import { AuthError, SessionUser, OnboardingProfile, LanguageCode, saveProfile } from './authStore';
 
 interface OnboardingProps {
   user: SessionUser;
@@ -93,10 +93,21 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
     setTimeout(next, 140);
   };
 
-  const finish = () => {
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Saved to the backend (encrypted), not the browser: it's personal
+  const finish = async () => {
+    if (saving) return;
+    setSaving(true);
+    setSaveError(null);
     const profile: OnboardingProfile = { ...draft, completedAt: new Date().toISOString() };
-    const updated = saveProfile(profile);
-    onComplete(updated ?? { ...user, profile });
+    try {
+      onComplete(await saveProfile(profile));
+    } catch (err) {
+      setSaveError(err instanceof AuthError ? err.message : 'We couldn’t save that just now. Please try again.');
+      setSaving(false);
+    }
   };
 
   const firstName = (draft.displayName || user.name).split(' ')[0];
@@ -304,12 +315,17 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
                   />
                 ))}
               </div>
+              {saveError && (
+                <p role="alert" className="mt-3 text-xs text-[#93000a] bg-[#ffdad6]/60 border border-[#ffdad6] rounded-xl px-3 py-2">
+                  {saveError}
+                </p>
+              )}
               <button
                 onClick={finish}
-                disabled={!draft.comfort}
+                disabled={!draft.comfort || saving}
                 className="mt-4 w-full py-3 rounded-2xl bg-[#9c6743] text-white font-semibold text-sm shadow-md hover:bg-[#835636] active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
               >
-                <span>Enter my sanctuary</span>
+                <span>{saving ? 'Saving…' : 'Enter my sanctuary'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </StepShell>

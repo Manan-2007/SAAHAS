@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { ChatMessage } from '../types';
-import { INITIAL_CHAT_MESSAGES, USER_PROFILE } from '../data/mockData';
+import { useAuth } from '../auth/AuthProvider';
 import {
   ChatTurn,
   Emotion,
@@ -65,11 +65,23 @@ function scriptedReply(text: string): string {
   return `Sorry, I'm having trouble connecting right now. Could you send that again in a moment?`;
 }
 
-const COUNSELLOR_REPLY = `Sunita, Dr. Ananya here. I read your words carefully. Your feelings are 100% valid and protective. You don't have to face this alone. I will be reviewing our prep notes with you before the session on Saturday, and our court liaison is confirmed for Thursday. Take a slow sip of water right now.`;
+// There is no counsellor inbox yet, so the app says so plainly instead of
+// pretending a message was delivered (or inventing a reply from them).
+const counsellorNotice = (counsellor: string) =>
+  `Messages to ${counsellor} can't be sent from the app yet. Please use the call button to reach them. If you're in danger right now, call 112.`;
 
+const welcomeMessage = (name: string | null): ChatMessage => ({
+  id: 'note-welcome',
+  sender: 'sahaas',
+  senderName: 'SAHAAS',
+  text: `Hi${name ? ` ${name}` : ''}. This is your private space - talk about anything, big or small, in English or Hindi. I'm SAHAAS, an AI companion.`,
+  timestamp: timestampNow(),
+});
+
+// Messages with a note- id are on-screen notices, never part of the conversation the model sees
 function toChatTurns(messages: ChatMessage[]): ChatTurn[] {
   return messages
-    .filter((m) => m.sender !== 'counsellor' && m.id !== 'msg-cleared')
+    .filter((m) => m.sender !== 'counsellor' && !m.id.startsWith('note-'))
     .map((m): ChatTurn => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text }))
     .slice(-CHAT_HISTORY_TURNS);
 }
@@ -88,7 +100,12 @@ interface SafeChatProps {
 }
 
 export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdateMetric }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
+  const { user } = useAuth();
+  const firstName = user.name.trim().split(' ')[0] || user.name;
+  const counsellorName = user.counsellor ?? 'your counsellor';
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [
+    welcomeMessage(user.role === 'guest' ? null : firstName),
+  ]);
   const [inputText, setInputText] = useState('');
   const [activePartner, setActivePartner] = useState<'sahaas' | 'counsellor'>('sahaas');
   const [discreetMode, setDiscreetMode] = useState(false);
@@ -174,32 +191,27 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
   const handleSendMessage = (textToSend?: string) => {
     const text = (textToSend || inputText).trim();
     if (!text || isTyping) return;
+    flagIfCrisis(text);
+
+    if (activePartner === 'counsellor') {
+      appendMessage({
+        id: `note-counsellor-${Date.now()}`,
+        sender: 'sahaas',
+        senderName: 'SAHAAS',
+        text: counsellorNotice(counsellorName),
+        timestamp: timestampNow(),
+      });
+      return;
+    }
 
     appendMessage({
       id: `usr-${Date.now()}`,
       sender: 'user',
-      senderName: USER_PROFILE.name,
+      senderName: firstName,
       text,
       timestamp: timestampNow(),
     });
     if (!textToSend) setInputText('');
-    flagIfCrisis(text);
-
-    if (activePartner === 'counsellor') {
-      setIsTyping(true);
-      setTimeout(() => {
-        if (!mountedRef.current) return;
-        appendMessage({
-          id: `csl-${Date.now()}`,
-          sender: 'counsellor',
-          senderName: USER_PROFILE.assignedCounsellor,
-          text: COUNSELLOR_REPLY,
-          timestamp: timestampNow(),
-        });
-        setIsTyping(false);
-      }, 1200);
-      return;
-    }
     askSahaas(() => scriptedReply(text));
   };
 
@@ -246,7 +258,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
     appendMessage({
       id: `aud-${Date.now()}`,
       sender: 'user',
-      senderName: USER_PROFILE.name,
+      senderName: firstName,
       text: transcript ? `Voice note - "${transcript}"` : 'Voice note',
       timestamp: timestampNow(),
       isAudio: true,
@@ -280,10 +292,10 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
     lastToneRef.current = null;
     messagesRef.current = [
       {
-        id: 'msg-cleared',
+        id: 'note-cleared',
         sender: 'sahaas',
-        senderName: 'SAHAAS Sanctuary',
-        text: 'Chat history cleared. Ephemeral memory wiped from active session.',
+        senderName: 'SAHAAS',
+        text: 'Chat cleared from this screen. We can start fresh whenever you like.',
         timestamp: timestampNow(),
       }
     ];
@@ -322,7 +334,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
                   : 'text-[#5c5142] hover:text-[#352e24]'
               }`}
             >
-              Dr. Ananya
+              {user.counsellor ?? 'Counsellor'}
             </button>
           </div>
         </div>
@@ -363,8 +375,27 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
       {/* Encryption & Security Banner */}
       <div className="flex items-center justify-center gap-1.5 py-1 text-[11px] text-[#9c6743] font-medium bg-[#efe7d6]/80 rounded-lg mb-2">
         <ShieldCheck className="w-3.5 h-3.5" />
-        <span>End-to-End Encrypted · Zero Cloud Traces</span>
+        <span>
+          {user.role === 'guest'
+            ? 'Private · nothing is saved without an account'
+            : user.consent.store_messages
+            ? 'Private · your messages are kept encrypted'
+            : 'Private · only how you felt is saved, not your words'}
+        </span>
       </div>
+
+      {activePartner === 'counsellor' && (
+        <div className="mb-2 rounded-xl bg-white border border-[#e5dac4] p-3 text-xs text-[#5c5142] leading-relaxed flex items-start gap-2">
+          <Phone className="w-4 h-4 text-[#9c6743] shrink-0 mt-0.5" />
+          <span>
+            Messaging {counsellorName} from the app isn't available yet.{' '}
+            <button onClick={onOpenCall} className="font-semibold text-[#9c6743] hover:underline">
+              Call instead
+            </button>
+            .
+          </span>
+        </div>
+      )}
 
       {/* Message List */}
       <div className="flex-1 overflow-y-auto space-y-3 px-1 py-2 scroll-smooth">
@@ -486,9 +517,11 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
               ? `Recording ${formatDuration(recordSeconds)} - tap the mic to send`
               : voiceStage === 'processing'
               ? 'Listening to your voice note...'
+              : activePartner === 'counsellor'
+              ? 'Switch to SAHAAS AI to chat'
               : 'Share whatever is on your mind...'
           }
-          disabled={voiceStage !== 'idle'}
+          disabled={voiceStage !== 'idle' || activePartner === 'counsellor'}
           className="flex-1 bg-transparent text-sm text-[#352e24] placeholder-[#8a7d68] outline-none px-1"
         />
 

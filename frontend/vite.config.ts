@@ -13,6 +13,11 @@ export default defineConfig(({mode}) => {
     '/predict': {target: backend, changeOrigin: true},
     '/chat': {target: backend, changeOrigin: true},
     '/ws': {target: backend, changeOrigin: true, ws: true},
+    // Monitoring API (accounts, check-ins, counsellor dashboard)
+    '/auth': {target: backend, changeOrigin: true},
+    '^/me(/|$|\\?)': {target: backend, changeOrigin: true},   // not a plain '/me': it would catch /metadata.json
+    '/questionnaires': {target: backend, changeOrigin: true},
+    '/counsellor': {target: backend, changeOrigin: true},
   };
 
   return {

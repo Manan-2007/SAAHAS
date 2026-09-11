@@ -1,31 +1,31 @@
 import React, { useState } from 'react';
-import { Shield, Lock, Power, UserCheck, LogOut, Heart, User } from 'lucide-react';
-import { AppView, UserPersona, LanguageCode } from '../types';
-import { TRANSLATIONS, USER_PROFILE } from '../data/mockData';
+import { createPortal } from 'react-dom';
+import { Lock, Power, LogOut, Heart, Shield, UserPlus } from 'lucide-react';
+import { AppView, LanguageCode } from '../types';
+import { TRANSLATIONS } from '../data/mockData';
 import { useAuth } from '../auth/AuthProvider';
+import { PrivacySettings } from './PrivacySettings';
 
 interface HeaderProps {
   currentView: AppView;
-  persona: UserPersona;
   language: LanguageCode;
   onLanguageChange: (lang: LanguageCode) => void;
-  onPersonaChange: (persona: UserPersona) => void;
   onQuickExit: () => void;
   onNavigate: (view: AppView) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   currentView,
-  persona,
   language,
   onLanguageChange,
-  onPersonaChange,
   onQuickExit,
   onNavigate,
 }) => {
   const t = TRANSLATIONS[language];
-  const { user, logout } = useAuth();
+  const { user, logout, lock } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const isGuest = user.role === 'guest';
   const firstName = user.name.trim().split(' ')[0] || user.name;
   const initial = firstName.charAt(0).toUpperCase();
 
@@ -43,12 +43,12 @@ export const Header: React.FC<HeaderProps> = ({
         return 'Support Network & Helplines';
       case 'legal-prep':
         return 'Hearing Preparation Guide';
-      case 'counsellor-command-centre':
-        return 'Counsellor Command Centre';
       default:
         return t.homeTitle;
     }
   };
+
+  const menuItem = 'w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#352e24] hover:bg-[#f5f1e8] transition-colors';
 
   return (
     <header className="fixed top-0 w-full z-50 pt-safe bg-[#f5f1e8]/95 backdrop-blur-xl shadow-[0_1px_12px_rgba(38,50,56,0.06)] border-b border-[#e5dac4]/60">
@@ -56,8 +56,8 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Top brand & safety bar */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <button 
-              onClick={() => onNavigate('home-dashboard')} 
+            <button
+              onClick={() => onNavigate('home-dashboard')}
               className="flex items-center gap-1.5 focus:outline-none group text-left"
               title="Return to Home"
             >
@@ -103,31 +103,58 @@ export const Header: React.FC<HeaderProps> = ({
               {menuOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-                  <div className="absolute right-0 mt-2 w-56 z-50 rounded-2xl bg-white border border-[#e5dac4] shadow-lg overflow-hidden animate-fadeIn">
+                  <div className="absolute right-0 mt-2 w-60 z-50 rounded-2xl bg-white border border-[#e5dac4] shadow-lg overflow-hidden animate-fadeIn">
                     <div className="px-4 py-3 border-b border-[#ece2ce]">
-                      <p className="text-sm font-bold text-[#352e24] truncate">{user.name}</p>
-                      <p className="text-xs text-[#8a7d68] truncate">{user.email}</p>
+                      <p className="text-sm font-bold text-[#352e24] truncate">{isGuest ? 'Without an account' : user.name}</p>
+                      <p className="text-xs text-[#8a7d68] truncate">
+                        {isGuest ? 'Nothing is being saved' : user.username ? `@${user.username}` : 'Signed in with a token'}
+                      </p>
                     </div>
                     <button
                       onClick={() => {
                         setMenuOpen(false);
                         onNavigate('well-being');
                       }}
-                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#352e24] hover:bg-[#f5f1e8] transition-colors"
+                      className={menuItem}
                     >
                       <Heart className="w-4 h-4 text-[#9c6743]" />
                       <span>My well-being</span>
                     </button>
-                    <button
-                      onClick={() => {
-                        setMenuOpen(false);
-                        logout();
-                      }}
-                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#93000a] hover:bg-[#ffdad6]/40 transition-colors border-t border-[#ece2ce]"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span>Sign out</span>
-                    </button>
+                    {isGuest ? (
+                      <button
+                        onClick={() => {
+                          setMenuOpen(false);
+                          lock();
+                        }}
+                        className={menuItem}
+                      >
+                        <UserPlus className="w-4 h-4 text-[#9c6743]" />
+                        <span>Create an account or sign in</span>
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => {
+                            setMenuOpen(false);
+                            setPrivacyOpen(true);
+                          }}
+                          className={menuItem}
+                        >
+                          <Shield className="w-4 h-4 text-[#9c6743]" />
+                          <span>Privacy &amp; account</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setMenuOpen(false);
+                            logout();
+                          }}
+                          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#93000a] hover:bg-[#ffdad6]/40 transition-colors border-t border-[#ece2ce]"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          <span>Sign out</span>
+                        </button>
+                      </>
+                    )}
                   </div>
                 </>
               )}
@@ -135,7 +162,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        {/* Sub-bar with View Name & Persona / Language controls */}
+        {/* Sub-bar with view name & language */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <h1 className="text-base sm:text-lg font-semibold text-[#352e24] tracking-tight truncate">
@@ -158,37 +185,12 @@ export const Header: React.FC<HeaderProps> = ({
               </select>
               <span className="pointer-events-none absolute right-1.5 text-[#5c5142] text-xs">▼</span>
             </div>
-
-            {/* Admin Toggle button */}
-            {persona === 'victim' ? (
-              <button
-                onClick={() => {
-                  onPersonaChange('admin');
-                  onNavigate('counsellor-command-centre');
-                }}
-                className="px-2.5 py-1 rounded-md bg-[#e2d6c0] text-[#352e24] text-xs font-semibold flex items-center gap-1 hover:bg-[#cbbda4] transition-colors shadow-2xs"
-                title="Switch to Counsellor Admin Mode"
-              >
-                <Shield className="w-3.5 h-3.5 text-[#9c6743]" />
-                <span className="hidden sm:inline">Admin</span>
-                <span className="sm:hidden">Adm</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => {
-                  onPersonaChange('victim');
-                  onNavigate('home-dashboard');
-                }}
-                className="px-2.5 py-1 rounded-md bg-[#e7d3b5] text-[#7a5a3f] text-xs font-semibold flex items-center gap-1 hover:bg-[#ecdcbf] transition-colors shadow-2xs"
-                title="Return to User View"
-              >
-                <UserCheck className="w-3.5 h-3.5" />
-                <span>User View</span>
-              </button>
-            )}
           </div>
         </div>
       </div>
+
+      {/* Portalled: the header's backdrop blur would otherwise trap the fixed overlay inside it */}
+      {privacyOpen && createPortal(<PrivacySettings onClose={() => setPrivacyOpen(false)} />, document.body)}
     </header>
   );
 };

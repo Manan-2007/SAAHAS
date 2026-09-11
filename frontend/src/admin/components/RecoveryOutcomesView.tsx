@@ -6,10 +6,29 @@ interface RecoveryOutcomesViewProps {
   onOpenAuditTrail: () => void;
 }
 
+const pct = (part: number, whole: number) => (whole ? `${Math.round((part / whole) * 100)}%` : '—');
+
+// Caseload outcomes over the last 30 days, computed from the real cases
+function outcomes(cases: CaseData[]) {
+  const changes = cases
+    .filter((c) => typeof c.distressBefore === 'number' && typeof c.distressAfter === 'number')
+    .map((c) => (c.distressAfter as number) - (c.distressBefore as number));
+  const average = changes.length ? changes.reduce((a, b) => a + b, 0) / changes.length : null;
+  const inTouch = cases.filter((c) => typeof c.metrics.missedCheckins === 'number' && c.metrics.missedCheckins <= 7).length;
+  const calm = cases.filter((c) => c.alertTitle === 'No open alerts').length;
+  return {
+    averageChange: average == null ? '—' : `${average > 0 ? '+' : ''}${average.toFixed(1)} pts`,
+    measured: changes.length,
+    inTouch: pct(inTouch, cases.length),
+    calm: pct(calm, cases.length),
+  };
+}
+
 export const RecoveryOutcomesView: React.FC<RecoveryOutcomesViewProps> = ({
   cases,
   onOpenAuditTrail,
 }) => {
+  const stats = outcomes(cases);
   return (
     <div className="flex flex-col space-y-6">
       {/* Header Banner */}
@@ -23,11 +42,11 @@ export const RecoveryOutcomesView: React.FC<RecoveryOutcomesViewProps> = ({
               Closed-Loop Recovery & Outcomes
             </h2>
             <span className="px-2.5 py-0.5 rounded-full bg-[#e7d3b5] text-[#7a5a3f] font-['Inter'] text-xs font-bold">
-              Audited Trajectory
+              Last 30 days
             </span>
           </div>
           <p className="font-['Plus_Jakarta_Sans'] text-xs text-[#837562] mt-1">
-            Measuring clinical de-escalation without re-traumatizing survivors with invasive surveys.
+            How your caseload is moving, from the Distress Score history and check-in activity.
           </p>
         </div>
 
@@ -36,80 +55,80 @@ export const RecoveryOutcomesView: React.FC<RecoveryOutcomesViewProps> = ({
           onClick={onOpenAuditTrail}
           className="px-3.5 py-2 rounded-lg bg-[#9c6743] text-white hover:bg-[#b3654a] font-['Inter'] text-xs font-semibold flex items-center gap-1.5 shadow-xs"
         >
-          <span className="material-symbols-outlined text-[16px]">file_download</span>
-          <span>Export Clinical Cohort Audit</span>
+          <span className="material-symbols-outlined text-[16px]">history</span>
+          <span>Case History</span>
         </button>
       </div>
 
-      {/* Cohort Stats Cards */}
+      {/* Caseload Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce]">
           <span className="text-xs text-[#837562] font-['Inter'] block font-semibold">
-            Average Distress Score Drop
+            Average Distress Score Change
           </span>
           <div className="flex items-baseline gap-2 mt-2">
             <span className="font-['Plus_Jakarta_Sans'] text-3xl font-bold text-[#8a6a4a]">
-              -16.4 pts
+              {stats.averageChange}
             </span>
             <span className="text-xs text-[#8a6a4a] font-semibold bg-[#e7d3b5]/40 px-2 py-0.5 rounded-full">
-              48h Post-Intervention
+              over 30 days
             </span>
           </div>
           <p className="text-xs text-[#5c5142] mt-2">
-            Cohort baseline de-escalates from High Strain (72) to Moderate (58) within 2 care cycles.
+            Negative is better. Based on the {stats.measured} case{stats.measured === 1 ? '' : 's'} with a score 30 days ago and now.
           </p>
         </div>
 
         <div className="bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce]">
           <span className="text-xs text-[#837562] font-['Inter'] block font-semibold">
-            Passive Retention Rate
+            In Touch This Week
           </span>
           <div className="flex items-baseline gap-2 mt-2">
             <span className="font-['Plus_Jakarta_Sans'] text-3xl font-bold text-[#9c6743]">
-              94.2%
+              {stats.inTouch}
             </span>
             <span className="text-xs text-[#9c6743] font-semibold bg-[#efe7d6] px-2 py-0.5 rounded-full">
-              Opt-in Maintained
+              last 7 days
             </span>
           </div>
           <p className="text-xs text-[#5c5142] mt-2">
-            Survivors continue voluntary micro-touchpoints without drop-off due to survey fatigue.
+            Share of your clients with a chat, voice or questionnaire check-in in the past week.
           </p>
         </div>
 
         <div className="bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce]">
           <span className="text-xs text-[#837562] font-['Inter'] block font-semibold">
-            Relapse Avoidance Index
+            No Open Alerts
           </span>
           <div className="flex items-baseline gap-2 mt-2">
             <span className="font-['Plus_Jakarta_Sans'] text-3xl font-bold text-[#8a6a4a]">
-              88.7%
+              {stats.calm}
             </span>
             <span className="text-xs text-[#8a6a4a] font-semibold bg-[#e7d3b5]/40 px-2 py-0.5 rounded-full">
-              Trauma Protocol Safe
+              right now
             </span>
           </div>
           <p className="text-xs text-[#5c5142] mt-2">
-            Zero re-traumatizing escalation triggers in audited cohort over the past 90 days.
+            Share of your clients with nothing waiting for follow-up.
           </p>
         </div>
       </div>
 
-      {/* Cohort Cases Trajectory Table */}
+      {/* Caseload Trajectory Table */}
       <div className="bg-white rounded-xl p-6 shadow-xs border border-[#ece2ce] space-y-4">
         <h3 className="font-['Plus_Jakarta_Sans'] text-base font-bold text-[#352e24]">
-          Patient Trajectory Status Matrix
+          Client Trajectory
         </h3>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-[#efe7d6] text-[11px] text-[#837562] uppercase font-['Inter'] tracking-wider">
-                <th className="py-2.5 px-3">Patient</th>
-                <th className="py-2.5 px-3">Protocol Phase</th>
-                <th className="py-2.5 px-3">Initial Strain</th>
-                <th className="py-2.5 px-3">Current Strain</th>
-                <th className="py-2.5 px-3">Improvement</th>
+                <th className="py-2.5 px-3">Client</th>
+                <th className="py-2.5 px-3">Care Phase</th>
+                <th className="py-2.5 px-3">30 Days Ago</th>
+                <th className="py-2.5 px-3">Now</th>
+                <th className="py-2.5 px-3">Change</th>
                 <th className="py-2.5 px-3">Counsellor</th>
               </tr>
             </thead>
@@ -132,7 +151,7 @@ export const RecoveryOutcomesView: React.FC<RecoveryOutcomesViewProps> = ({
                     {c.distressAfter} / 100
                   </td>
                   <td className="py-3 px-3 font-bold text-[#8a6a4a]">
-                    {c.cohortImprovementPct}
+                    {c.distressDelta || '—'}
                   </td>
                   <td className="py-3 px-3 text-[#837562]">{c.assignedCounsellor}</td>
                 </tr>

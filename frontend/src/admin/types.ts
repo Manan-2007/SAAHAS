@@ -20,7 +20,7 @@ export interface MultimodalSignal {
   type: 'text' | 'voice' | 'engagement' | 'legal';
   label: string;
   description: string;
-  status: 'Stable' | 'Changed' | 'Reduced' | 'High Stress' | 'Improving';
+  status: 'Stable' | 'Changed' | 'Reduced' | 'High Stress' | 'Improving' | 'No data';
   statusColor: 'secondary' | 'amber' | 'error' | 'primary';
 }
 
@@ -31,7 +31,7 @@ export interface CaseData {
   initials: string;
   registeredDate: string;
   assignedCounsellor: string;
-  status: 'Silent Deterioration Detected' | 'Voice Acoustic Tension' | 'Follow-up Required' | 'Stabilizing • Recovery Tracking' | 'Court Stress Alert';
+  status: string;          // e.g. 'Crisis Signal', 'Silent Deterioration Detected' (data/live.ts)
   statusType: 'error' | 'amber' | 'info' | 'success';
   timeAgo: string;
   keyHighlight: string;
@@ -39,10 +39,10 @@ export interface CaseData {
   keyHighlightColor: 'error' | 'amber' | 'primary' | 'secondary' | 'tertiary';
   subHighlight: string;
   
-  // Vitals
-  wellbeingIndex: number;
+  // Vitals ("—" where the backend has no data yet)
+  wellbeingIndex: number | string;     // the Distress Score, 0-100
   wellbeingDelta: string;
-  fatigueMarker: number;
+  fatigueMarker: number | string;      // the voice component, 0-100
   fatigueDelta: string;
   escalationRisk: 'HIGH' | 'MODERATE' | 'LOW' | 'STABLE';
   escalationReason: string;
@@ -58,7 +58,7 @@ export interface CaseData {
     responseLatencyNote: string;
     voiceDurationDelta: string;
     voiceDurationNote: string;
-    missedCheckins: number;
+    missedCheckins: number | string;
     missedCheckinsNote: string;
   };
 
@@ -77,11 +77,12 @@ export interface CaseData {
 
   // Closed-loop Recovery
   cohortImprovementPct: string;
-  distressBefore: number;
+  distressBefore: number | string;
   distressBeforeLabel: string;
-  distressAfter: number;
+  distressAfter: number | string;
   distressAfterLabel: string;
   distressDelta: string;
+  trendPoints: number[];   // Distress Score history, last 30 days
   currentStep: number; // 1 to 5
 }
 

@@ -1,224 +1,156 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-export const SystemSettingsView: React.FC = () => {
-  const [zScoreThreshold, setZScoreThreshold] = useState(3.0);
-  const [windowHours, setWindowHours] = useState(96);
-  const [allowAudioTelemetry, setAllowAudioTelemetry] = useState(true);
-  const [autoRankQueue, setAutoRankQueue] = useState(true);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+// A read-only reference for counsellors: how the Distress Score and alerts
+// actually work. The numbers mirror backend/monitoring/scoring.py - change
+// them there (and here) together.
 
-  const handleSave = () => {
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2500);
-  };
+const WEIGHTS = [
+  {
+    label: 'Questionnaires',
+    weight: 45,
+    detail: 'PHQ-9, GAD-7, PC-PTSD-5 and the PHQ-4 pulse from the last 21 days, mapped to 0-100 by clinical band.',
+  },
+  {
+    label: 'Chat distress',
+    weight: 25,
+    detail: 'The distress model on chat messages from the last 7 days; recent messages count more.',
+  },
+  {
+    label: 'Voice distress',
+    weight: 15,
+    detail: 'Tone, arousal and valence from voice check-ins and notes in the last 7 days.',
+  },
+  {
+    label: 'Withdrawal',
+    weight: 15,
+    detail: 'Days since the last contact. No penalty in the first 3 days after sign-up.',
+  },
+];
 
-  return (
-    <div className="flex flex-col space-y-6">
-      {/* Header */}
-      <div className="bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#9c6743] text-[24px]">settings</span>
-            <h2 className="font-['Plus_Jakarta_Sans'] text-xl text-[#352e24] font-bold">
-              System Settings & Clinical Rubric
-            </h2>
-            <span className="px-2.5 py-0.5 rounded-full bg-[#e5dac4] text-[#352e24] font-['Inter'] text-xs font-bold">
-              Protocol v3.2
-            </span>
+const TIERS = [
+  { range: '75-100', name: 'High' },
+  { range: '50-74', name: 'Elevated' },
+  { range: '25-49', name: 'Watch' },
+  { range: '0-24', name: 'Stable' },
+];
+
+const ALERTS = [
+  {
+    name: 'Crisis Signal',
+    level: 'Crisis',
+    when: 'Crisis words or a high-risk distress rating in chat or a voice call, or a PHQ-9 self-harm answer. The score is held at 80 or more for 72 hours.',
+  },
+  { name: 'High Distress', level: 'High', when: 'The score reaches the High tier. Stays quiet for 24 hours after you resolve it.' },
+  { name: 'Rising Distress', level: 'Watch', when: 'Up 15 points or more in 7 days while not Stable. 72-hour cool-down.' },
+  {
+    name: 'Silent Deterioration',
+    level: 'Watch',
+    when: 'A long silence while distress is Watch or higher. 72-hour cool-down.',
+  },
+  {
+    name: 'Court Stress',
+    level: 'Watch',
+    when: 'A case date within 3 days while distress is Elevated or higher. 72-hour cool-down.',
+  },
+];
+
+const PRIVACY = [
+  'Names, phone numbers, case references, answers, saved messages, notes and recordings are encrypted at rest.',
+  'Chat text is kept only if the client turns on "Keep what I write"; recordings only if they turn on "Keep recordings".',
+  'Passwords are hashed with scrypt. Five wrong attempts start a lockout, and sign-ins expire after 30 days.',
+  'A client who deletes their account erases everything, recordings included.',
+  'Clients never see scores, severities or clinical labels - only gentle trend words.',
+];
+
+const CARD = 'bg-white rounded-xl p-6 shadow-xs border border-[#ece2ce] space-y-4';
+const HEADING = "font-['Plus_Jakarta_Sans'] text-base font-bold text-[#352e24] flex items-center gap-2";
+
+export const SystemSettingsView: React.FC = () => (
+  <div className="flex flex-col space-y-6">
+    {/* Header */}
+    <div className="bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce]">
+      <div className="flex items-center gap-2">
+        <span className="material-symbols-outlined text-[#9c6743] text-[24px]">menu_book</span>
+        <h2 className="font-['Plus_Jakarta_Sans'] text-xl text-[#352e24] font-bold">How SAHAAS Scores</h2>
+        <span className="px-2.5 py-0.5 rounded-full bg-[#e5dac4] text-[#352e24] font-['Inter'] text-xs font-bold">
+          Distress Score v1
+        </span>
+      </div>
+      <p className="font-['Plus_Jakarta_Sans'] text-xs text-[#837562] mt-1">
+        A reference for reading the dashboard. The score is recomputed every hour and after every check-in. The weights
+        are fixed and not yet clinically validated; they'll be fitted to pilot data.
+      </p>
+    </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className={`lg:col-span-6 ${CARD}`}>
+        <h3 className={HEADING}>
+          <span className="material-symbols-outlined text-[#9c6743]">tune</span>
+          What goes into the score (0-100)
+        </h3>
+        {WEIGHTS.map((w) => (
+          <div key={w.label}>
+            <div className="flex justify-between text-xs font-semibold text-[#352e24]">
+              <span>{w.label}</span>
+              <span className="text-[#9c6743] font-mono">{w.weight}%</span>
+            </div>
+            <div className="h-1.5 rounded-full bg-[#efe7d6] mt-1.5 overflow-hidden">
+              <div className="h-full bg-[#9c6743] rounded-full" style={{ width: `${w.weight}%` }} />
+            </div>
+            <p className="text-[11px] text-[#837562] mt-1">{w.detail}</p>
           </div>
-          <p className="font-['Plus_Jakarta_Sans'] text-xs text-[#837562] mt-1">
-            Configure algorithmic boundaries, HIPAA encryption safeguards, and trauma-informed sensitivity.
-          </p>
-        </div>
+        ))}
+        <p className="text-[11px] text-[#837562] pt-2 border-t border-[#efe7d6]">
+          Signals with no recent data are left out and the rest re-weighted. "Signal coverage" on a case shows how much
+          of the score had data.
+        </p>
 
-        {saveSuccess && (
-          <span className="text-xs font-semibold text-[#8a6a4a] bg-[#e7d3b5]/40 px-3 py-1.5 rounded-full flex items-center gap-1">
-            <span className="material-symbols-outlined text-[16px]">check_circle</span>
-            Settings Successfully Deployed
-          </span>
-        )}
+        <h3 className={`${HEADING} pt-2`}>
+          <span className="material-symbols-outlined text-[#9c6743]">stacked_bar_chart</span>
+          Tiers
+        </h3>
+        <div className="grid grid-cols-4 gap-2 text-center">
+          {TIERS.map((t) => (
+            <div key={t.name} className="p-2 rounded-lg bg-[#f5f1e8] border border-[#e5dac4]">
+              <span className="block text-xs font-bold text-[#352e24]">{t.name}</span>
+              <span className="text-[11px] text-[#837562] font-mono">{t.range}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Algorithmic Thresholds */}
-        <div className="lg:col-span-6 bg-white rounded-xl p-6 shadow-xs border border-[#ece2ce] space-y-5">
-          <h3 className="font-['Plus_Jakarta_Sans'] text-base font-bold text-[#352e24] flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#9c6743]">tune</span>
-            Deterioration Detection Thresholds
+      <div className="lg:col-span-6 flex flex-col gap-6">
+        <div className={CARD}>
+          <h3 className={HEADING}>
+            <span className="material-symbols-outlined text-[#ba1a1a]">notifications</span>
+            When an alert is raised
           </h3>
-
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-xs font-semibold text-[#352e24]">
-                <span>Divergence Z-Score Sensitivity</span>
-                <span className="text-[#9c6743] font-mono">{zScoreThreshold.toFixed(1)} σ</span>
-              </div>
-              <input
-                type="range"
-                min="1.5"
-                max="4.5"
-                step="0.1"
-                value={zScoreThreshold}
-                onChange={(e) => setZScoreThreshold(parseFloat(e.target.value))}
-                className="w-full accent-[#9c6743] mt-2 cursor-pointer"
-              />
-              <p className="text-[11px] text-[#837562] mt-1">
-                Lower triggers earlier silent deterioration alerts; higher minimizes false positive outreach.
-              </p>
-            </div>
-
-            <div className="pt-3 border-t border-[#efe7d6]">
-              <div className="flex justify-between text-xs font-semibold text-[#352e24]">
-                <span>Rolling Baseline Observation Window</span>
-                <span className="text-[#9c6743] font-mono">{windowHours} Hours</span>
-              </div>
-              <input
-                type="range"
-                min="48"
-                max="168"
-                step="12"
-                value={windowHours}
-                onChange={(e) => setWindowHours(parseInt(e.target.value))}
-                className="w-full accent-[#9c6743] mt-2 cursor-pointer"
-              />
-              <p className="text-[11px] text-[#837562] mt-1">
-                Current window matches 96-hour pre-court anticipatory stress detection curve.
-              </p>
-            </div>
-
-            <div className="pt-3 border-t border-[#efe7d6] space-y-3">
-              <label className="flex items-center justify-between cursor-pointer">
-                <div className="flex flex-col">
-                  <span className="text-xs font-semibold text-[#352e24]">
-                    Acoustic Biomarker Telemetry
-                  </span>
-                  <span className="text-[11px] text-[#837562]">
-                    Process vocal pauses & micro-jitter without storing speech transcripts.
-                  </span>
+          <div className="space-y-2">
+            {ALERTS.map((a) => (
+              <div key={a.name} className="p-2.5 rounded-lg bg-[#f5f1e8] border border-[#e5dac4]">
+                <div className="flex justify-between text-xs">
+                  <span className="font-semibold text-[#352e24]">{a.name}</span>
+                  <span className="font-mono text-[#9c6743]">{a.level}</span>
                 </div>
-                <input
-                  type="checkbox"
-                  checked={allowAudioTelemetry}
-                  onChange={(e) => setAllowAudioTelemetry(e.target.checked)}
-                  className="w-5 h-5 rounded text-[#9c6743] accent-[#9c6743]"
-                />
-              </label>
-
-              <label className="flex items-center justify-between cursor-pointer">
-                <div className="flex flex-col">
-                  <span className="text-xs font-semibold text-[#352e24]">
-                    Auto-Rank Triage Queue
-                  </span>
-                  <span className="text-[11px] text-[#837562]">
-                    Order incoming cases automatically by urgency score and court proximity.
-                  </span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={autoRankQueue}
-                  onChange={(e) => setAutoRankQueue(e.target.checked)}
-                  className="w-5 h-5 rounded text-[#9c6743] accent-[#9c6743]"
-                />
-              </label>
-            </div>
+                <p className="text-[11px] text-[#5c5142] mt-0.5">{a.when}</p>
+              </div>
+            ))}
           </div>
-
-          <button
-            type="button"
-            onClick={handleSave}
-            className="w-full py-2.5 rounded-lg bg-[#9c6743] text-white hover:bg-[#b3654a] font-['Inter'] text-xs font-semibold shadow-xs transition-colors"
-          >
-            Apply Protocol Configuration
-          </button>
+          <p className="text-[11px] text-[#837562]">One open alert per reason at a time. Crisis alerts always refresh.</p>
         </div>
 
-        {/* Right Column: HIPAA Vault & Security Status */}
-        <div className="lg:col-span-6 bg-white rounded-xl p-6 shadow-xs border border-[#ece2ce] space-y-5">
-          <h3 className="font-['Plus_Jakarta_Sans'] text-base font-bold text-[#352e24] flex items-center gap-2">
+        <div className={CARD}>
+          <h3 className={HEADING}>
             <span className="material-symbols-outlined text-[#8a6a4a]">lock</span>
-            HIPAA Vault & Data Governance
+            Data and privacy
           </h3>
-
-          <div className="space-y-3">
-            <div className="p-3.5 bg-[#efe7d6] rounded-xl border border-[#e5dac4] flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-[#9c6743] text-[20px]">
-                  verified_user
-                </span>
-                <div>
-                  <span className="text-xs font-semibold text-[#352e24] block">
-                    Zero-Knowledge Encryption
-                  </span>
-                  <span className="text-[11px] text-[#837562]">
-                    AES-256 GCM client-side encrypted payload
-                  </span>
-                </div>
-              </div>
-              <span className="px-2 py-0.5 rounded bg-[#e7d3b5] text-[#7a5a3f] text-[10px] font-bold">
-                Active
-              </span>
-            </div>
-
-            <div className="p-3.5 bg-[#efe7d6] rounded-xl border border-[#e5dac4] flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-[#9c6743] text-[20px]">
-                  privacy_tip
-                </span>
-                <div>
-                  <span className="text-xs font-semibold text-[#352e24] block">
-                    Legal Privilege Firewall
-                  </span>
-                  <span className="text-[11px] text-[#837562]">
-                    Subpoena immunity under counselor-client privilege rule 126
-                  </span>
-                </div>
-              </div>
-              <span className="px-2 py-0.5 rounded bg-[#e7d3b5] text-[#7a5a3f] text-[10px] font-bold">
-                Certified
-              </span>
-            </div>
-
-            <div className="p-3.5 bg-[#efe7d6] rounded-xl border border-[#e5dac4] flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-[#9c6743] text-[20px]">
-                  history_edu
-                </span>
-                <div>
-                  <span className="text-xs font-semibold text-[#352e24] block">
-                    Cryptographic Audit Ledger
-                  </span>
-                  <span className="text-[11px] text-[#837562]">
-                    Every algorithmic triage computation hashed and logged
-                  </span>
-                </div>
-              </div>
-              <span className="px-2 py-0.5 rounded bg-[#e7d3b5] text-[#7a5a3f] text-[10px] font-bold">
-                Verified
-              </span>
-            </div>
-          </div>
-
-          <div className="pt-3 border-t border-[#efe7d6]">
-            <h4 className="text-xs font-bold text-[#352e24] mb-2 font-['Plus_Jakarta_Sans']">
-              Explainable AI Rule Directory
-            </h4>
-            <div className="space-y-1.5 text-xs text-[#5c5142]">
-              <div className="flex justify-between p-2 rounded bg-[#f5f1e8] border border-[#e5dac4]">
-                <span className="font-mono text-[#9c6743]">Rule #E-94</span>
-                <span>Conflicting multimodal signals & latency divergence</span>
-              </div>
-              <div className="flex justify-between p-2 rounded bg-[#f5f1e8] border border-[#e5dac4]">
-                <span className="font-mono text-[#9c6743]">Rule #V-42</span>
-                <span>Acoustic vocal jitter above physiological norm</span>
-              </div>
-              <div className="flex justify-between p-2 rounded bg-[#f5f1e8] border border-[#e5dac4]">
-                <span className="font-mono text-[#9c6743]">Rule #D-12</span>
-                <span>Passive touchpoint decay without explicit opt-out</span>
-              </div>
-            </div>
-          </div>
+          <ul className="space-y-1.5 text-xs text-[#5c5142] list-disc pl-4">
+            {PRIVACY.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
         </div>
       </div>
     </div>
-  );
-};
+  </div>
+);

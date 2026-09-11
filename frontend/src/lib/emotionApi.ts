@@ -1,7 +1,11 @@
-// Client for the voice emotion backend (../backend, FastAPI).
-// In dev, Vite proxies /health, /predict and /ws to the backend, so the
+// Client for the voice emotion + chat backend (../backend, FastAPI).
+// In dev, Vite proxies /health, /predict, /chat and /ws to the backend, so the
 // default same-origin base works. For a separately hosted backend, set
 // VITE_API_URL (e.g. "https://emotion.example.com").
+// A signed-in victim's token goes with every call, so check-ins are saved to
+// their timeline; without one everything still works and nothing is stored.
+
+import { authHeaders, expireSession, getToken, httpUrl, wsUrl } from './api';
 
 export const EMOTIONS = [
   'angry', 'calm', 'disgust', 'fearful', 'happy', 'neutral', 'sad', 'surprised',
@@ -41,12 +45,6 @@ export interface BackendHealth {
   transcription: boolean;
 }
 
-const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
-
-const httpUrl = (path: string) => `${API_BASE}${path}`;
-const wsUrl = (path: string) =>
-  `${(API_BASE || window.location.origin).replace(/^http/, 'ws')}${path}`;
-
 export async function checkHealth(timeoutMs = 3000): Promise<BackendHealth | null> {
   try {
     const res = await fetch(httpUrl('/health'), { signal: AbortSignal.timeout(timeoutMs) });
@@ -59,8 +57,9 @@ export async function checkHealth(timeoutMs = 3000): Promise<BackendHealth | nul
 export async function predictFile(file: File): Promise<EmotionReading> {
   const body = new FormData();
   body.append('file', file);
-  const res = await fetch(httpUrl('/predict'), { method: 'POST', body });
+  const res = await fetch(httpUrl('/predict'), { method: 'POST', body, headers: authHeaders() });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) expireSession();
   if (!res.ok) {
     throw new Error(typeof data.detail === 'string' ? data.detail : `Analysis failed (${res.status})`);
   }
@@ -136,7 +135,8 @@ export async function startLiveSession(h: LiveSessionHandlers): Promise<LiveSess
   let stopping = false;
   let finalWaiter: (() => void) | null = null;
 
-  ws.send(JSON.stringify({ sampleRate, transcribe: h.transcribe }));
+  const token = getToken();
+  ws.send(JSON.stringify({ sampleRate, transcribe: h.transcribe, ...(token ? { token } : {}) }));
 
   ws.onmessage = (e) => {
     let msg: any;
@@ -228,11 +228,12 @@ export interface ChatResponse {
 export async function chatReply(messages: ChatTurn[], tone?: Emotion | null): Promise<ChatResponse> {
   const res = await fetch(httpUrl('/chat'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ messages, tone: tone ?? null }),
     signal: AbortSignal.timeout(120000),
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) expireSession();
   if (!res.ok) {
     throw new Error(typeof data.detail === 'string' ? data.detail : `Chat failed (${res.status})`);
   }

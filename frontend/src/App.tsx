@@ -1,6 +1,5 @@
-import React, { useState, lazy, Suspense } from 'react';
-import { AppView, UserPersona, LanguageCode, WellBeingMetric } from './types';
-import { INITIAL_WELLBEING_METRICS } from './data/mockData';
+import React, { useCallback, useEffect, useState, lazy, Suspense } from 'react';
+import { AppView, LanguageCode, WellBeingMetric } from './types';
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
 import { HomeDashboard } from './components/HomeDashboard';
@@ -13,23 +12,43 @@ import { SupportLegalPrep } from './components/SupportLegalPrep';
 const AdminApp = lazy(() => import('./admin/AdminApp'));
 import { QuickExitDecoy } from './components/QuickExitDecoy';
 import { CallModal } from './components/CallModal';
+import { useAuth } from './auth/AuthProvider';
+import { Wellbeing, api, clearSession } from './lib/api';
+import { STARTING_METRICS, applyWellbeing } from './lib/wellbeing';
 
 export default function App() {
+  const { user, logout, lock } = useAuth();
+  const isVictim = user.role === 'victim';
   const [currentView, setCurrentView] = useState<AppView>('home-dashboard');
-  const [persona, setPersona] = useState<UserPersona>('victim');
-  const [language, setLanguage] = useState<LanguageCode>('en');
+  const [language, setLanguage] = useState<LanguageCode>(user.language);
   const [isQuickExited, setIsQuickExited] = useState(false);
   const [isCallOpen, setIsCallOpen] = useState(false);
   const [selectedMood, setSelectedMood] = useState<string>('calm');
-  const [metrics, setMetrics] = useState<WellBeingMetric[]>(INITIAL_WELLBEING_METRICS);
+  const [metrics, setMetrics] = useState<WellBeingMetric[]>(STARTING_METRICS);
+  const [wellbeingMessage, setWellbeingMessage] = useState<string | null>(null);
 
-  // Quick Safety Exit triggered: instantly mask with realistic decoy
+  const showWellbeing = useCallback((w: Wellbeing) => {
+    setMetrics((m) => applyWellbeing(m, w));
+    setWellbeingMessage(w.message);
+  }, []);
+
+  // The home rows come from the victim's own check-ins (trend words, never scores)
+  useEffect(() => {
+    if (!isVictim) return;
+    let live = true;
+    api.wellbeing().then((w) => live && showWellbeing(w)).catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [isVictim, showWellbeing]);
+
+  // Quick Safety Exit: the token is wiped at once and the decoy covers the
+  // screen. Coming back needs a fresh sign-in, so whoever picks up the phone
+  // next can't just tap back in.
   const handleQuickExit = () => {
+    clearSession();
+    setIsCallOpen(false);
     setIsQuickExited(true);
-  };
-
-  const handleRestoreSanctuary = () => {
-    setIsQuickExited(false);
   };
 
   const handleUpdateMetric = (metricId: string, status: string, description?: string) => {
@@ -44,12 +63,12 @@ export default function App() {
 
   // If in emergency quick-exit decoy mode:
   if (isQuickExited) {
-    return <QuickExitDecoy onRestoreSanctuary={handleRestoreSanctuary} />;
+    return <QuickExitDecoy onRestoreSanctuary={lock} />;
   }
 
-  // Counsellor Command Centre is a full-screen dashboard with its own sidebar
-  // and header, so it takes over the shell instead of nesting in the user chrome.
-  if (currentView === 'counsellor-command-centre') {
+  // Counsellors sign in to the Command Centre: a full-screen dashboard with its
+  // own sidebar and header. Victims never reach it - it shows scores.
+  if (user.role === 'counsellor') {
     return (
       <Suspense
         fallback={
@@ -61,12 +80,7 @@ export default function App() {
           </div>
         }
       >
-        <AdminApp
-          onExitToUser={() => {
-            setPersona('victim');
-            setCurrentView('home-dashboard');
-          }}
-        />
+        <AdminApp counsellorName={user.name} onSignOut={logout} />
       </Suspense>
     );
   }
@@ -76,10 +90,8 @@ export default function App() {
       {/* Top Header */}
       <Header
         currentView={currentView}
-        persona={persona}
         language={language}
         onLanguageChange={setLanguage}
-        onPersonaChange={setPersona}
         onQuickExit={handleQuickExit}
         onNavigate={setCurrentView}
       />
@@ -90,11 +102,11 @@ export default function App() {
           <HomeDashboard
             language={language}
             onNavigate={setCurrentView}
-            onPersonaChange={setPersona}
             onOpenCall={() => setIsCallOpen(true)}
             selectedMood={selectedMood}
             onMoodSelect={setSelectedMood}
             metrics={metrics}
+            wellbeingMessage={wellbeingMessage}
           />
         )}
 
@@ -116,8 +128,9 @@ export default function App() {
         {currentView === 'well-being' && (
           <WellBeingTracker
             onBack={() => setCurrentView('home-dashboard')}
-            metrics={metrics}
-            onUpdateMetric={handleUpdateMetric}
+            language={language}
+            onWellbeing={showWellbeing}
+            onOpenCall={() => setIsCallOpen(true)}
           />
         )}
 

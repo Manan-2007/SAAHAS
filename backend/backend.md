@@ -10,29 +10,33 @@ cd backend && ./start.sh                        # http://127.0.0.1:8000 (models 
 ```
 Interactive API docs: http://127.0.0.1:8000/docs
 
+**Status (2026-09-11):** sections 1–4 are wired in the frontend (`src/lib/api.ts`,
+`src/auth/`, `src/admin/data/live.ts`); the open boxes below are what's left, mainly
+the voice call screen (3b).
+
 ---
 
 ## 1. Setup
 
-- [ ] **Add the new routes to the Vite proxy** (`frontend/vite.config.ts`), next to
+- [x] **Add the new routes to the Vite proxy** (`frontend/vite.config.ts`), next to
       `/health`, `/predict`, `/chat` and `/ws`: add `/auth`, `/me`, `/questionnaires`
       and `/counsellor`.
-- [ ] **Send the sign-in token on every request:** header
+- [x] **Send the sign-in token on every request:** header
       `Authorization: Bearer <token>` on `/chat`, `/predict` and all `/me/*` and
       `/counsellor/*` calls. For live voice, add it to the first WebSocket config
       frame: `{"sampleRate": 48000, "transcribe": true, "token": "<token>"}`.
       Without a token the app still works, but nothing is saved.
       The token is whatever `/auth/register` or `/auth/login` returned - the
       frontend treats both the same way.
-- [ ] **Store the token in memory or `sessionStorage`, never `localStorage`.**
+- [x] **Store the token in memory or `sessionStorage`, never `localStorage`.**
       Quick Exit must clear it (`sessionStorage.clear()`), because victims may share phones.
-- [ ] **Treat a 401 on any call as "signed out":** drop the token and show the
+- [x] **Treat a 401 on any call as "signed out":** drop the token and show the
       sign-in screen. Sessions expire (30 days), and changing the password or
       revoking a device invalidates other tokens, so this will happen in normal use.
 
 ## 2. Victim screens
 
-- [ ] **Sign-up + consent screen.** It needs: name, language (`en` / `hi` / `pa`), and consent
+- [x] **Sign-up + consent screen.** It needs: name, language (`en` / `hi` / `pa`), and consent
       toggles. The first toggle is required; the other two are optional.
       `POST /auth/register`
       ```json
@@ -44,14 +48,14 @@ Interactive API docs: http://127.0.0.1:8000/docs
       There is now a third consent toggle, `store_recordings` (default **false**):
       "keep the audio of my voice check-ins". Label it clearly - it is the only
       consent that makes the app keep a recording of someone's voice.
-- [ ] **Offer a username + password on the sign-up screen** (optional fields).
+- [x] **Offer a username + password on the sign-up screen** (optional fields).
       Add `"username": "sunita", "password": "..."` to the same
       `POST /auth/register` body. Send both or neither (422 otherwise); the
       password must be 8+ characters (422), and a taken username returns 409.
       Explain the trade-off in one line: **without** them the account lives
       only on this device (losing the token loses the journey), **with** them
       she can sign in again on any phone.
-- [ ] **Sign-in screen.** `POST /auth/login` with `{"username", "password"}`
+- [x] **Sign-in screen.** `POST /auth/login` with `{"username", "password"}`
       → `{"token", "expires_at", "user_id", "role", "name", "language", "consent", "counsellor"}`.
       Route on `role`: `victim` to the app, `counsellor` to the Command Centre.
       Handle `401` ("Incorrect username or password" - show it as-is, it is
@@ -59,11 +63,19 @@ Interactive API docs: http://127.0.0.1:8000/docs
       `detail` already says how many minutes).
 - [ ] **"Add a password" prompt for token-only accounts.** `GET /me` returns
       `has_password` and `username`; when `has_password` is false, offer
-      `PUT /me/credentials` with `{"username", "password"}`.
-- [ ] **Sign out:** `POST /auth/logout` with `{"all_devices": false}`, then
+      `PUT /me/credentials` with `{"username", "password"}`. Once the account
+      has a password, replacing it needs `"current_password"` too (401 without
+      it), and other devices are signed out. (The app's sign-up always sets a
+      password; token sign-in covers `seed-demo` accounts.)
+- [x] **Onboarding answers:** `PUT /me/profile` with `{"display_name", "language",
+      "coping", "low_time", "channel", "baseline_mood" (1-5), "comfort"}`, all
+      optional → `{"profile", "name", "language"}`. Stored encrypted; also updates
+      the account's name and language. `GET /me` returns them as `profile`
+      (`null` until onboarding is done).
+- [x] **Sign out:** `POST /auth/logout` with `{"all_devices": false}`, then
       clear the token. Quick Exit should **not** call this - it must be
       instant and leave no trace of a deliberate action; just clear storage.
-- [ ] **Check-in questionnaires** (replace the mocked 3-question "Quick Daily
+- [x] **Check-in questionnaires** (replace the mocked 3-question "Quick Daily
       Check-in" in `WellBeingTracker.tsx`):
       1. `GET /me/due` → `[{instrument, name, due, next_due_at}]`. Show the items where `due: true`.
       2. `GET /questionnaires/{instrument}?lang=hi` →
@@ -76,28 +88,28 @@ Interactive API docs: http://127.0.0.1:8000/docs
          "Call your counsellor" button (same banner as in Safe Chat).
       Instruments: `phq9` (9 questions), `gad7` (7), `pcptsd5` (5, yes/no),
       `phq4` (4, the quick pulse). The backend decides which are due.
-- [ ] **Home dashboard well-being rows** (replace `INITIAL_WELLBEING_METRICS`):
+- [x] **Home dashboard well-being rows** (replace `INITIAL_WELLBEING_METRICS`):
       `GET /me/wellbeing` → `{stress, energy, fatigue, message, has_data}`.
       `stress`, `energy` and `fatigue` use the trend words the UI already has
       (`Improving`, `Stable`, `Rest needed`, `Elevated`). Show `message` as the card's
       subtitle. When `has_data` is false, show an invitation to check in.
-- [ ] **Upcoming events** (replace the mock `SCHEDULED_EVENTS`): `GET /me/events` →
+- [x] **Upcoming events** (replace the mock `SCHEDULED_EVENTS`): `GET /me/events` →
       `[{id, date, kind, title, days_until}]`. `kind` is one of
       `hearing | fir | chargesheet | compensation | counselling | other`.
-- [ ] **Settings screen:** consent toggles with `PATCH /me/consent`
+- [x] **Settings screen:** consent toggles with `PATCH /me/consent`
       (`{"voice_analysis": false}`, `{"store_recordings": true}`) and a
       "Delete all my data" button (`DELETE /me` → `{"deleted", "recordings_deleted"}`,
       then clear the token and go to the start screen).
-- [ ] **Change password** (only when `has_password`): `POST /me/password` with
+- [x] **Change password** (only when `has_password`): `POST /me/password` with
       `{"current_password", "new_password"}` → `{"changed", "other_sessions_signed_out"}`.
       401 means the current password was wrong. Warn first that other devices
       will be signed out; this device stays signed in.
-- [ ] **"Where I'm signed in" list:** `GET /me/sessions` →
+- [x] **"Where I'm signed in" list:** `GET /me/sessions` →
       `[{id, device, started_at, last_seen_at, expires_at, current}]`, with a
       "Sign out this device" button per row (`DELETE /me/sessions/{id}`).
       Mark the `current: true` row. This is also the "someone else has my
       phone" escape hatch, so put it somewhere findable in Settings.
-- [ ] **My voice notes** (only when `consent.store_recordings`):
+- [x] **My voice notes** (only when `consent.store_recordings`):
       `GET /me/recordings` → `[{id, at, kind, content_type, bytes, duration_s, detail}]`
       where `kind` is `voice_note` (an uploaded file) or `voice_checkin` (a live
       session). Play with `GET /me/recordings/{id}/audio` - it returns the audio
@@ -107,42 +119,44 @@ Interactive API docs: http://127.0.0.1:8000/docs
 - [ ] **Saved indicator (optional):** `/chat` returns `recorded` and `/predict`
       returns `Recorded` (true or false). A small "saved to your journey" tick is enough.
       Voice check-ins with less than 2 seconds of speech are not saved.
-- [ ] **Safe Chat: send only the real conversation to `/chat`.** Don't include
+- [x] **Safe Chat: send only the real conversation to `/chat`.** Don't include
       the demo messages from `INITIAL_CHAT_MESSAGES` in `messages`. They're
       about court anxiety and grounding breaths, and the model carries that tone
       into every reply (even "hi"). Start the history empty, or show the demo
       messages on screen only.
-- [ ] **Never show victims numbers, scores, severities or clinical labels.** The
+- [x] **Never show victims numbers, scores, severities or clinical labels.** The
       victim endpoints don't return them; keep it that way in the UI too.
 
 ## 3. Counsellor Command Centre
 
-Replace the mock clients in `CounsellorCommandCentre.tsx` with real data.
+Done in `frontend/src/admin/`: `data/live.ts` maps these routes onto the
+dashboard, and anything the backend doesn't measure shows "—".
 
-- [ ] **Login:** the same `POST /auth/login` screen as victims - counsellors
+- [x] **Login:** the same `POST /auth/login` screen as victims - counsellors
       created with `manage.py create-counsellor "Name" --username ananya` sign
       in with a username and password, and `role: "counsellor"` in the response
       is what routes them here. Pasting a token still works for `seed-demo`.
-- [ ] **Caseload list:** `GET /counsellor/victims`, already sorted most urgent
+- [x] **Caseload list:** `GET /counsellor/victims`, already sorted most urgent
       first. Per row: `name`, `case_ref`, `score` (0–100), `tier`, `crisis`,
       `trend.direction` + `trend.change_7d`, `open_alerts`, `last_contact_at`, `next_event`.
-- [ ] **Client page:** `GET /counsellor/victims/{id}` for the profile, `latest`
+- [x] **Client page:** `GET /counsellor/victims/{id}` for the profile, `latest`
       (score, tier, crisis, `components`: questionnaires / text / voice /
       engagement, each 0–100), `questionnaires` (with answers), `events` and `alerts`.
-- [ ] **Charts:** `GET /counsellor/victims/{id}/timeline?days=30` →
-      `scores: [{at, score, tier, crisis}]` for the main line chart,
-      `questionnaires: [{at, instrument, total}]` as markers, and
+- [x] **Charts:** `GET /counsellor/victims/{id}/timeline?days=30` →
+      `scores: [{at, score, tier, crisis}]` for the main line chart (done).
+- [ ] Chart extras: `questionnaires: [{at, instrument, total}]` as markers, and
       `signals.text_distress / voice_distress: [{date, mean}]` as smaller lines.
-- [ ] **Alert queue:** `GET /counsellor/alerts?status=open` →
+- [x] **Alert queue:** `GET /counsellor/alerts?status=open` →
       `[{id, victim_name, at, level, reason, message, status}]`, with buttons for
       `POST /counsellor/alerts/{id}/acknowledge` and
       `POST /counsellor/alerts/{id}/resolve` (`{"note": "Called, she is safe"}`).
       Show `level: crisis` in red at the top.
-- [ ] **Case events:** an add form on the client page,
-      `POST /counsellor/victims/{id}/events` with
-      `{"kind": "hearing", "date": "2026-09-14", "title": "District court"}`, and
-      delete with `DELETE /counsellor/events/{id}`.
-- [ ] **Recordings (only if the victim consented):**
+- [x] **Case events:** `POST /counsellor/victims/{id}/events` with
+      `{"kind": "hearing", "date": "2026-09-14", "title": "District court"}`
+      (the "Schedule follow-up" dialog adds `counselling` events).
+- [ ] Other event kinds (hearing, FIR…) from the dashboard, and delete with
+      `DELETE /counsellor/events/{id}`.
+- [x] **Recordings (only if the victim consented):**
       `GET /counsellor/victims/{id}/recordings` →
       `[{id, at, kind, duration_s, detail}]`, played from
       `GET /counsellor/victims/{id}/recordings/{rec_id}/audio` (fetch with the
@@ -207,10 +221,10 @@ with a voice that adapts to how you sound, and you can talk over it to interrupt
 
 ## 4. Remove or reword
 
-- [ ] "Zero Cloud Traces", "Ephemeral Audio · Never saved", "No interaction
+- [x] "Zero Cloud Traces", "Ephemeral Audio · Never saved", "No interaction
       data… stored" are **no longer true for signed-in users.** Keep them only for
       anonymous mode, or change them to "Private & encrypted · delete everything anytime".
-- [ ] Remove the mock data you replace: `INITIAL_WELLBEING_METRICS`,
+- [x] Remove the mock data you replace: `INITIAL_WELLBEING_METRICS`,
       `SCHEDULED_EVENTS`, and the mock clients in the Command Centre.
 
 ---
@@ -299,6 +313,17 @@ with a voice that adapts to how you sound, and you can talk over it to interrupt
 ---
 
 ## Update log (what changed for the frontend)
+
+**2026-09-11 (merged and wired together)**
+- `feat/backend-auth` and `feat/recordings-storage` merged into `main`, and the
+  frontend now uses them (sections 1–4).
+- `PUT /me/credentials` now needs `current_password` once the account has a
+  password (401 otherwise), and signs other devices out, like `/me/password`.
+  Before, anyone holding an unlocked phone could replace the password.
+- New `PUT /me/profile` for the onboarding answers (encrypted); `GET /me` returns
+  them as `profile`. The frontend used to keep them in `localStorage`.
+- `/predict` reads at most 25 MB + 1 byte before refusing with 413 (it used to
+  read the whole upload first).
 
 **2026-09-11 (auth + storage)**
 - New: **username + password sign-in.** `POST /auth/login` returns a session

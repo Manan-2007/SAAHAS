@@ -1,104 +1,36 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CaseData, NotificationItem } from '../types';
+import { ApiError, VictimDetail, api } from '../../lib/api';
+import { REASON_TITLES } from '../data/live';
 
 interface QuickLockModalProps {
   isOpen: boolean;
   onUnlock: () => void;
 }
 
+// A privacy curtain for when someone walks past the screen. It is not a lock:
+// signing out is what ends the session.
 export const QuickLockModal: React.FC<QuickLockModalProps> = ({ isOpen, onUnlock }) => {
-  const [pin, setPin] = useState('');
-  const [error, setError] = useState(false);
-
   if (!isOpen) return null;
-
-  const handleKeypad = (num: string) => {
-    if (pin.length < 4) {
-      const nextPin = pin + num;
-      setPin(nextPin);
-      setError(false);
-      if (nextPin.length === 4) {
-        // any 4-digit PIN works, or default 1234
-        setTimeout(() => {
-          onUnlock();
-          setPin('');
-        }, 150);
-      }
-    }
-  };
-
-  const handleClear = () => {
-    setPin('');
-    setError(false);
-  };
 
   return (
     <div className="fixed inset-0 z-50 bg-[#352e24]/95 backdrop-blur-xl flex items-center justify-center p-4">
       <div className="bg-white max-w-sm w-full rounded-2xl p-6 shadow-2xl flex flex-col items-center text-center">
-        <div className="w-12 h-12 rounded-full bg-[#ffdad6] text-[#ba1a1a] flex items-center justify-center mb-3">
-          <span className="material-symbols-outlined text-[26px]">lock</span>
+        <div className="w-12 h-12 rounded-full bg-[#efe7d6] text-[#9c6743] flex items-center justify-center mb-3">
+          <span className="material-symbols-outlined text-[26px]">visibility_off</span>
         </div>
 
-        <h3 className="font-['Plus_Jakarta_Sans'] text-xl font-bold text-[#352e24]">
-          Session Locked
-        </h3>
+        <h3 className="font-['Plus_Jakarta_Sans'] text-xl font-bold text-[#352e24]">Screen hidden</h3>
         <p className="font-['Inter'] text-xs text-[#837562] mt-1 mb-5 max-w-xs">
-          HIPAA & Clinical confidentiality guard active. Enter your 4-digit counsellor credentials or click Quick Unlock.
+          Client details are covered while you step away. To end the session on this device, sign out instead.
         </p>
-
-        {/* PIN Dots */}
-        <div className="flex justify-center gap-3 mb-6">
-          {[0, 1, 2, 3].map((idx) => (
-            <div
-              key={idx}
-              className={`w-3.5 h-3.5 rounded-full border border-[#9c6743] transition-all ${
-                pin.length > idx ? 'bg-[#9c6743] scale-110' : 'bg-[#efe7d6]'
-              }`}
-            />
-          ))}
-        </div>
-
-        {/* Keypad */}
-        <div className="grid grid-cols-3 gap-3 w-full max-w-[240px] mb-4">
-          {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
-            <button
-              key={digit}
-              type="button"
-              onClick={() => handleKeypad(digit)}
-              className="h-12 rounded-xl bg-[#f5f1e8] hover:bg-[#e5dac4] text-[#352e24] font-semibold text-lg transition-colors shadow-xs"
-            >
-              {digit}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={handleClear}
-            className="h-12 rounded-xl bg-[#ffdad6]/50 hover:bg-[#ffdad6] text-[#ba1a1a] font-medium text-xs transition-colors flex items-center justify-center"
-          >
-            Clear
-          </button>
-          <button
-            type="button"
-            onClick={() => handleKeypad('0')}
-            className="h-12 rounded-xl bg-[#f5f1e8] hover:bg-[#e5dac4] text-[#352e24] font-semibold text-lg transition-colors shadow-xs"
-          >
-            0
-          </button>
-          <button
-            type="button"
-            onClick={onUnlock}
-            className="h-12 rounded-xl bg-[#9c6743] hover:bg-[#b3654a] text-white font-medium text-xs transition-colors flex items-center justify-center"
-          >
-            Bypass
-          </button>
-        </div>
 
         <button
           type="button"
           onClick={onUnlock}
-          className="w-full py-2.5 rounded-lg bg-[#9c6743] text-white font-['Inter'] text-sm font-semibold hover:bg-[#b3654a] transition-colors mt-2"
+          className="w-full py-2.5 rounded-lg bg-[#9c6743] text-white font-['Inter'] text-sm font-semibold hover:bg-[#b3654a] transition-colors"
         >
-          Quick Resume Session
+          Show the screen again
         </button>
       </div>
     </div>
@@ -132,7 +64,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
               notifications_active
             </span>
             <h3 className="font-['Plus_Jakarta_Sans'] font-semibold text-[#352e24]">
-              Clinical Alerts & Cues
+              Open Alerts
             </h3>
           </div>
           <div className="flex items-center gap-2">
@@ -154,6 +86,9 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
         </div>
 
         <div className="p-4 overflow-y-auto flex-1 space-y-3">
+          {notifications.length === 0 && (
+            <p className="text-xs text-[#837562] text-center py-8">No open alerts. New ones appear here within a minute.</p>
+          )}
           {notifications.map((item) => (
             <div
               key={item.id}
@@ -190,106 +125,6 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
   );
 };
 
-interface AssignCounsellorModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  currentCase: CaseData;
-  onAssign: (counsellor: string) => void;
-}
-
-export const AssignCounsellorModal: React.FC<AssignCounsellorModalProps> = ({
-  isOpen,
-  onClose,
-  currentCase,
-  onAssign,
-}) => {
-  const [selected, setSelected] = useState(currentCase.assignedCounsellor);
-
-  if (!isOpen) return null;
-
-  const counsellors = [
-    { name: 'Dr. Ananya Sharma', role: 'Lead Trauma Specialist', activeCases: 14 },
-    { name: 'Dr. Radhika Roy', role: 'Clinical Psychologist', activeCases: 12 },
-    { name: 'Advocate Meera Sen', role: 'Trauma Legal Counselor', activeCases: 9 },
-    { name: 'Sunaina Patel', role: 'Peer Support Specialist', activeCases: 18 },
-  ];
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white max-w-md w-full rounded-2xl p-6 shadow-xl">
-        <div className="flex items-center justify-between pb-3 border-b border-[#ece2ce]">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#9c6743]">person_add</span>
-            <h3 className="font-['Plus_Jakarta_Sans'] font-bold text-lg text-[#352e24]">
-              Assign Counsellor
-            </h3>
-          </div>
-          <button type="button" onClick={onClose} className="text-[#837562] hover:text-[#352e24]">
-            <span className="material-symbols-outlined text-[20px]">close</span>
-          </button>
-        </div>
-
-        <div className="mt-4 mb-2">
-          <p className="font-['Inter'] text-xs text-[#837562]">
-            Select certified trauma-informed caregiver for{' '}
-            <strong className="text-[#352e24]">{currentCase.name}</strong> ({currentCase.number}):
-          </p>
-        </div>
-
-        <div className="space-y-2 mt-3 mb-6">
-          {counsellors.map((c) => (
-            <label
-              key={c.name}
-              className={`flex items-center justify-between p-3 rounded-xl border cursor-pointer transition-colors ${
-                selected === c.name
-                  ? 'border-[#9c6743] bg-[#efe7d6]'
-                  : 'border-[#e5dac4] hover:bg-[#f5f1e8]'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <input
-                  type="radio"
-                  name="counsellor"
-                  checked={selected === c.name}
-                  onChange={() => setSelected(c.name)}
-                  className="w-4 h-4 text-[#9c6743] accent-[#9c6743]"
-                />
-                <div>
-                  <span className="font-semibold text-sm text-[#352e24] block">{c.name}</span>
-                  <span className="text-xs text-[#837562]">{c.role}</span>
-                </div>
-              </div>
-              <span className="text-xs font-medium px-2 py-0.5 rounded bg-white text-[#8a6a4a] border border-[#e5dac4]">
-                {c.activeCases} active
-              </span>
-            </label>
-          ))}
-        </div>
-
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-[#e5dac4] text-[#837562] hover:bg-[#f5f1e8] font-['Inter'] text-xs font-semibold"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onAssign(selected);
-              onClose();
-            }}
-            className="px-4 py-2 rounded-lg bg-[#9c6743] text-white hover:bg-[#b3654a] font-['Inter'] text-xs font-semibold shadow-xs"
-          >
-            Confirm Reassignment
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 interface ScheduleFollowUpModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -297,15 +132,22 @@ interface ScheduleFollowUpModalProps {
   onSchedule: (details: { date: string; time: string; type: string }) => void;
 }
 
+const localToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+// Adds a counselling session to the victim's case dates (POST /counsellor/victims/{id}/events);
+// they see it on their home screen.
 export const ScheduleFollowUpModal: React.FC<ScheduleFollowUpModalProps> = ({
   isOpen,
   onClose,
   currentCase,
   onSchedule,
 }) => {
-  const [date, setDate] = useState('2026-09-12');
+  const [date, setDate] = useState(localToday);
   const [time, setTime] = useState('10:30');
-  const [type, setType] = useState('Trauma-Informed Voice Session');
+  const [type, setType] = useState('Counselling call');
 
   if (!isOpen) return null;
 
@@ -316,7 +158,7 @@ export const ScheduleFollowUpModal: React.FC<ScheduleFollowUpModalProps> = ({
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[#9c6743]">calendar_add_on</span>
             <h3 className="font-['Plus_Jakarta_Sans'] font-bold text-lg text-[#352e24]">
-              Schedule Follow-up Call
+              Schedule a Follow-up
             </h3>
           </div>
           <button type="button" onClick={onClose} className="text-[#837562] hover:text-[#352e24]">
@@ -326,40 +168,39 @@ export const ScheduleFollowUpModal: React.FC<ScheduleFollowUpModalProps> = ({
 
         <div className="mt-4 space-y-3">
           <div>
-            <label className="block text-xs font-medium text-[#837562] mb-1">
-              Client & Protocol
-            </label>
+            <label className="block text-xs font-medium text-[#837562] mb-1">Client</label>
             <div className="p-2.5 rounded-lg bg-[#f5f1e8] border border-[#e5dac4] text-xs font-medium text-[#352e24]">
-              {currentCase.name} ({currentCase.number}) • Silent Deterioration Safeguard
+              {currentCase.name} ({currentCase.number}) • {currentCase.status}
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-[#837562] mb-1">Session Modality</label>
+            <label className="block text-xs font-medium text-[#837562] mb-1">Session</label>
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
               className="w-full p-2.5 rounded-lg border border-[#e5dac4] text-xs bg-white text-[#352e24]"
             >
-              <option>Trauma-Informed Voice Session</option>
-              <option>Legal Aid Court Preparation Briefing</option>
-              <option>Discreet SMS Welfare Ping</option>
-              <option>Protected In-Person Safe Space Escort</option>
+              <option>Counselling call</option>
+              <option>In-person counselling session</option>
+              <option>Court preparation session</option>
+              <option>Check-in call</option>
             </select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-[#837562] mb-1">Target Date</label>
+              <label className="block text-xs font-medium text-[#837562] mb-1">Date</label>
               <input
                 type="date"
                 value={date}
+                min={localToday()}
                 onChange={(e) => setDate(e.target.value)}
                 className="w-full p-2 rounded-lg border border-[#e5dac4] text-xs bg-white text-[#352e24]"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#837562] mb-1">Target Time</label>
+              <label className="block text-xs font-medium text-[#837562] mb-1">Time</label>
               <input
                 type="time"
                 value={time}
@@ -370,7 +211,8 @@ export const ScheduleFollowUpModal: React.FC<ScheduleFollowUpModalProps> = ({
           </div>
 
           <div className="p-3 bg-[#efe7d6] rounded-xl text-xs text-[#5c5142]">
-            <strong className="text-[#9c6743]">Trauma-Informed Notice:</strong> Call will be conducted through the encrypted masked proxy to safeguard client location.
+            This adds the session to {currentCase.name}'s case dates, where they'll see it on their home screen.
+            Arrange the call itself as you normally would.
           </div>
         </div>
 
@@ -384,13 +226,14 @@ export const ScheduleFollowUpModal: React.FC<ScheduleFollowUpModalProps> = ({
           </button>
           <button
             type="button"
+            disabled={!date}
             onClick={() => {
               onSchedule({ date, time, type });
               onClose();
             }}
-            className="px-4 py-2 rounded-lg bg-[#9c6743] text-white hover:bg-[#b3654a] font-['Inter'] text-xs font-semibold shadow-xs"
+            className="px-4 py-2 rounded-lg bg-[#9c6743] text-white hover:bg-[#b3654a] font-['Inter'] text-xs font-semibold shadow-xs disabled:opacity-50"
           >
-            Schedule & Notify Caregiver
+            Add to case dates
           </button>
         </div>
       </div>
@@ -404,11 +247,52 @@ interface AuditTrailModalProps {
   currentCase: CaseData;
 }
 
+type HistoryItem = { at: string; title: string; text: string };
+
+function historyOf(detail: VictimDetail): HistoryItem[] {
+  const items: HistoryItem[] = [{ at: detail.created_at, title: 'Account created', text: 'Consent recorded at sign-up.' }];
+  for (const a of detail.alerts) {
+    items.push({ at: a.at, title: `${REASON_TITLES[a.reason] ?? 'Alert'} raised`, text: a.message });
+    if (a.handled_at) {
+      items.push({
+        at: a.handled_at,
+        title: `Alert ${a.status} by ${a.handled_by ?? 'a counsellor'}`,
+        text: a.note ?? 'No note added.',
+      });
+    }
+  }
+  for (const q of detail.questionnaires) {
+    items.push({ at: q.at, title: `${q.name} submitted`, text: `${q.total} / ${q.max_score} · ${q.severity}` });
+  }
+  return items.sort((x, y) => new Date(y.at).getTime() - new Date(x.at).getTime());
+}
+
+const when = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+// Who did what on this case, from the backend's records
 export const AuditTrailModal: React.FC<AuditTrailModalProps> = ({
   isOpen,
   onClose,
   currentCase,
 }) => {
+  const [items, setItems] = useState<HistoryItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let live = true;
+    setItems(null);
+    setError(null);
+    api
+      .victim(currentCase.id)
+      .then((d) => live && setItems(historyOf(d)))
+      .catch((err) => live && setError(err instanceof ApiError ? err.message : "Can't reach the SAHAAS backend."));
+    return () => {
+      live = false;
+    };
+  }, [isOpen, currentCase.id]);
+
   if (!isOpen) return null;
 
   return (
@@ -416,9 +300,9 @@ export const AuditTrailModal: React.FC<AuditTrailModalProps> = ({
       <div className="bg-white max-w-lg w-full rounded-2xl p-6 shadow-2xl">
         <div className="flex items-center justify-between pb-3 border-b border-[#ece2ce]">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#9c6743]">policy</span>
+            <span className="material-symbols-outlined text-[#9c6743]">history</span>
             <h3 className="font-['Plus_Jakarta_Sans'] font-bold text-lg text-[#352e24]">
-              Protocol Audit Trail • {currentCase.number}
+              Case History • {currentCase.number}
             </h3>
           </div>
           <button type="button" onClick={onClose} className="text-[#837562] hover:text-[#352e24]">
@@ -427,48 +311,30 @@ export const AuditTrailModal: React.FC<AuditTrailModalProps> = ({
         </div>
 
         <div className="mt-4 space-y-3 max-h-80 overflow-y-auto pr-1">
-          <div className="p-3 bg-[#f5f1e8] rounded-xl border border-[#e5dac4]">
-            <div className="flex items-center justify-between text-xs text-[#837562]">
-              <span className="font-mono text-[#9c6743]">SHA-256: 8f9b...a12c</span>
-              <span>Today, 09:42 AM</span>
+          {error && <p className="text-xs text-[#93000a]">{error}</p>}
+          {!error && items === null && <p className="text-xs text-[#837562]">Loading…</p>}
+          {items?.map((item, i) => (
+            <div key={i} className="p-3 bg-[#f5f1e8] rounded-xl border border-[#e5dac4]">
+              <div className="flex items-center justify-between text-xs text-[#837562] gap-2">
+                <span className="font-semibold text-[#9c6743]">{item.title}</span>
+                <span className="shrink-0">{when(item.at)}</span>
+              </div>
+              <p className="text-xs font-medium text-[#352e24] mt-1">{item.text}</p>
             </div>
-            <p className="text-xs font-medium text-[#352e24] mt-1">
-              Passive divergence threshold calculated (Z: 3.1). Acoustic pause drift flagged under Rule #E-94.
-            </p>
-          </div>
-
-          <div className="p-3 bg-[#f5f1e8] rounded-xl border border-[#e5dac4]">
-            <div className="flex items-center justify-between text-xs text-[#837562]">
-              <span className="font-mono text-[#9c6743]">SHA-256: 4e7d...99b0</span>
-              <span>Yesterday, 04:15 PM</span>
-            </div>
-            <p className="text-xs font-medium text-[#352e24] mt-1">
-              Consent verification re-certified for opt-in acoustic biomarker telemetry.
-            </p>
-          </div>
-
-          <div className="p-3 bg-[#f5f1e8] rounded-xl border border-[#e5dac4]">
-            <div className="flex items-center justify-between text-xs text-[#837562]">
-              <span className="font-mono text-[#9c6743]">SHA-256: 1a8c...ff32</span>
-              <span>3 days ago, 11:20 AM</span>
-            </div>
-            <p className="text-xs font-medium text-[#352e24] mt-1">
-              Legal Aid calendar linked: District Court hearing confirmed for upcoming docket.
-            </p>
-          </div>
+          ))}
         </div>
 
         <div className="mt-5 pt-3 border-t border-[#ece2ce] flex items-center justify-between">
           <span className="text-xs text-[#8a6a4a] font-semibold flex items-center gap-1">
-            <span className="material-symbols-outlined text-[16px]">verified</span>
-            HIPAA Compliant Immutable Ledger
+            <span className="material-symbols-outlined text-[16px]">lock</span>
+            Encrypted at rest
           </span>
           <button
             type="button"
             onClick={onClose}
             className="px-4 py-2 bg-[#9c6743] text-white rounded-lg text-xs font-semibold hover:bg-[#b3654a]"
           >
-            Close Audit Log
+            Close
           </button>
         </div>
       </div>
