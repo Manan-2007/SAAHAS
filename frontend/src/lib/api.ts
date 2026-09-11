@@ -271,7 +271,20 @@ export interface CaseloadRow {
   next_event: CaseEvent | null;
 }
 
-export type ScoreComponent = 'questionnaires' | 'text' | 'voice' | 'engagement';
+export type ScoreComponent = 'questionnaires' | 'text' | 'voice' | 'engagement' | 'case_pressure';
+
+// The "why" behind each signal (backend.md §5c). Engagement carries how quiet
+// the person has gone — the strongest signal that someone is withdrawing.
+export interface ScoreDetails {
+  engagement?: {
+    days_since_last_contact?: number;
+    reply_latency_trend?: string;
+    message_length_trend?: string;
+    missed_checkins?: number;
+  };
+  case_pressure?: { next_hearing_days?: number; driver?: string } & Record<string, unknown>;
+  [component: string]: Record<string, unknown> | undefined;
+}
 
 export interface LatestScore {
   score: number;
@@ -280,6 +293,7 @@ export interface LatestScore {
   confidence: number;      // 0-1: share of the signals that had data
   updated_at: string;
   components: Partial<Record<ScoreComponent, number>>;
+  details?: ScoreDetails;
   crisis_reasons?: string[];
 }
 
@@ -328,10 +342,15 @@ export interface VictimDetail {
   events: CaseEvent[];
   // present when a hearing is within 14 days (backend.md §5a)
   forecast?: Forecast | null;
+  // relief entitlements with amounts (counsellor only, backend.md §5b)
+  entitlements?: Entitlement[];
 }
 
 export interface Timeline {
   scores: { at: string; score: number; tier: Tier; crisis: boolean }[];
+  // Chart extras (backend.md §3): questionnaire markers + per-day signal means.
+  questionnaires?: { at: string; instrument: string; total: number; severity: string }[];
+  signals?: Record<string, { date: string; mean: number; count: number }[]>;
 }
 
 // --- Case-aware distress: the calendar is the stressor (backend.md §5) ---
@@ -340,8 +359,9 @@ export interface Timeline {
 // hearing is within 14 days. Turns the score from a thermometer into a forecast.
 export interface Forecast {
   peak_score: number;
-  peak_on: string;   // YYYY-MM-DD
-  driver: string;    // short human string, e.g. "Hearing on 2026-09-18"
+  peak_on: string;    // YYYY-MM-DD
+  days_until?: number;
+  driver: string;     // short human string, e.g. "Bail Hearing on 2026-09-18"
 }
 
 // GET /me/case — victim's own calendar. Gentle, pre-translated, NO numbers.
@@ -375,16 +395,33 @@ export interface CaseUpcoming {
   days_until: number;
   label: string;     // already written in the victim's language, non-clinical
 }
+export type EntitlementStatus = 'due' | 'received' | 'not_received' | 'unknown';
+export type EntitlementStage =
+  | 'fir' | 'chargesheet' | 'conviction' | 'trial_end' | 'medical_report' | 'post_mortem' | 'tame' | 'other';
+
+// Victim sees no amount; counsellor also gets amount + note (backend.md §5b).
 export interface Entitlement {
   id: number;
-  stage: string;
+  stage: EntitlementStage | string;
   label: string;
   due_on: string | null;
-  status: 'due' | 'received' | 'not_received' | 'unknown';
+  status: EntitlementStatus;
+  answered_at?: string | null;
+  amount?: number | null;   // counsellor only
+  note?: string | null;     // counsellor only
 }
 export interface CaseInfo {
   upcoming: CaseUpcoming[];
   entitlements: Entitlement[];
+}
+
+// GET /counsellor/relief-schedule — the SC/ST (PoA) Annexure-I table.
+export interface ReliefEntry {
+  section: string;
+  offence: string;
+  amount: number;
+  stages: string[];
+  stage_labels?: Record<string, string>;
 }
 
 // GET /counsellor/forecast — "who needs attention this week", by predicted peak.
@@ -392,8 +429,10 @@ export interface ForecastRow {
   victim_id: string;
   name: string;
   score: number | null;
+  tier?: Tier | null;
   peak_score: number;
   peak_on: string;
+  days_until?: number;
   driver: string;
 }
 
@@ -414,6 +453,10 @@ export const api = {
   updateConsent: (changes: Partial<Omit<Consent, 'data_storage'>>) =>
     apiFetch<{ consent: Consent }>('/me/consent', json('PATCH', changes)),
   deleteMe: () => apiFetch<{ deleted: boolean; recordings_deleted: number }>('/me', json('DELETE')),
+  // Add a username + password to a token-only account (backend.md §2).
+  setCredentials: (username: string, password: string) =>
+    apiFetch<{ username: string; has_password: boolean }>('/me/credentials',
+      json('PUT', { username, password }, { keepSessionOn401: true })),
   sessions: () => apiFetch<SessionInfo[]>('/me/sessions'),
   revokeSession: (id: number) => apiFetch<{ revoked: boolean }>(`/me/sessions/${id}`, json('DELETE')),
   changePassword: (currentPassword: string, newPassword: string) =>
@@ -424,6 +467,9 @@ export const api = {
   wellbeing: () => apiFetch<Wellbeing>('/me/wellbeing'),
   events: () => apiFetch<CaseEvent[]>('/me/events'),
   case: () => apiFetch<CaseInfo>('/me/case'),
+  // Victim answers "did the support money arrive?" — no amounts (backend.md §5b).
+  answerEntitlement: (id: number, status: EntitlementStatus) =>
+    apiFetch<Entitlement>(`/me/entitlements/${id}`, json('POST', { status })),
   due: () => apiFetch<DueCheckin[]>('/me/due'),
   questionnaire: (instrument: string, lang: LanguageCode) =>
     apiFetch<Questionnaire>(`/questionnaires/${encodeURIComponent(instrument)}?lang=${lang}`, { auth: false }),
@@ -455,5 +501,22 @@ export const api = {
     event: { kind: EventKind; date: string; title: string; notice_given?: boolean },
   ) =>
     apiFetch<CaseEvent>(`/counsellor/victims/${victimId}/events`, json('POST', event)),
+  deleteEvent: (eventId: number) => apiFetch<{ deleted: boolean }>(`/counsellor/events/${eventId}`, json('DELETE')),
   victimRecordings: (victimId: string) => apiFetch<Recording[]>(`/counsellor/victims/${victimId}/recordings`),
+
+  // Relief entitlements (backend.md §5b)
+  victimEntitlements: (victimId: string) =>
+    apiFetch<Entitlement[]>(`/counsellor/victims/${victimId}/entitlements`),
+  addEntitlement: (
+    victimId: string,
+    body: { stage: EntitlementStage; amount?: number | null; due_on?: string | null; note?: string | null },
+  ) => apiFetch<Entitlement>(`/counsellor/victims/${victimId}/entitlements`, json('POST', body)),
+  updateEntitlement: (
+    id: number,
+    body: { status?: EntitlementStatus; amount?: number | null; due_on?: string | null; note?: string | null },
+  ) => apiFetch<Entitlement>(`/counsellor/entitlements/${id}`, json('PATCH', body)),
+  reliefSchedule: () => apiFetch<{ entries: ReliefEntry[] }>('/counsellor/relief-schedule'),
+  addReliefFromSchedule: (victimId: string, section: string) =>
+    apiFetch<{ section: string; offence: string; total: number; entitlements: Entitlement[] }>(
+      `/counsellor/victims/${victimId}/relief`, json('POST', { section })),
 };

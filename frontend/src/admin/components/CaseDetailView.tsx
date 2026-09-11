@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CaseData } from '../types';
-import { Alert, ApiError, Recording, ScoreComponent, Timeline, VictimDetail, api, fetchAudioUrl } from '../../lib/api';
-import { REASON_TITLES, timeAgo } from '../data/live';
+import {
+  Alert, ApiError, Entitlement, EntitlementStatus, EventKind, Recording, ScoreComponent, Timeline, VictimDetail,
+  api, fetchAudioUrl,
+} from '../../lib/api';
+import { REASON_ICONS, REASON_TITLES, timeAgo } from '../data/live';
 
 interface CaseDetailViewProps {
   caseData: CaseData;
@@ -12,11 +15,12 @@ interface CaseDetailViewProps {
   onChanged?: () => void;
 }
 
-type Tab = 'Signals' | 'Timeline' | 'Alerts' | 'Recordings' | 'Consent';
+type Tab = 'Signals' | 'Timeline' | 'Entitlements' | 'Alerts' | 'Recordings' | 'Consent';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'Signals', label: 'Score & Signals', icon: 'monitoring' },
   { id: 'Timeline', label: 'Timeline', icon: 'timeline' },
+  { id: 'Entitlements', label: 'Relief', icon: 'payments' },
   { id: 'Alerts', label: 'Alerts', icon: 'notifications' },
   { id: 'Recordings', label: 'Recordings', icon: 'graphic_eq' },
   { id: 'Consent', label: 'Consent', icon: 'shield' },
@@ -27,7 +31,33 @@ const COMPONENTS: { key: ScoreComponent; label: string; source: string }[] = [
   { key: 'text', label: 'Chat distress', source: 'distress model on chat messages' },
   { key: 'voice', label: 'Voice distress', source: 'voice check-ins and notes' },
   { key: 'engagement', label: 'Withdrawal', source: 'days since contact' },
+  { key: 'case_pressure', label: 'Case pressure', source: 'the justice calendar: hearings, relief' },
 ];
+
+const ENTITLEMENT_STATUS_STYLE: Record<EntitlementStatus, { label: string; color: string; bg: string }> = {
+  received: { label: 'Received', color: '#7a5a3f', bg: '#efe7d6' },
+  not_received: { label: 'Not received', color: '#93000a', bg: '#ffdad6' },
+  due: { label: 'Due', color: '#9a5b13', bg: '#f3dcc3' },
+  unknown: { label: 'Unconfirmed', color: '#5c5142', bg: '#ece2ce' },
+};
+
+const rupees = (n: number | null | undefined) =>
+  n == null ? '—' : `₹${Math.round(n).toLocaleString('en-IN')}`;
+
+const EVENT_KIND_OPTIONS: { value: EventKind; label: string }[] = [
+  { value: 'hearing', label: 'Hearing' },
+  { value: 'bail_hearing', label: 'Bail hearing' },
+  { value: 'parole', label: 'Parole hearing' },
+  { value: 'adjournment', label: 'Adjournment' },
+  { value: 'trial_end', label: 'Trial verdict' },
+  { value: 'chargesheet', label: 'Charge sheet' },
+  { value: 'fir', label: 'FIR' },
+  { value: 'compensation', label: 'Compensation' },
+  { value: 'counselling', label: 'Counselling' },
+  { value: 'other', label: 'Other' },
+];
+// s.15A makes notice to the victim mandatory before these (backend.md §5d).
+const NOTICE_KINDS: EventKind[] = ['bail_hearing', 'parole'];
 
 const CONSENTS: { key: keyof VictimDetail['consent']; label: string }[] = [
   { key: 'data_storage', label: 'Store check-ins' },
@@ -69,8 +99,23 @@ const ScoreChart: React.FC<{ timeline: Timeline; forecast?: VictimDetail['foreca
       {[25, 50, 75].map((y) => (
         <line key={y} x1="0" x2="600" y1={Y(y)} y2={Y(y)} stroke="#ece2ce" strokeWidth="1" />
       ))}
+      {/* §3: faint per-day chat / voice distress means, under the score line */}
+      {(['text_distress', 'voice_distress'] as const).map((m, mi) => {
+        const s = timeline.signals?.[m]?.filter((o) => o.mean != null);
+        if (!s || s.length < 2) return null;
+        const pts = s.map((o) => `${X(new Date(`${o.date}T00:00:00`).getTime())},${Y(o.mean)}`).join(' ');
+        return (
+          <polyline key={m} points={pts} fill="none" stroke={mi === 0 ? '#7d92b6' : '#c8a97e'}
+            strokeWidth="1.2" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" opacity="0.85" />
+        );
+      })}
       <polyline points={xy.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#9c6743" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
       {points.map((p, i) => (p.crisis ? <circle key={i} cx={xy[i][0]} cy={xy[i][1]} r="4" fill="#ba1a1a" /> : null))}
+      {/* §3: questionnaire submissions as ticks along the bottom axis */}
+      {(timeline.questionnaires ?? []).map((q, i) => {
+        const x = X(new Date(q.at).getTime());
+        return <line key={`q${i}`} x1={x} x2={x} y1="110" y2="120" stroke="#7a5a3f" strokeWidth="2" vectorEffect="non-scaling-stroke" />;
+      })}
       {fc && (
         <>
           <line
@@ -99,6 +144,10 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
   const [playing, setPlaying] = useState<{ id: string; url: string } | null>(null);
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [newEvent, setNewEvent] = useState<{ kind: EventKind; date: string; title: string; notice_given: boolean }>({
+    kind: 'hearing', date: '', title: '', notice_given: false,
+  });
+  const [showAddEvent, setShowAddEvent] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -132,6 +181,46 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
     try {
       if (action === 'acknowledge') await api.acknowledgeAlert(alert.id);
       else await api.resolveAlert(alert.id, notes[alert.id]?.trim() || undefined);
+      await load();
+      onChanged?.();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  };
+
+  // §5b: mark a relief stage as paid / overdue from the counsellor's side.
+  const setEntitlementStatus = async (id: number, status: EntitlementStatus) => {
+    try {
+      await api.updateEntitlement(id, { status });
+      await load();
+      onChanged?.();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  };
+
+  // §5d/§3: add a case date (with the s.15A notice flag for bail/parole) or delete one.
+  const addCaseEvent = async () => {
+    if (!newEvent.date || !newEvent.title.trim()) return;
+    try {
+      await api.addEvent(caseData.id, {
+        kind: newEvent.kind,
+        date: newEvent.date,
+        title: newEvent.title.trim(),
+        ...(NOTICE_KINDS.includes(newEvent.kind) ? { notice_given: newEvent.notice_given } : {}),
+      });
+      setNewEvent({ kind: 'hearing', date: '', title: '', notice_given: false });
+      setShowAddEvent(false);
+      await load();
+      onChanged?.();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  };
+
+  const removeCaseEvent = async (id: number) => {
+    try {
+      await api.deleteEvent(id);
       await load();
       onChanged?.();
     } catch (err) {
@@ -274,6 +363,13 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
                   </span>
                 </div>
                 <ScoreChart timeline={timeline} forecast={detail.forecast} />
+                <div className="flex items-center gap-3 flex-wrap text-[10px] text-[#837562]">
+                  <span className="flex items-center gap-1"><span className="w-3 h-[2.5px] bg-[#9c6743] rounded-full"></span> Distress Score</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-[2px] border-t-2 border-dashed border-[#7d92b6]"></span> Chat distress</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-[2px] border-t-2 border-dashed border-[#c8a97e]"></span> Voice distress</span>
+                  <span className="flex items-center gap-1"><span className="w-[2px] h-3 bg-[#7a5a3f]"></span> Questionnaire</span>
+                  {detail.forecast && <span className="flex items-center gap-1"><span className="w-3 h-[2px] border-t-2 border-dashed border-[#b3654a]"></span> Forecast</span>}
+                </div>
                 {detail.forecast ? (
                   <div className="flex items-start gap-2 text-xs text-[#7a5a3f] bg-[#efe7d6]/70 border border-[#e5dac4] rounded-lg px-3 py-2">
                     <span className="material-symbols-outlined text-[16px] text-[#b3654a] mt-0.5">insights</span>
@@ -309,6 +405,13 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
                         />
                       </div>
                       <span className="text-[10px] text-[#837562]">{c.source}</span>
+                      {c.key === 'engagement' && detail.latest?.details?.engagement?.days_since_last_contact != null && (
+                        <span className="block text-[10px] font-semibold text-[#93000a] mt-0.5">
+                          Silent {Math.round(detail.latest.details.engagement.days_since_last_contact)} day
+                          {Math.round(detail.latest.details.engagement.days_since_last_contact) === 1 ? '' : 's'} — withdrawal is the
+                          highest-risk signal, not the lowest.
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -322,20 +425,168 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
           )}
 
           {activeTab === 'Timeline' && (
-            <div className={`${CARD} space-y-4`}>
-              <h3 className="font-['Plus_Jakarta_Sans'] text-base font-bold text-[#352e24]">Alerts, check-ins and case dates</h3>
-              {timelineItems.length === 0 ? (
-                <p className="text-xs text-[#837562]">Nothing recorded yet.</p>
-              ) : (
-                <div className="space-y-4 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#e5dac4] pl-8">
-                  {timelineItems.map((item, i) => (
-                    <div key={i} className="relative">
-                      <span className={`absolute -left-8 top-1 w-4 h-4 rounded-full border-2 border-white ring-2 ${item.dot}`}></span>
-                      <span className="text-[11px] text-[#837562] font-mono">{when(item.at)}</span>
-                      <h4 className="text-sm font-bold text-[#352e24]">{item.title}</h4>
-                      <p className="text-xs text-[#5c5142] mt-0.5">{item.text}</p>
+            <div className="space-y-4">
+              {/* §5d/§3: add a case date (with s.15A notice for bail/parole) or delete one */}
+              <div className={`${CARD} space-y-3`}>
+                <div className="flex items-center justify-between">
+                  <h3 className="font-['Plus_Jakarta_Sans'] text-base font-bold text-[#352e24]">Case dates</h3>
+                  <button
+                    onClick={() => setShowAddEvent((v) => !v)}
+                    className="text-xs font-semibold text-[#9c6743] hover:underline flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">{showAddEvent ? 'close' : 'add'}</span>
+                    {showAddEvent ? 'Cancel' : 'Add a date'}
+                  </button>
+                </div>
+
+                {showAddEvent && (
+                  <div className="rounded-xl border border-[#e5dac4] bg-[#f5f1e8] p-3 space-y-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <select
+                        value={newEvent.kind}
+                        onChange={(e) => setNewEvent((s) => ({ ...s, kind: e.target.value as EventKind }))}
+                        className="px-2.5 py-2 rounded-lg border border-[#e5dac4] bg-white text-xs outline-none focus:border-[#9c6743]"
+                      >
+                        {EVENT_KIND_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      <input
+                        type="date" value={newEvent.date}
+                        onChange={(e) => setNewEvent((s) => ({ ...s, date: e.target.value }))}
+                        className="px-2.5 py-2 rounded-lg border border-[#e5dac4] bg-white text-xs outline-none focus:border-[#9c6743]"
+                      />
+                      <input
+                        type="text" value={newEvent.title} maxLength={200}
+                        onChange={(e) => setNewEvent((s) => ({ ...s, title: e.target.value }))}
+                        placeholder="e.g. District court, room 4"
+                        className="px-2.5 py-2 rounded-lg border border-[#e5dac4] bg-white text-xs outline-none focus:border-[#9c6743]"
+                      />
                     </div>
-                  ))}
+                    {NOTICE_KINDS.includes(newEvent.kind) && (
+                      <label className="flex items-start gap-2 text-xs text-[#5c5142] bg-white rounded-lg border border-[#f3b0ab] p-2.5">
+                        <input
+                          type="checkbox" checked={newEvent.notice_given}
+                          onChange={(e) => setNewEvent((s) => ({ ...s, notice_given: e.target.checked }))}
+                          className="mt-0.5 accent-[#9c6743]"
+                        />
+                        <span>
+                          <strong>Victim has been given notice (s.15A).</strong> Notice before a bail or parole hearing is
+                          mandatory; if it isn't recorded and the hearing is within 7 days, SAHAAS raises a legal alert.
+                        </span>
+                      </label>
+                    )}
+                    <button
+                      onClick={addCaseEvent}
+                      disabled={!newEvent.date || !newEvent.title.trim()}
+                      className="px-3.5 py-2 rounded-lg bg-[#9c6743] text-white text-xs font-semibold hover:bg-[#835636] disabled:opacity-50 transition-colors"
+                    >
+                      Add date
+                    </button>
+                  </div>
+                )}
+
+                {detail.events.length === 0 ? (
+                  <p className="text-xs text-[#837562]">No case dates recorded yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {detail.events.map((ce) => (
+                      <div key={ce.id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg bg-[#f5f1e8] border border-[#ece2ce]">
+                        <div className="min-w-0">
+                          <span className="text-sm font-semibold text-[#352e24] capitalize">{ce.kind.replace(/_/g, ' ')}</span>
+                          <span className="text-xs text-[#837562]"> · {ce.title}</span>
+                          <p className="text-[11px] text-[#837562]">
+                            {when(`${ce.date}T00:00:00`).split(',')[0]} · {ce.days_until >= 0 ? `in ${ce.days_until}d` : 'past'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => removeCaseEvent(ce.id)}
+                          className="p-1.5 rounded-lg text-[#837562] hover:text-[#93000a] hover:bg-[#ffdad6]/40"
+                          title="Delete date"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Merged history: alerts, check-ins and case dates */}
+              <div className={`${CARD} space-y-4`}>
+                <h3 className="font-['Plus_Jakarta_Sans'] text-base font-bold text-[#352e24]">Alerts, check-ins and case dates</h3>
+                {timelineItems.length === 0 ? (
+                  <p className="text-xs text-[#837562]">Nothing recorded yet.</p>
+                ) : (
+                  <div className="space-y-4 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#e5dac4] pl-8">
+                    {timelineItems.map((item, i) => (
+                      <div key={i} className="relative">
+                        <span className={`absolute -left-8 top-1 w-4 h-4 rounded-full border-2 border-white ring-2 ${item.dot}`}></span>
+                        <span className="text-[11px] text-[#837562] font-mono">{when(item.at)}</span>
+                        <h4 className="text-sm font-bold text-[#352e24]">{item.title}</h4>
+                        <p className="text-xs text-[#5c5142] mt-0.5">{item.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'Entitlements' && (
+            <div className={`${CARD} space-y-4`}>
+              <div>
+                <h3 className="font-['Plus_Jakarta_Sans'] text-base font-bold text-[#352e24]">Relief &amp; entitlements</h3>
+                <p className="text-xs text-[#837562] mt-0.5">
+                  Staged relief under the SC/ST (PoA) Rules. What the victim reported is shown — a
+                  <strong className="text-[#93000a]"> not received</strong> answer is the one to chase.
+                </p>
+              </div>
+              {!detail.entitlements || detail.entitlements.length === 0 ? (
+                <p className="text-xs text-[#837562]">
+                  No relief stages recorded. Add them from the SC/ST relief schedule when the offence is known.
+                </p>
+              ) : (
+                <div className="space-y-2.5">
+                  {detail.entitlements.map((e: Entitlement) => {
+                    const s = ENTITLEMENT_STATUS_STYLE[e.status];
+                    const overdue = e.status === 'not_received';
+                    return (
+                      <div
+                        key={e.id}
+                        className={`rounded-xl border p-3.5 ${overdue ? 'border-[#f3b0ab] bg-[#ffdad6]/30' : 'border-[#ece2ce] bg-[#f5f1e8]'}`}
+                      >
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-sm font-bold text-[#352e24] capitalize">{e.stage.replace(/_/g, ' ')}</span>
+                              <span className="text-sm font-semibold text-[#7a5a3f]">{rupees(e.amount)}</span>
+                              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ color: s.color, backgroundColor: s.bg }}>
+                                {s.label}
+                              </span>
+                            </div>
+                            <p className="text-xs text-[#5c5142] mt-1">{e.label}</p>
+                            <p className="text-[11px] text-[#837562] mt-0.5">
+                              {e.due_on ? `Due ${when(`${e.due_on}T00:00:00`).split(',')[0]}` : 'No due date set'}
+                              {e.answered_at ? ` · victim answered ${timeAgo(e.answered_at)}` : ' · victim not asked yet'}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              onClick={() => setEntitlementStatus(e.id, 'received')}
+                              className="px-2.5 py-1 rounded-lg bg-[#9c6743] text-white text-[11px] font-semibold hover:bg-[#835636] transition-colors"
+                            >
+                              Mark paid
+                            </button>
+                            <button
+                              onClick={() => setEntitlementStatus(e.id, 'not_received')}
+                              className="px-2.5 py-1 rounded-lg bg-white text-[#93000a] border border-[#f3b0ab] text-[11px] font-semibold hover:bg-[#ffdad6]/40 transition-colors"
+                            >
+                              Overdue
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -350,7 +601,12 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
                 detail.alerts.map((a) => (
                   <div key={a.id} className="p-3 rounded-xl bg-[#f5f1e8] border border-[#e5dac4] flex flex-col gap-2">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-[#352e24]">
+                      <span className="text-xs font-bold text-[#352e24] flex items-center gap-1.5">
+                        <span
+                          className={`material-symbols-outlined text-[18px] ${a.reason === 'bail_no_notice' ? 'text-[#93000a]' : a.level === 'crisis' ? 'text-[#ba1a1a]' : 'text-[#9c6743]'}`}
+                        >
+                          {REASON_ICONS[a.reason] ?? 'notifications'}
+                        </span>
                         {REASON_TITLES[a.reason] ?? a.reason} · <span className="uppercase">{a.level}</span>
                       </span>
                       <span className="text-[11px] text-[#837562]">{when(a.at)} · {a.status}</span>
