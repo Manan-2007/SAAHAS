@@ -1,9 +1,10 @@
-export type NavigationTab = 
-  | 'overview' 
-  | 'priority-cases' 
-  | 'case-detail-signals' 
-  | 'interventions' 
-  | 'recovery-outcomes' 
+export type NavigationTab =
+  | 'overview'
+  | 'priority-cases'
+  | 'forecast'
+  | 'case-detail-signals'
+  | 'interventions'
+  | 'recovery-outcomes'
   | 'system-settings';
 
 export interface InterventionItem {
@@ -83,6 +84,8 @@ export interface CaseData {
   distressAfterLabel: string;
   distressDelta: string;
   trendPoints: number[];   // Distress Score history, last 30 days
+  // Case-aware forecast (backend.md §5a): a predicted peak when a hearing is near.
+  forecast: { peak_score: number; peak_on: string; driver: string } | null;
   currentStep: number; // 1 to 5
 }
 

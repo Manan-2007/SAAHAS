@@ -9,6 +9,7 @@ import { PriorityCasesView } from './components/PriorityCasesView';
 import { CaseDetailView } from './components/CaseDetailView';
 import { InterventionsView } from './components/InterventionsView';
 import { RecoveryOutcomesView } from './components/RecoveryOutcomesView';
+import { ForecastView } from './components/ForecastView';
 import { SystemSettingsView } from './components/SystemSettingsView';
 import {
   QuickLockModal,
@@ -208,6 +209,13 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
         <main className="flex-1 pt-20 sm:pt-24 px-4 pb-4 sm:px-6 sm:pb-6 lg:px-8 lg:pb-8 max-w-7xl w-full mx-auto">
           {activeTab === 'system-settings' ? (
             <SystemSettingsView />
+          ) : activeTab === 'forecast' ? (
+            <ForecastView
+              onOpenCase={(id) => {
+                setSelectedCaseId(id);
+                setActiveTab('case-detail-signals');
+              }}
+            />
           ) : !activeCase ? (
             emptyState
           ) : (

@@ -50,22 +50,35 @@ const errorText = (err: unknown) => (err instanceof ApiError ? err.message : "Ca
 const CARD = 'bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce]';
 
 // The 30-day Distress Score line (0-100, higher is harder)
-const ScoreChart: React.FC<{ timeline: Timeline }> = ({ timeline }) => {
+const ScoreChart: React.FC<{ timeline: Timeline; forecast?: VictimDetail['forecast'] }> = ({ timeline, forecast }) => {
   const points = timeline.scores;
   if (points.length < 2) {
     return <p className="text-xs text-[#837562]">Not enough scores yet for a trend line.</p>;
   }
   const t0 = new Date(points[0].at).getTime();
-  const span = Math.max(1, new Date(points[points.length - 1].at).getTime() - t0);
-  const xy = points.map((p) => [((new Date(p.at).getTime() - t0) / span) * 600, 120 - (p.score / 100) * 120]);
+  const last = points[points.length - 1];
+  const tLast = new Date(last.at).getTime();
+  // Extend the axis to the forecast peak so the dotted continuation fits.
+  const fc = forecast?.peak_on ? { t: new Date(`${forecast.peak_on}T00:00:00`).getTime(), score: forecast.peak_score } : null;
+  const span = Math.max(1, (fc ? Math.max(tLast, fc.t) : tLast) - t0);
+  const X = (t: number) => ((t - t0) / span) * 600;
+  const Y = (s: number) => 120 - (s / 100) * 120;
+  const xy = points.map((p) => [X(new Date(p.at).getTime()), Y(p.score)] as const);
   return (
-    <svg viewBox="0 0 600 120" className="w-full h-32" preserveAspectRatio="none" role="img" aria-label="Distress Score over 30 days">
+    <svg viewBox="0 0 600 120" className="w-full h-32" preserveAspectRatio="none" role="img" aria-label="Distress Score over 30 days, with forecast">
       {[25, 50, 75].map((y) => (
-        <line key={y} x1="0" x2="600" y1={120 - (y / 100) * 120} y2={120 - (y / 100) * 120} stroke="#ece2ce" strokeWidth="1" />
+        <line key={y} x1="0" x2="600" y1={Y(y)} y2={Y(y)} stroke="#ece2ce" strokeWidth="1" />
       ))}
       <polyline points={xy.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke="#9c6743" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-      {points.map((p, i) =>
-        p.crisis ? <circle key={i} cx={xy[i][0]} cy={xy[i][1]} r="4" fill="#ba1a1a" /> : null,
+      {points.map((p, i) => (p.crisis ? <circle key={i} cx={xy[i][0]} cy={xy[i][1]} r="4" fill="#ba1a1a" /> : null))}
+      {fc && (
+        <>
+          <line
+            x1={X(tLast)} y1={Y(last.score)} x2={X(fc.t)} y2={Y(fc.score)}
+            stroke="#b3654a" strokeWidth="2" strokeDasharray="5 4" vectorEffect="non-scaling-stroke"
+          />
+          <circle cx={X(fc.t)} cy={Y(fc.score)} r="4.5" fill="none" stroke="#b3654a" strokeWidth="2" vectorEffect="non-scaling-stroke" />
+        </>
       )}
     </svg>
   );
@@ -260,7 +273,18 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
                     {detail.latest ? `${Math.round(detail.latest.score)} · ${detail.latest.tier}` : 'No score yet'}
                   </span>
                 </div>
-                <ScoreChart timeline={timeline} />
+                <ScoreChart timeline={timeline} forecast={detail.forecast} />
+                {detail.forecast ? (
+                  <div className="flex items-start gap-2 text-xs text-[#7a5a3f] bg-[#efe7d6]/70 border border-[#e5dac4] rounded-lg px-3 py-2">
+                    <span className="material-symbols-outlined text-[16px] text-[#b3654a] mt-0.5">insights</span>
+                    <span className="leading-relaxed">
+                      <strong>Forecast (dashed):</strong> distress may rise toward{' '}
+                      <strong>{Math.round(detail.forecast.peak_score)}/100</strong> around{' '}
+                      {new Date(`${detail.forecast.peak_on}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                      {' '}— {detail.forecast.driver}. Reaching out before then is the point.
+                    </span>
+                  </div>
+                ) : null}
                 {detail.latest?.crisis && detail.latest.crisis_reasons?.length ? (
                   <p className="text-xs text-[#ba1a1a] font-semibold">
                     Crisis signal: {detail.latest.crisis_reasons.join(', ').replace(/_/g, ' ')}
