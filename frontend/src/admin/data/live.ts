@@ -20,6 +20,20 @@ export const REASON_TITLES: Record<AlertReason, string> = {
   adjournment_streak: 'Repeated Adjournments',
 };
 
+// Material Symbols per reason. bail_no_notice gets a distinct legal icon — it is
+// a legal failure (s.15A notice not recorded), not a mood reading (backend.md §5d).
+export const REASON_ICONS: Record<AlertReason, string> = {
+  crisis_signal: 'e911_emergency',
+  high_distress: 'warning',
+  rising_distress: 'trending_up',
+  gone_quiet: 'volume_off',
+  upcoming_event: 'gavel',
+  hearing_soon: 'gavel',
+  bail_no_notice: 'balance',
+  entitlement_unpaid: 'payments',
+  adjournment_streak: 'event_repeat',
+};
+
 const LEVEL_RANK: Record<Alert['level'], number> = { crisis: 0, high: 1, watch: 2 };
 
 const EVENT_LABELS: Record<EventKind, string> = {

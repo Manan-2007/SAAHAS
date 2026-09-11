@@ -52,6 +52,8 @@ export const PrivacySettings: React.FC<{ onClose: () => void }> = ({ onClose }) 
   const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState({ open: false, current: '', next: '', done: false, busy: false });
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // §2: token-only accounts can add a username + password to sign in on any phone.
+  const [creds, setCreds] = useState({ username: '', password: '', busy: false, done: false });
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -116,6 +118,24 @@ export const PrivacySettings: React.FC<{ onClose: () => void }> = ({ onClose }) 
       setSessions((list) => list?.filter((x) => x.id !== s.id) ?? null);
     } catch (err) {
       setError(errorText(err));
+    }
+  };
+
+  const addCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (creds.password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Please use at least ${MIN_PASSWORD_LENGTH} characters for the password.`);
+      return;
+    }
+    setError(null);
+    setCreds((c) => ({ ...c, busy: true }));
+    try {
+      const res = await api.setCredentials(creds.username.trim(), creds.password);
+      setCreds({ username: '', password: '', busy: false, done: true });
+      updateUser({ ...user, username: res.username, hasPassword: true });
+    } catch (err) {
+      setCreds((c) => ({ ...c, busy: false }));
+      setError(err instanceof ApiError && err.status === 409 ? 'That username is taken. Try another.' : errorText(err));
     }
   };
 
@@ -262,6 +282,50 @@ export const PrivacySettings: React.FC<{ onClose: () => void }> = ({ onClose }) 
             ))
           )}
         </section>
+
+        {/* §2: Add a password to a token-only account */}
+        {!user.hasPassword && (
+          <section className={SECTION}>
+            <h3 className={HEADING}>Add a password</h3>
+            {creds.done ? (
+              <p className="text-xs text-[#7a5a3f] flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5" /> Password added. You can now sign in on any phone.
+              </p>
+            ) : (
+              <>
+                <p className="text-[11px] text-[#8a7d68] leading-relaxed">
+                  Right now this account lives only on this device — if you lose it, you lose your journey. Add a
+                  username and password to sign back in anywhere.
+                </p>
+                <form onSubmit={addCredentials} className="flex flex-col gap-2 mt-1">
+                  <input
+                    type="text"
+                    value={creds.username}
+                    onChange={(e) => setCreds((c) => ({ ...c, username: e.target.value }))}
+                    placeholder="Username (not your real name)"
+                    autoComplete="username"
+                    className="w-full px-3 py-2 rounded-xl bg-[#f5f1e8] border border-[#e5dac4] text-sm outline-none focus:border-[#9c6743]"
+                  />
+                  <input
+                    type="password"
+                    value={creds.password}
+                    onChange={(e) => setCreds((c) => ({ ...c, password: e.target.value }))}
+                    placeholder={`Password (at least ${MIN_PASSWORD_LENGTH} characters)`}
+                    autoComplete="new-password"
+                    className="w-full px-3 py-2 rounded-xl bg-[#f5f1e8] border border-[#e5dac4] text-sm outline-none focus:border-[#9c6743]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={creds.busy || !creds.username.trim() || !creds.password}
+                    className="py-2 rounded-xl bg-[#9c6743] text-white text-sm font-semibold disabled:opacity-50"
+                  >
+                    {creds.busy ? 'Saving…' : 'Add a password'}
+                  </button>
+                </form>
+              </>
+            )}
+          </section>
+        )}
 
         {/* Password */}
         {user.hasPassword && (

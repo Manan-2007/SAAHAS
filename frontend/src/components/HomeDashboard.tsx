@@ -17,12 +17,15 @@ import {
   Shield,
   Clock,
   CheckCheck,
-  Headphones
+  Headphones,
+  Wallet,
+  Check,
+  HelpCircle
 } from 'lucide-react';
 import { AppView, LanguageCode, WellBeingMetric } from '../types';
 import { TRANSLATIONS } from '../data/mockData';
 import { useAuth } from '../auth/AuthProvider';
-import { CaseUpcoming, DueCheckin, VictimEventKind, api, victimKind } from '../lib/api';
+import { CaseUpcoming, DueCheckin, Entitlement, EntitlementStatus, VictimEventKind, api, victimKind } from '../lib/api';
 
 const TREND_COLORS: Record<WellBeingMetric['trend'], string> = {
   Improving: '#9c6743',
@@ -87,6 +90,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   // Personalize the localized greeting by swapping the demo name for the user's.
   const greeting = t.greeting.replace(/Sunita|सुनीता|ਸੁਨੀਤਾ/, firstName);
   const [events, setEvents] = useState<CaseUpcoming[] | null>(null);
+  const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
   const [due, setDue] = useState<DueCheckin[] | null>(null);
 
   // "What's coming up" (backend.md §5a): GET /me/case gives gentle, pre-translated
@@ -97,7 +101,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     const take = (list: CaseUpcoming[]) => list.filter((e) => e.days_until >= 0).slice(0, 3);
     api
       .case()
-      .then((info) => live && setEvents(take(info.upcoming)))
+      .then((info) => {
+        if (!live) return;
+        setEvents(take(info.upcoming));
+        // Only the ones still worth asking about (skip already-received).
+        setEntitlements(info.entitlements.filter((e) => e.status !== 'received'));
+      })
       .catch(() =>
         api
           .events()
@@ -123,6 +132,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   }, [isVictim]);
 
   const next = nextCheckin(due);
+
+  // §5b: the victim answers "did the support money arrive?" — no amounts shown.
+  const answerEntitlement = (id: number, status: EntitlementStatus) => {
+    setEntitlements((prev) => prev.filter((e) => e.id !== id));
+    api.answerEntitlement(id, status).catch(() => {});
+  };
+
   const counsellorInitials = (user.counsellor ?? 'C')
     .replace(/^Dr\.?\s+/i, '')
     .split(/\s+/)
@@ -477,6 +493,56 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           )}
         </div>
       </section>
+
+      {/* 4b. Support you may be owed (§5b entitlement tracker) — no amounts */}
+      {isVictim && entitlements.length > 0 && (
+        <section className="rounded-2xl bg-white p-5 shadow-xs flex flex-col gap-4 border border-[#e5dac4]/60">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-[#ece2ce] flex items-center justify-center text-[#9c6743]">
+              <Wallet className="w-4 h-4" />
+            </div>
+            <div className="flex flex-col">
+              <h3 className="text-base font-bold text-[#352e24]">Support you may be owed</h3>
+              <span className="text-xs text-[#8a7d68]">A quick yes/no helps your counsellor chase anything that hasn't arrived.</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            {entitlements.map((e) => (
+              <div key={e.id} className="p-3.5 rounded-xl bg-[#efe7d6]/50 border border-[#e5dac4]/40 flex flex-col gap-2.5">
+                <div className="flex items-start gap-2">
+                  <HelpCircle className="w-4 h-4 text-[#9c6743] shrink-0 mt-0.5" />
+                  <span className="text-sm text-[#352e24] leading-snug">{e.label}?</span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap pl-6">
+                  <button
+                    onClick={() => answerEntitlement(e.id, 'received')}
+                    className="px-3 py-1.5 rounded-lg bg-[#9c6743] text-white text-xs font-semibold flex items-center gap-1.5 hover:bg-[#835636] transition-colors"
+                  >
+                    <Check className="w-3.5 h-3.5" /> Yes, it arrived
+                  </button>
+                  <button
+                    onClick={() => answerEntitlement(e.id, 'not_received')}
+                    className="px-3 py-1.5 rounded-lg bg-white text-[#93000a] border border-[#f3b0ab] text-xs font-semibold hover:bg-[#ffdad6]/40 transition-colors"
+                  >
+                    No, not yet
+                  </button>
+                  <button
+                    onClick={() => answerEntitlement(e.id, 'unknown')}
+                    className="px-3 py-1.5 rounded-lg bg-white text-[#5c5142] border border-[#e5dac4] text-xs font-semibold hover:bg-[#efe7d6] transition-colors"
+                  >
+                    I'm not sure
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-[#8a7d68] leading-relaxed">
+            You never need to remember amounts — that's your counsellor's job. This is only so nothing you're
+            entitled to gets quietly missed.
+          </p>
+        </section>
+      )}
 
       {/* 5. Emergency & Empathetic Support Banner */}
       <section className="rounded-2xl bg-gradient-to-r from-[#b3654a] to-[#9c6743] text-white p-5 sm:p-6 shadow-md flex flex-col gap-4">
