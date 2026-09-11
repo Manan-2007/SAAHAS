@@ -4,6 +4,7 @@ import { SessionUser, restoreSession, signOut } from './authStore';
 import { clearSession, onSignedOut } from '../lib/api';
 import { AuthScreen } from './AuthScreen';
 import { Onboarding } from './Onboarding';
+import { LandingPage } from '../components/LandingPage';
 
 interface AuthContextValue {
   user: SessionUser;
@@ -30,6 +31,8 @@ type GateState = { status: 'loading' } | { status: 'offline' } | { status: 'read
 // victim account, and only then the app itself.
 export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<GateState>({ status: 'loading' });
+  // Show the marketing landing page first; "Enter SAHAAS" reveals sign-in.
+  const [showAuth, setShowAuth] = useState(false);
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -64,7 +67,13 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   }
 
   const { user } = state;
-  if (!user) return <AuthScreen onAuthenticated={setUser} />;
+  if (!user) {
+    return showAuth ? (
+      <AuthScreen onAuthenticated={setUser} />
+    ) : (
+      <LandingPage onEnter={() => setShowAuth(true)} />
+    );
+  }
   if (user.role === 'victim' && !user.onboarded) return <Onboarding user={user} onComplete={setUser} />;
 
   const value: AuthContextValue = {
