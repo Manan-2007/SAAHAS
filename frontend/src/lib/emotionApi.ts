@@ -221,6 +221,8 @@ export interface ChatResponse {
   crisis: boolean;
   crisis_message: string | null;
   model: string | null;
+  // true when this exchange was saved to the victim's journey (backend.md §2).
+  recorded?: boolean;
 }
 
 // Replies from the SAHAAS chat model (fine-tuned with backend/train_chat.sh).

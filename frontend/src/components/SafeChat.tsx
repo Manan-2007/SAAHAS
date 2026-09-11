@@ -9,6 +9,7 @@ import {
   Phone,
   ArrowLeft,
   ShieldCheck,
+  Check,
   Volume2,
   X,
 } from 'lucide-react';
@@ -138,6 +139,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
   const [voiceStage, setVoiceStage] = useState<VoiceStage>('idle');
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [crisisMessage, setCrisisMessage] = useState<string | null>(null);
+  const [savedToJourney, setSavedToJourney] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef(messages);
   const voiceSessionRef = useRef<LiveSession | null>(null);
@@ -218,6 +220,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
       const res = await chatReply(toChatTurns(messagesRef.current), tone);
       reply = res.reply;
       if (res.crisis) setCrisisMessage(res.crisis_message || DEFAULT_CRISIS_MESSAGE);
+      if (res.recorded) setSavedToJourney(true);
     } catch {
       reply = fallback();
     }
@@ -428,6 +431,14 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
             : 'Private · only how you felt is saved, not your words'}
         </span>
       </div>
+
+      {/* §2: gentle "saved to your journey" tick once the backend has kept an exchange */}
+      {savedToJourney && (
+        <div className="flex items-center justify-center gap-1 text-[10px] text-[#8a7d68] mb-2 -mt-1">
+          <Check className="w-3 h-3 text-[#9c6743]" />
+          <span>Saved to your journey</span>
+        </div>
+      )}
 
       {activePartner === 'counsellor' && (
         <div className="mb-2 rounded-xl bg-white border border-[#e5dac4] p-3 text-xs text-[#5c5142] leading-relaxed flex items-start gap-2">
