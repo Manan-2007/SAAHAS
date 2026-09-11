@@ -81,25 +81,25 @@ export const WellBeingTracker: React.FC<WellBeingTrackerProps> = ({
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
-          className="p-2 rounded-xl bg-white border border-[#ddeaf2] text-[#3d4947] hover:text-[#00685d] flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
+          className="p-2 rounded-xl bg-white border border-[#e5dac4] text-[#5c5142] hover:text-[#9c6743] flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Dashboard</span>
         </button>
 
-        <span className="text-xs font-semibold text-[#1d6e67] bg-[#a3ede4]/40 px-3 py-1 rounded-full">
+        <span className="text-xs font-semibold text-[#7a5a3f] bg-[#e7d3b5]/40 px-3 py-1 rounded-full">
           Self-Compassion Space
         </span>
       </div>
 
       {/* Tabs */}
-      <div className="flex bg-[#e9f6fd] p-1 rounded-2xl border border-[#ddeaf2] text-xs font-semibold">
+      <div className="flex bg-[#efe7d6] p-1 rounded-2xl border border-[#e5dac4] text-xs font-semibold">
         <button
           onClick={() => setActiveTab('checkin')}
           className={`flex-1 py-2 rounded-xl transition-all ${
             activeTab === 'checkin'
-              ? 'bg-white text-[#00685d] shadow-2xs'
-              : 'text-[#3d4947] hover:text-[#111d23]'
+              ? 'bg-white text-[#9c6743] shadow-2xs'
+              : 'text-[#5c5142] hover:text-[#352e24]'
           }`}
         >
           Daily 3-Question
@@ -108,8 +108,8 @@ export const WellBeingTracker: React.FC<WellBeingTrackerProps> = ({
           onClick={() => setActiveTab('breathing')}
           className={`flex-1 py-2 rounded-xl transition-all ${
             activeTab === 'breathing'
-              ? 'bg-white text-[#00685d] shadow-2xs'
-              : 'text-[#3d4947] hover:text-[#111d23]'
+              ? 'bg-white text-[#9c6743] shadow-2xs'
+              : 'text-[#5c5142] hover:text-[#352e24]'
           }`}
         >
           4-7-8 Breathing
@@ -118,8 +118,8 @@ export const WellBeingTracker: React.FC<WellBeingTrackerProps> = ({
           onClick={() => setActiveTab('grounding')}
           className={`flex-1 py-2 rounded-xl transition-all ${
             activeTab === 'grounding'
-              ? 'bg-white text-[#00685d] shadow-2xs'
-              : 'text-[#3d4947] hover:text-[#111d23]'
+              ? 'bg-white text-[#9c6743] shadow-2xs'
+              : 'text-[#5c5142] hover:text-[#352e24]'
           }`}
         >
           5-4-3-2-1 Sensory
@@ -128,21 +128,21 @@ export const WellBeingTracker: React.FC<WellBeingTrackerProps> = ({
 
       {/* TAB 1: 3-Question Daily Check-in */}
       {activeTab === 'checkin' && (
-        <div className="bg-white rounded-3xl p-6 border border-[#ddeaf2] shadow-xs flex flex-col gap-5">
+        <div className="bg-white rounded-3xl p-6 border border-[#e5dac4] shadow-xs flex flex-col gap-5">
           {!checkInDone ? (
             <>
-              <div className="flex items-center justify-between border-b border-[#ddeaf2] pb-3">
+              <div className="flex items-center justify-between border-b border-[#e5dac4] pb-3">
                 <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#00685d]">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#9c6743]">
                     Question {step} of 3
                   </span>
-                  <h3 className="text-lg font-bold text-[#111d23] mt-0.5">
+                  <h3 className="text-lg font-bold text-[#352e24] mt-0.5">
                     {step === 1 && "How does your body feel right now?"}
                     {step === 2 && "What is your emotional landscape today?"}
                     {step === 3 && "What would feel most comforting right now?"}
                   </h3>
                 </div>
-                <div className="w-8 h-8 rounded-full bg-[#e9f6fd] text-[#00685d] font-bold text-xs flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-[#efe7d6] text-[#9c6743] font-bold text-xs flex items-center justify-center">
                   {step}/3
                 </div>
               </div>
@@ -164,8 +164,8 @@ export const WellBeingTracker: React.FC<WellBeingTrackerProps> = ({
                       }}
                       className={`p-3.5 rounded-xl border text-left text-xs font-medium transition-all active:scale-[0.99] flex items-center justify-between ${
                         answers.body === opt
-                          ? 'border-[#00685d] bg-[#e9f6fd] text-[#00685d]'
-                          : 'border-[#ddeaf2] hover:bg-[#f4faff] text-[#111d23]'
+                          ? 'border-[#9c6743] bg-[#efe7d6] text-[#9c6743]'
+                          : 'border-[#e5dac4] hover:bg-[#f5f1e8] text-[#352e24]'
                       }`}
                     >
                       <span>{opt}</span>
@@ -192,8 +192,8 @@ export const WellBeingTracker: React.FC<WellBeingTrackerProps> = ({
                       }}
                       className={`p-3.5 rounded-xl border text-left text-xs font-medium transition-all active:scale-[0.99] flex items-center justify-between ${
                         answers.emotion === opt
-                          ? 'border-[#00685d] bg-[#e9f6fd] text-[#00685d]'
-                          : 'border-[#ddeaf2] hover:bg-[#f4faff] text-[#111d23]'
+                          ? 'border-[#9c6743] bg-[#efe7d6] text-[#9c6743]'
+                          : 'border-[#e5dac4] hover:bg-[#f5f1e8] text-[#352e24]'
                       }`}
                     >
                       <span>{opt}</span>
@@ -218,10 +218,10 @@ export const WellBeingTracker: React.FC<WellBeingTrackerProps> = ({
                         setAnswers({ ...answers, nourishment: opt });
                         handleFinishCheckin();
                       }}
-                      className="p-3.5 rounded-xl border border-[#ddeaf2] hover:border-[#00685d] hover:bg-[#e9f6fd] text-left text-xs font-medium text-[#111d23] transition-all active:scale-[0.99] flex items-center justify-between"
+                      className="p-3.5 rounded-xl border border-[#e5dac4] hover:border-[#9c6743] hover:bg-[#efe7d6] text-left text-xs font-medium text-[#352e24] transition-all active:scale-[0.99] flex items-center justify-between"
                     >
                       <span>{opt}</span>
-                      <Check className="w-4 h-4 text-[#00685d]" />
+                      <Check className="w-4 h-4 text-[#9c6743]" />
                     </button>
                   ))}
                 </div>
@@ -229,18 +229,18 @@ export const WellBeingTracker: React.FC<WellBeingTrackerProps> = ({
             </>
           ) : (
             <div className="flex flex-col items-center text-center gap-4 py-4">
-              <div className="w-14 h-14 rounded-full bg-[#a3ede4]/50 text-[#00685d] flex items-center justify-center">
+              <div className="w-14 h-14 rounded-full bg-[#e7d3b5]/50 text-[#9c6743] flex items-center justify-center">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-[#111d23]">Check-in Recorded Gently</h3>
-                <p className="text-xs text-[#3d4947] mt-1 max-w-sm">
+                <h3 className="text-lg font-bold text-[#352e24]">Check-in Recorded Gently</h3>
+                <p className="text-xs text-[#5c5142] mt-1 max-w-sm">
                   Your baseline has been updated safely. No labels or diagnoses are assigned—only your personal awareness.
                 </p>
               </div>
 
-              <div className="w-full bg-[#e9f6fd] p-3 rounded-2xl text-left text-xs text-[#3d4947] flex flex-col gap-1.5 border border-[#ddeaf2]">
-                <span className="font-semibold text-[#00685d]">Your Reflection:</span>
+              <div className="w-full bg-[#efe7d6] p-3 rounded-2xl text-left text-xs text-[#5c5142] flex flex-col gap-1.5 border border-[#e5dac4]">
+                <span className="font-semibold text-[#9c6743]">Your Reflection:</span>
                 <span>• Body: {answers.body || "Tension in shoulders"}</span>
                 <span>• Landscape: {answers.emotion || "Apprehensive about upcoming events"}</span>
                 <span>• Need: {answers.nourishment || "Gentle reassurance"}</span>
@@ -251,7 +251,7 @@ export const WellBeingTracker: React.FC<WellBeingTrackerProps> = ({
                   setCheckInDone(false);
                   setStep(1);
                 }}
-                className="text-xs font-semibold text-[#00685d] hover:underline"
+                className="text-xs font-semibold text-[#9c6743] hover:underline"
               >
                 Take check-in again
               </button>
@@ -262,15 +262,15 @@ export const WellBeingTracker: React.FC<WellBeingTrackerProps> = ({
 
       {/* TAB 2: 4-7-8 Breathing Circle */}
       {activeTab === 'breathing' && (
-        <div className="bg-white rounded-3xl p-6 border border-[#ddeaf2] shadow-xs flex flex-col items-center text-center gap-6">
+        <div className="bg-white rounded-3xl p-6 border border-[#e5dac4] shadow-xs flex flex-col items-center text-center gap-6">
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-[#00685d]">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#9c6743]">
               Somatic Calming
             </span>
-            <h3 className="text-xl font-bold text-[#111d23] mt-0.5">
+            <h3 className="text-xl font-bold text-[#352e24] mt-0.5">
               4-7-8 Parasympathetic Reset
             </h3>
-            <p className="text-xs text-[#3d4947] mt-1 max-w-sm">
+            <p className="text-xs text-[#5c5142] mt-1 max-w-sm">
               Inhale through nose for 4s, hold gently for 7s, exhale through mouth for 8s to calm the vagus nerve.
             </p>
           </div>
@@ -280,10 +280,10 @@ export const WellBeingTracker: React.FC<WellBeingTrackerProps> = ({
             <div
               className={`rounded-full flex flex-col items-center justify-center transition-all duration-1000 shadow-xl ${
                 breathPhase === 'inhale'
-                  ? 'w-48 h-48 bg-[#8cf5e4] text-[#00201c] scale-110'
+                  ? 'w-48 h-48 bg-[#ecdcbf] text-[#3a2c1e] scale-110'
                   : breathPhase === 'hold'
-                  ? 'w-48 h-48 bg-[#008376] text-white scale-105'
-                  : 'w-36 h-36 bg-[#00685d] text-white scale-90'
+                  ? 'w-48 h-48 bg-[#b3654a] text-white scale-105'
+                  : 'w-36 h-36 bg-[#9c6743] text-white scale-90'
               }`}
             >
               <span className="text-xs uppercase font-bold tracking-widest opacity-80">
@@ -298,7 +298,7 @@ export const WellBeingTracker: React.FC<WellBeingTrackerProps> = ({
           {/* Start/Stop Button */}
           <button
             onClick={() => setBreathActive(!breathActive)}
-            className="px-6 py-3 rounded-2xl bg-[#00685d] text-white text-sm font-semibold hover:bg-[#008376] transition-all flex items-center gap-2 shadow-sm"
+            className="px-6 py-3 rounded-2xl bg-[#9c6743] text-white text-sm font-semibold hover:bg-[#b3654a] transition-all flex items-center gap-2 shadow-sm"
           >
             {breathActive ? (
               <>
@@ -317,15 +317,15 @@ export const WellBeingTracker: React.FC<WellBeingTrackerProps> = ({
 
       {/* TAB 3: 5-4-3-2-1 Sensory Grounding */}
       {activeTab === 'grounding' && (
-        <div className="bg-white rounded-3xl p-6 border border-[#ddeaf2] shadow-xs flex flex-col gap-4">
+        <div className="bg-white rounded-3xl p-6 border border-[#e5dac4] shadow-xs flex flex-col gap-4">
           <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-[#00685d]">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#9c6743]">
               Trauma Grounding Anchor
             </span>
-            <h3 className="text-lg font-bold text-[#111d23] mt-0.5">
+            <h3 className="text-lg font-bold text-[#352e24] mt-0.5">
               5-4-3-2-1 Sensory Check
             </h3>
-            <p className="text-xs text-[#3d4947] mt-1 leading-relaxed">
+            <p className="text-xs text-[#5c5142] mt-1 leading-relaxed">
               When thoughts spin about court dates or memories, orient your sensory organs directly to your current physical room.
             </p>
           </div>
@@ -343,14 +343,14 @@ export const WellBeingTracker: React.FC<WellBeingTrackerProps> = ({
                 onClick={() => setSensoryStep(stepItem.num)}
                 className={`p-3.5 rounded-xl border flex items-center gap-3 transition-all cursor-pointer ${
                   sensoryStep === stepItem.num
-                    ? 'border-[#00685d] bg-[#e9f6fd]'
-                    : 'border-[#ddeaf2] bg-white opacity-80'
+                    ? 'border-[#9c6743] bg-[#efe7d6]'
+                    : 'border-[#e5dac4] bg-white opacity-80'
                 }`}
               >
-                <div className="w-7 h-7 rounded-full bg-[#00685d] text-white flex items-center justify-center font-bold text-xs shrink-0">
+                <div className="w-7 h-7 rounded-full bg-[#9c6743] text-white flex items-center justify-center font-bold text-xs shrink-0">
                   {stepItem.num}
                 </div>
-                <span className="text-xs font-medium text-[#111d23] leading-normal">
+                <span className="text-xs font-medium text-[#352e24] leading-normal">
                   {stepItem.label}
                 </span>
               </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { AppView, UserPersona, LanguageCode, WellBeingMetric } from './types';
 import { INITIAL_WELLBEING_METRICS } from './data/mockData';
 import { Header } from './components/Header';
@@ -8,7 +8,9 @@ import { SafeChat } from './components/SafeChat';
 import { VoiceCompanion } from './components/VoiceCompanion';
 import { WellBeingTracker } from './components/WellBeingTracker';
 import { SupportLegalPrep } from './components/SupportLegalPrep';
-import { CounsellorCommandCentre } from './components/CounsellorCommandCentre';
+// The counsellor dashboard is a large, separate surface — lazy-load it so the
+// survivor-facing app stays lean and never downloads the admin bundle.
+const AdminApp = lazy(() => import('./admin/AdminApp'));
 import { QuickExitDecoy } from './components/QuickExitDecoy';
 import { CallModal } from './components/CallModal';
 
@@ -45,8 +47,32 @@ export default function App() {
     return <QuickExitDecoy onRestoreSanctuary={handleRestoreSanctuary} />;
   }
 
+  // Counsellor Command Centre is a full-screen dashboard with its own sidebar
+  // and header, so it takes over the shell instead of nesting in the user chrome.
+  if (currentView === 'counsellor-command-centre') {
+    return (
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-[#f5f1e8] flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3 text-[#9c6743]">
+              <div className="w-8 h-8 rounded-full border-2 border-[#e7d3b5] border-t-[#9c6743] animate-spin"></div>
+              <span className="text-sm font-semibold">Opening Command Centre…</span>
+            </div>
+          </div>
+        }
+      >
+        <AdminApp
+          onExitToUser={() => {
+            setPersona('victim');
+            setCurrentView('home-dashboard');
+          }}
+        />
+      </Suspense>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#f4faff] text-[#111d23] flex flex-col font-sans selection:bg-[#a3ede4] selection:text-[#1d6e67]">
+    <div className="min-h-screen bg-[#f5f1e8] text-[#352e24] flex flex-col font-sans selection:bg-[#e7d3b5] selection:text-[#7a5a3f]">
       {/* Top Header */}
       <Header
         currentView={currentView}
@@ -99,15 +125,6 @@ export default function App() {
           <SupportLegalPrep
             onBack={() => setCurrentView('home-dashboard')}
             onOpenCall={() => setIsCallOpen(true)}
-          />
-        )}
-
-        {currentView === 'counsellor-command-centre' && (
-          <CounsellorCommandCentre
-            onBack={() => setCurrentView('home-dashboard')}
-            onPersonaChange={setPersona}
-            onOpenCall={() => setIsCallOpen(true)}
-            onNavigate={setCurrentView}
           />
         )}
       </main>

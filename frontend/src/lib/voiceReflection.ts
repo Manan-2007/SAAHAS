@@ -14,8 +14,8 @@ export const TONE_WORDS: Record<Emotion, string> = {
 };
 
 export const TONE_COLORS: Record<Emotion, string> = {
-  calm: '#00685d', neutral: '#4e5f62', happy: '#b7791f', sad: '#3f5f9a',
-  angry: '#ba1a1a', fearful: '#7b4fa0', disgust: '#6b6b2f', surprised: '#c05621',
+  calm: '#9c6743', neutral: '#837562', happy: '#b7791f', sad: '#7d92b6',
+  angry: '#ba1a1a', fearful: '#9484ad', disgust: '#999465', surprised: '#b56b3f',
 };
 
 const REFLECTIONS: Record<Emotion, string> = {

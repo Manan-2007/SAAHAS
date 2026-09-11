@@ -46,10 +46,10 @@ export const CallModal: React.FC<CallModalProps> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#111d23]/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-sm rounded-3xl bg-gradient-to-b from-[#00685d] to-[#004d45] text-white p-6 shadow-2xl flex flex-col items-center justify-between min-h-[500px] border border-[#a3ede4]/20">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#352e24]/80 backdrop-blur-md animate-fadeIn">
+      <div className="relative w-full max-w-sm rounded-3xl bg-gradient-to-b from-[#9c6743] to-[#6f4a2f] text-white p-6 shadow-2xl flex flex-col items-center justify-between min-h-[500px] border border-[#e7d3b5]/20">
         {/* Top security tag */}
-        <div className="w-full flex items-center justify-between text-xs text-[#a3ede4]">
+        <div className="w-full flex items-center justify-between text-xs text-[#e7d3b5]">
           <span className="flex items-center gap-1 bg-white/10 px-2.5 py-1 rounded-full backdrop-blur-xs">
             <Shield className="w-3 h-3" />
             <span>End-to-End Encrypted Call</span>
@@ -61,13 +61,13 @@ export const CallModal: React.FC<CallModalProps> = ({ isOpen, onClose }) => {
         <div className="flex flex-col items-center gap-3 my-auto text-center">
           <div className="relative flex items-center justify-center">
             {/* Pulsing rings when connecting / talking */}
-            <div className="absolute w-36 h-36 rounded-full bg-[#a3ede4]/20 animate-ping pointer-events-none"></div>
-            <div className="absolute w-28 h-28 rounded-full bg-[#a3ede4]/30 animate-pulse pointer-events-none"></div>
+            <div className="absolute w-36 h-36 rounded-full bg-[#e7d3b5]/20 animate-ping pointer-events-none"></div>
+            <div className="absolute w-28 h-28 rounded-full bg-[#e7d3b5]/30 animate-pulse pointer-events-none"></div>
             
             <img
               src={USER_PROFILE.counsellorAvatar}
               alt={USER_PROFILE.assignedCounsellor}
-              className="relative z-10 w-24 h-24 rounded-full object-cover ring-4 ring-[#a3ede4] shadow-lg"
+              className="relative z-10 w-24 h-24 rounded-full object-cover ring-4 ring-[#e7d3b5] shadow-lg"
             />
           </div>
 
@@ -75,22 +75,22 @@ export const CallModal: React.FC<CallModalProps> = ({ isOpen, onClose }) => {
             <h3 className="text-xl font-bold tracking-tight text-white">
               {USER_PROFILE.assignedCounsellor}
             </h3>
-            <p className="text-xs text-[#a3ede4] font-medium mt-0.5">
+            <p className="text-xs text-[#e7d3b5] font-medium mt-0.5">
               {USER_PROFILE.counsellorRole}
             </p>
           </div>
 
           {callState === 'connecting' ? (
-            <div className="flex items-center gap-2 text-sm text-[#e9f6fd] animate-pulse">
-              <Sparkles className="w-4 h-4 text-[#a3ede4]" />
+            <div className="flex items-center gap-2 text-sm text-[#efe7d6] animate-pulse">
+              <Sparkles className="w-4 h-4 text-[#e7d3b5]" />
               <span>Connecting private line...</span>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2">
-              <span className="text-xs tracking-widest text-[#a3ede4] font-mono font-semibold bg-black/20 px-3 py-1 rounded-full">
+              <span className="text-xs tracking-widest text-[#e7d3b5] font-mono font-semibold bg-black/20 px-3 py-1 rounded-full">
                 {formatTime(seconds)}
               </span>
-              <p className="text-xs text-[#e9f6fd]/90 max-w-xs italic leading-relaxed px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-xs">
+              <p className="text-xs text-[#efe7d6]/90 max-w-xs italic leading-relaxed px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-xs">
                 "Hello Sunita, I am right here with you. Take a soft breath. You don't have to explain anything you aren't ready to."
               </p>
             </div>
@@ -120,7 +120,7 @@ export const CallModal: React.FC<CallModalProps> = ({ isOpen, onClose }) => {
           <button
             onClick={() => setIsSpeaker(!isSpeaker)}
             className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
-              isSpeaker ? 'bg-[#a3ede4] text-[#00685d]' : 'bg-white/15 text-white hover:bg-white/25'
+              isSpeaker ? 'bg-[#e7d3b5] text-[#9c6743]' : 'bg-white/15 text-white hover:bg-white/25'
             }`}
             title="Toggle Speaker"
           >

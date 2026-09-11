@@ -290,23 +290,23 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
   return (
     <div className="flex flex-col h-[calc(100vh-145px)] max-w-md md:max-w-2xl lg:max-w-3xl mx-auto w-full px-3 animate-fadeIn">
       {/* Top Chat Partner Bar */}
-      <div className="bg-white rounded-2xl p-3 shadow-2xs border border-[#ddeaf2] flex items-center justify-between gap-2 mb-3">
+      <div className="bg-white rounded-2xl p-3 shadow-2xs border border-[#e5dac4] flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <button
             onClick={onBack}
-            className="p-1.5 rounded-lg text-[#3d4947] hover:bg-[#e9f6fd] transition-colors"
+            className="p-1.5 rounded-lg text-[#5c5142] hover:bg-[#efe7d6] transition-colors"
             title="Back to Dashboard"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
 
-          <div className="flex bg-[#e9f6fd] p-0.5 rounded-xl text-xs font-semibold">
+          <div className="flex bg-[#efe7d6] p-0.5 rounded-xl text-xs font-semibold">
             <button
               onClick={() => setActivePartner('sahaas')}
               className={`px-3 py-1.5 rounded-lg transition-all ${
                 activePartner === 'sahaas'
-                  ? 'bg-white text-[#00685d] shadow-2xs'
-                  : 'text-[#3d4947] hover:text-[#111d23]'
+                  ? 'bg-white text-[#9c6743] shadow-2xs'
+                  : 'text-[#5c5142] hover:text-[#352e24]'
               }`}
             >
               SAHAAS AI
@@ -315,8 +315,8 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
               onClick={() => setActivePartner('counsellor')}
               className={`px-3 py-1.5 rounded-lg transition-all ${
                 activePartner === 'counsellor'
-                  ? 'bg-white text-[#00685d] shadow-2xs'
-                  : 'text-[#3d4947] hover:text-[#111d23]'
+                  ? 'bg-white text-[#9c6743] shadow-2xs'
+                  : 'text-[#5c5142] hover:text-[#352e24]'
               }`}
             >
               Dr. Ananya
@@ -329,7 +329,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
           <button
             onClick={() => setDiscreetMode(!discreetMode)}
             className={`p-2 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors ${
-              discreetMode ? 'bg-[#ffdad6] text-[#93000a]' : 'bg-[#e9f6fd] text-[#1d6e67] hover:bg-[#a3ede4]/40'
+              discreetMode ? 'bg-[#ffdad6] text-[#93000a]' : 'bg-[#efe7d6] text-[#7a5a3f] hover:bg-[#e7d3b5]/40'
             }`}
             title={discreetMode ? 'Discreet Mode Active (Hover to reveal)' : 'Turn on Discreet Masking'}
           >
@@ -340,7 +340,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
           {/* Call Counsellor Quick Button */}
           <button
             onClick={onOpenCall}
-            className="p-2 rounded-lg bg-[#00685d] text-white hover:bg-[#008376] transition-colors shadow-2xs"
+            className="p-2 rounded-lg bg-[#9c6743] text-white hover:bg-[#b3654a] transition-colors shadow-2xs"
             title="Direct Voice Call with Counsellor"
           >
             <Phone className="w-4 h-4" />
@@ -349,7 +349,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
           {/* Ephemeral Wipe */}
           <button
             onClick={handleClearHistory}
-            className="p-2 rounded-lg text-[#6d7a77] hover:text-[#ba1a1a] hover:bg-red-50 transition-colors"
+            className="p-2 rounded-lg text-[#8a7d68] hover:text-[#ba1a1a] hover:bg-red-50 transition-colors"
             title="Wipe Session Memory"
           >
             <Trash2 className="w-4 h-4" />
@@ -358,7 +358,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
       </div>
 
       {/* Encryption & Security Banner */}
-      <div className="flex items-center justify-center gap-1.5 py-1 text-[11px] text-[#00685d] font-medium bg-[#e9f6fd]/80 rounded-lg mb-2">
+      <div className="flex items-center justify-center gap-1.5 py-1 text-[11px] text-[#9c6743] font-medium bg-[#efe7d6]/80 rounded-lg mb-2">
         <ShieldCheck className="w-3.5 h-3.5" />
         <span>End-to-End Encrypted · Zero Cloud Traces</span>
       </div>
@@ -373,15 +373,15 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
               className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
             >
               <div className="flex items-baseline gap-1.5 mb-0.5 px-1">
-                <span className="text-[11px] font-semibold text-[#3d4947]">{msg.senderName}</span>
-                <span className="text-[10px] text-[#6d7a77]">{msg.timestamp}</span>
+                <span className="text-[11px] font-semibold text-[#5c5142]">{msg.senderName}</span>
+                <span className="text-[10px] text-[#8a7d68]">{msg.timestamp}</span>
               </div>
 
               <div
                 className={`max-w-[85%] sm:max-w-[75%] p-3.5 rounded-2xl text-sm leading-relaxed transition-all shadow-2xs ${
                   isUser
-                    ? 'bg-[#00685d] text-white rounded-tr-xs'
-                    : 'bg-white text-[#111d23] rounded-tl-xs border border-[#ddeaf2]'
+                    ? 'bg-[#9c6743] text-white rounded-tr-xs'
+                    : 'bg-white text-[#352e24] rounded-tl-xs border border-[#e5dac4]'
                 } ${discreetMode ? 'filter blur-sm hover:filter-none active:filter-none cursor-pointer select-none transition duration-200' : ''}`}
               >
                 {msg.isAudio ? (
@@ -403,10 +403,10 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
         })}
 
         {isTyping && (
-          <div className="flex items-center gap-2 p-3 bg-white rounded-2xl rounded-tl-xs border border-[#ddeaf2] w-24 text-[#00685d]">
-            <span className="w-2 h-2 rounded-full bg-[#00685d] animate-bounce"></span>
-            <span className="w-2 h-2 rounded-full bg-[#00685d] animate-bounce [animation-delay:0.2s]"></span>
-            <span className="w-2 h-2 rounded-full bg-[#00685d] animate-bounce [animation-delay:0.4s]"></span>
+          <div className="flex items-center gap-2 p-3 bg-white rounded-2xl rounded-tl-xs border border-[#e5dac4] w-24 text-[#9c6743]">
+            <span className="w-2 h-2 rounded-full bg-[#9c6743] animate-bounce"></span>
+            <span className="w-2 h-2 rounded-full bg-[#9c6743] animate-bounce [animation-delay:0.2s]"></span>
+            <span className="w-2 h-2 rounded-full bg-[#9c6743] animate-bounce [animation-delay:0.4s]"></span>
           </div>
         )}
 
@@ -443,7 +443,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
           <button
             key={idx}
             onClick={() => handleSendMessage(prompt)}
-            className="whitespace-nowrap px-3 py-1 rounded-full bg-[#e9f6fd] text-[#1d6e67] hover:bg-[#a3ede4]/40 text-xs font-medium border border-[#ddeaf2] transition-colors shrink-0"
+            className="whitespace-nowrap px-3 py-1 rounded-full bg-[#efe7d6] text-[#7a5a3f] hover:bg-[#e7d3b5]/40 text-xs font-medium border border-[#e5dac4] transition-colors shrink-0"
           >
             {prompt}
           </button>
@@ -456,7 +456,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
           e.preventDefault();
           handleSendMessage();
         }}
-        className="bg-white p-2 rounded-2xl shadow-xs border border-[#ddeaf2] flex items-center gap-2"
+        className="bg-white p-2 rounded-2xl shadow-xs border border-[#e5dac4] flex items-center gap-2"
       >
         <button
           type="button"
@@ -465,7 +465,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
           className={`p-2.5 rounded-xl transition-colors disabled:opacity-50 ${
             voiceStage === 'recording'
               ? 'bg-red-500 text-white animate-pulse'
-              : 'text-[#166963] hover:bg-[#e9f6fd]'
+              : 'text-[#8a6a4a] hover:bg-[#efe7d6]'
           }`}
           title={voiceStage === 'recording' ? 'Tap to send your voice note' : 'Send a gentle voice note'}
         >
@@ -486,13 +486,13 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
               : 'Share whatever is on your mind...'
           }
           disabled={voiceStage !== 'idle'}
-          className="flex-1 bg-transparent text-sm text-[#111d23] placeholder-[#6d7a77] outline-none px-1"
+          className="flex-1 bg-transparent text-sm text-[#352e24] placeholder-[#8a7d68] outline-none px-1"
         />
 
         <button
           type="submit"
           disabled={!inputText.trim() || voiceStage !== 'idle' || isTyping}
-          className="p-2.5 rounded-xl bg-[#00685d] text-white disabled:opacity-40 hover:bg-[#008376] active:scale-95 transition-all shadow-2xs"
+          className="p-2.5 rounded-xl bg-[#9c6743] text-white disabled:opacity-40 hover:bg-[#b3654a] active:scale-95 transition-all shadow-2xs"
           title="Send message"
         >
           <Send className="w-4 h-4" />
