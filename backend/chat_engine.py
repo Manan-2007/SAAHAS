@@ -45,6 +45,14 @@ SAFETY_INSTRUCTION = (
     "gently ask whether they are safe right now, and encourage reaching emergency help or their counsellor "
     "immediately. Do not list phone numbers; they are shown separately.")
 
+# Does the reply name any route to help? Deliberately broad: it is a check for
+# "did it point anywhere", not a check for particular wording.
+POINTS_TO_HELP = re.compile(
+    r"\b(counsellor|counselor|emergency|helpline|help ?line|ambulance|police|"
+    r"someone you trust|call someone|get help|reach out to|112|181|14416)\b", re.I)
+SAFETY_FALLBACK = ("Please reach out to your counsellor or emergency help right now - "
+                   "you should not have to hold this on your own.")
+
 VOICE_HINT_RULE = (
     " Their words decide what kind of reply this is: if the words are casual, reply casually. Let the voice "
     "shape only your pacing; never announce, label or ask about their emotions because of it.")
@@ -141,7 +149,22 @@ class ChatModel:
 
     def _result(self, text, crisis):
         text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
-        return {"reply": text, "crisis": crisis, "crisis_message": self.crisis_message if crisis else None}
+        return {"reply": self._ensure_points_to_help(text, crisis), "crisis": crisis,
+                "crisis_message": self.crisis_message if crisis else None}
+
+    def _ensure_points_to_help(self, text, crisis):
+        """On a crisis turn, guarantee the reply points somewhere.
+
+        Training makes this likely; it does not make it certain, and a model that
+        asks "are you safe?" and then stops has left the person holding it alone.
+        Measured on eval_tone.py, both the base model and the trained one did
+        exactly that. So the ask is the model's job and the pointer is the code's:
+        if the reply names no route to help, one warm sentence is appended. No
+        phone numbers - those ride in `crisis_message`, which the app shows
+        separately."""
+        if not crisis or not text or POINTS_TO_HELP.search(text):
+            return text
+        return f"{text.rstrip()} {SAFETY_FALLBACK}"
 
     def _translation_plan(self, messages, language, at_risk):
         """(messages for the model, at_risk, language to translate the reply into or None)."""

@@ -457,3 +457,60 @@ def test_unknown_section_is_refused_rather_than_guessed():
     r = client.post(f"/counsellor/victims/{v['user_id']}/relief", headers=bearer(c["token"]),
                     json={"section": "not a real section"})
     assert r.status_code == 422
+
+
+def test_engagement_detail_carries_what_the_counsellor_page_renders():
+    """backend.md 5c promises these. The frontend types them, so an absent field
+    is a silently blank panel rather than an error."""
+    c = service.create_counsellor("C")
+    v = register()
+    user = auth.user_for_token(v["token"])
+    with db.connect() as conn:      # age the account past the grace period
+        conn.execute("UPDATE users SET created_at = ? WHERE id = ?", (time.time() - 30 * 86400, v["user_id"]))
+    service.record_chat(user, "hello", {"score": 20.0})
+    detail = client.get(f"/counsellor/victims/{v['user_id']}", headers=bearer(c["token"])).json()
+    eng = detail["latest"]["details"]["engagement"]
+    assert "days_since_last_contact" in eng
+    # all three full questionnaires are overdue for a brand new account
+    assert eng["missed_checkins"] == 3
+    # reply_latency_trend is optional by design: too few contacts to judge yet
+    assert eng.get("reply_latency_trend") in (None, "slower", "faster", "steady")
+
+
+def test_the_whole_frontend_contract_answers():
+    """Walks the calls frontend/src/lib/api.ts makes for section 5, so a rename
+    on either side fails here instead of in someone's browser."""
+    c = service.create_counsellor("C")
+    v = register()
+    vid, ch, vh = v["user_id"], bearer(c["token"]), bearer(v["token"])
+
+    assert client.post(f"/counsellor/victims/{vid}/events", headers=ch, json={
+        "kind": "bail_hearing", "date": _days_from_today(3), "title": "Bail",
+        "notice_given": False}).status_code == 200
+    relief = client.post(f"/counsellor/victims/{vid}/relief", headers=ch,
+                         json={"section": "3(1)(r)"}).json()
+    assert {"section", "offence", "total", "entitlements"} <= set(relief)
+
+    sched = client.get("/counsellor/relief-schedule", headers=ch).json()
+    assert {"entries", "stage_labels", "notification"} <= set(sched)
+
+    case = client.get("/me/case", headers=vh).json()
+    assert {"upcoming", "entitlements"} <= set(case)
+    assert {"id", "kind", "date", "days_until", "label"} <= set(case["upcoming"][0])
+    ent = case["entitlements"][0]
+    assert {"id", "stage", "label", "due_on", "status"} <= set(ent)
+    assert client.post(f"/me/entitlements/{ent['id']}", headers=vh,
+                       json={"status": "not_received"}).status_code == 200
+
+    detail = client.get(f"/counsellor/victims/{vid}", headers=ch).json()
+    assert {"latest", "trend", "forecast", "entitlements", "events", "alerts"} <= set(detail)
+    assert {"peak_score", "peak_on", "driver", "days_until"} <= set(detail["forecast"])
+    assert {"id", "stage", "label", "amount", "due_on", "status"} <= set(detail["entitlements"][0])
+    assert detail["events"][0]["notice_given"] is False
+
+    rows = client.get("/counsellor/forecast", headers=ch).json()
+    assert {"victim_id", "name", "score", "peak_score", "peak_on", "driver"} <= set(rows[0])
+
+    alerts = client.get("/counsellor/alerts?status=open", headers=ch).json()
+    assert "bail_no_notice" in {a["reason"] for a in alerts}
+    assert {"id", "victim_name", "at", "level", "reason", "message", "status"} <= set(alerts[0])

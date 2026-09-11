@@ -278,11 +278,20 @@ export type ScoreComponent = 'questionnaires' | 'text' | 'voice' | 'engagement' 
 export interface ScoreDetails {
   engagement?: {
     days_since_last_contact?: number;
-    reply_latency_trend?: string;
-    message_length_trend?: string;
-    missed_checkins?: number;
+    // 'slower' | 'faster' | 'steady' — how fast they come back now against their
+    // own baseline. Absent until there are enough contacts on both sides of the
+    // 7-day line. There is no message_length_trend: it would need the stored
+    // message text, which most people never consent to keep.
+    reply_latency_trend?: 'slower' | 'faster' | 'steady';
+    missed_checkins?: number;   // 0-3 full questionnaires overdue
   };
-  case_pressure?: { next_hearing_days?: number; driver?: string } & Record<string, unknown>;
+  // The shape the backend actually sends. Each key is absent when that pressure
+  // is not present, which is why a quiet docket scores nothing rather than calm.
+  case_pressure?: {
+    next_hearing?: { date: string; kind: EventKind; days_until: number; points: number };
+    adjournments?: { count: number; window_days: number; points: number };
+    unpaid_entitlements?: { count: number; points: number };
+  };
   [component: string]: Record<string, unknown> | undefined;
 }
 

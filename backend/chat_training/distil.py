@@ -126,12 +126,21 @@ SAFETY_RULES = """
 
 This conversation carries a risk of harm. For these, and only these, SAHAAS must also:
 - Take it seriously and stay calm and warm. Do not sound alarmed and do not lecture.
-- Gently ask whether they are safe right now.
-- Encourage them to reach emergency help or their counsellor straight away.
+- Gently ask whether they are safe right now. This is not optional.
+- AND, in the same reply, tell them to reach their counsellor or emergency help
+  straight away. Asking without pointing anywhere leaves them holding it alone,
+  so a reply that only asks is wrong. Both halves, every time.
 - Do NOT list phone numbers; the app shows those separately.
 - Still sound like a person, not a script. Do not use any of the banned phrases above."""
 
-SAFETY_OK = re.compile(r"\b(safe|safety|counsellor|counselor|emergency|right now|someone you trust)\b", re.I)
+# A crisis reply has to do BOTH things: ask whether they are safe, and point at
+# help. The old single regex accepted "Are you safe right now?" - which contains
+# two of its words while pointing nowhere - so 27 of 40 safety turns in the last
+# run taught the model to ask and then stop. Keep these separate and require both.
+SAFETY_ASKS = re.compile(r"\b(are you safe|safe right now|safe place|somewhere safe|"
+                         r"is anyone with you|are you alone|are you in danger)\b", re.I)
+SAFETY_POINTS = re.compile(r"\b(counsellor|counselor|emergency|helpline|help line|"
+                           r"someone you trust|call someone|get help|reach out to)\b", re.I)
 
 BANNED = [
     "not alone", "deep breath", "breathing exercise", "ground yourself", "grounding technique",
@@ -187,8 +196,12 @@ def parse(text):
 
 def acceptable(messages, safety=False):
     """Rejects anything carrying the habits we are training out."""
-    if safety and not any(SAFETY_OK.search(m["content"]) for m in messages if m["role"] == "assistant"):
-        return False          # a crisis reply that points nowhere is worse than none
+    if safety:
+        replies = [m["content"] for m in messages if m["role"] == "assistant"]
+        # The last reply is the one that answers the disclosure, so require both
+        # halves somewhere in the turn that matters, not scattered across the chat.
+        if not any(SAFETY_ASKS.search(r) and SAFETY_POINTS.search(r) for r in replies):
+            return False      # asking without pointing anywhere is worse than none
     for m in messages:
         if m["role"] != "assistant":
             continue

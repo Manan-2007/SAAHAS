@@ -345,7 +345,15 @@ score already had a coarse `engagement` component; it is now richer.
 
 - [ ] **Counsellor:** `components.engagement` is unchanged in shape (0-100), but
       `details.engagement` now carries
-      `{days_since_last_contact, reply_latency_trend, message_length_trend, missed_checkins}`.
+      `{days_since_last_contact, missed_checkins, reply_latency_trend}`.
+      `missed_checkins` is how many of the three full questionnaires are overdue
+      (0-3). `reply_latency_trend` is `slower` / `faster` / `steady` - how fast
+      they come back now against their own 21-day baseline - and is **absent**
+      until there are at least two gaps on each side of the 7-day line, so treat
+      it as optional rather than defaulting it to "steady". An earlier draft of
+      this section also promised `message_length_trend`; it is not sent, because
+      it would need the stored message text and most people never consent to
+      keep it.
       Show these as the "why" behind a `gone_quiet` alert rather than a bare number.
 - [ ] Nothing changes on the victim side. Do not tell a victim they have been quiet.
 

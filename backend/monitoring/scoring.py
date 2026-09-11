@@ -131,7 +131,8 @@ def compute(conn, user_id, now):
         if not any(inst in latest for inst in FULL_INSTRUMENTS):
             engagement = min(100.0, engagement + 20)
         components["engagement"] = engagement
-        details["engagement"] = {"days_since_last_contact": round(quiet_days, 1)}
+        details["engagement"] = {"days_since_last_contact": round(quiet_days, 1),
+                                 **engagement_detail(conn, user_id, now)}
 
     pressure, pressure_detail = case_pressure(conn, user_id, now)
     if pressure is not None:
@@ -172,6 +173,49 @@ def compute(conn, user_id, now):
         "components": {k: round(v, 1) for k, v in components.items()},
         "details": details,
     }
+
+
+# Questionnaires come due every 14 days (monitoring.questionnaires), and a check-in
+# that never happened is the quietest way a person withdraws.
+CHECKIN_INTERVAL_DAYS = 14
+LATENCY_RECENT_DAYS = 7
+LATENCY_BASELINE_DAYS = 21
+LATENCY_CHANGE = 1.5          # x slower/faster before it is worth naming
+
+
+def engagement_detail(conn, user_id, now):
+    """Why the engagement number is what it is.
+
+    Silence is the signal that matters most - withdrawal is the documented
+    precursor to abandoning the case - so the counsellor gets the shape of it,
+    not just a score."""
+    out = {}
+
+    missed = 0
+    for inst in FULL_INSTRUMENTS:
+        last = conn.execute("SELECT MAX(created_at) FROM questionnaires WHERE user_id = ? AND instrument = ?",
+                            (user_id, inst)).fetchone()[0]
+        if last is None or (now - last) / DAY > CHECKIN_INTERVAL_DAYS:
+            missed += 1
+    out["missed_checkins"] = missed
+
+    # How long they take to come back, recently against their own baseline. Built
+    # from observation timestamps, so it works whether or not they let us keep the
+    # message text.
+    times = [r[0] for r in conn.execute(
+        "SELECT created_at FROM observations WHERE user_id = ? AND created_at >= ? AND created_at <= ? "
+        "ORDER BY created_at", (user_id, now - LATENCY_BASELINE_DAYS * DAY, now)).fetchall()]
+    gaps_recent, gaps_before = [], []
+    cutoff = now - LATENCY_RECENT_DAYS * DAY
+    for earlier, later in zip(times, times[1:]):
+        (gaps_recent if later >= cutoff else gaps_before).append(later - earlier)
+    if len(gaps_recent) >= 2 and len(gaps_before) >= 2:
+        recent, before = float(np.median(gaps_recent)), float(np.median(gaps_before))
+        if before > 0:
+            ratio = recent / before
+            out["reply_latency_trend"] = ("slower" if ratio >= LATENCY_CHANGE
+                                          else "faster" if ratio <= 1 / LATENCY_CHANGE else "steady")
+    return out
 
 
 def case_pressure(conn, user_id, now):

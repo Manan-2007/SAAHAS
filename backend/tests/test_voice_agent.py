@@ -259,3 +259,26 @@ def test_an_anonymous_call_stores_nothing():
         collect(ws, "agent_done")
     assert store.turns == []
     assert chat.calls[0]["messages"] == [{"role": "user", "content": "Just thinking out loud."}]
+
+
+def test_crisis_reply_always_points_to_help_even_if_the_model_forgets():
+    """The model's job is to ask warmly; pointing at help is the code's job.
+    Both the base and the trained model were measured asking "are you safe?" and
+    then stopping, which leaves the person holding it alone."""
+    import chat_engine
+
+    class Bare(chat_engine.ChatModel):
+        def __init__(self):          # no model load: only _result is under test
+            self.crisis_message = "Emergency 112"
+
+    m = Bare()
+    asked_only = m._result("I hear you. Are you safe right now?", crisis=True)
+    assert chat_engine.SAFETY_FALLBACK in asked_only["reply"]
+    assert asked_only["crisis_message"] == "Emergency 112"
+
+    already = m._result("Are you safe right now? Please call your counsellor.", crisis=True)
+    assert chat_engine.SAFETY_FALLBACK not in already["reply"]
+
+    calm = m._result("That sounds like a good day.", crisis=False)
+    assert calm["reply"] == "That sounds like a good day."
+    assert calm["crisis_message"] is None
