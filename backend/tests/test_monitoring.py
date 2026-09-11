@@ -193,9 +193,10 @@ def test_timeline_has_chart_data():
 def test_delete_account_erases_everything():
     v = register()
     client.post("/me/questionnaires/phq9", json={"answers": [1] * 9}, headers=bearer(v["token"]))
-    assert client.delete("/me", headers=bearer(v["token"])).json() == {"deleted": True}
+    assert client.delete("/me", headers=bearer(v["token"])).json() == {"deleted": True, "recordings_deleted": 0}
     with db.connect() as conn:
-        for table in ("users", "observations", "questionnaires", "scores", "alerts"):
+        for table in ("users", "observations", "questionnaires", "scores", "alerts",
+                      "credentials", "sessions", "attachments"):
             assert conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0
     assert client.get("/me", headers=bearer(v["token"])).status_code == 401
 

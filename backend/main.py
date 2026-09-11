@@ -22,7 +22,8 @@ from text_emotion import load_text_engine , fuse_text
 from speaker_session import SpeakerSession
 from chat_engine import load_chat_engine , CRISIS_RE
 from distress_engine import DistressEngine
-from monitoring import api as monitoring_api , auth as monitoring_auth , db as monitoring_db , service as monitoring
+from monitoring import (api as monitoring_api , auth as monitoring_auth , db as monitoring_db ,
+                        service as monitoring , storage as monitoring_storage)
 from tempfile import NamedTemporaryFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -77,6 +78,10 @@ distress_engine = DistressEngine()
 
 # Victim monitoring: accounts, questionnaires, Distress Score, alerts (monitoring/)
 monitoring_db.init()
+# Recordings bucket: local encrypted files by default, S3/Supabase when
+# configured. Reported here so a misconfigured bucket is visible at startup
+# rather than at the first upload.
+print(f"[storage] recordings bucket: {monitoring_storage.status()}")
 
 # Human-readable description of the classifiers actually loaded, surfaced in
 # the UI and API so the reported stack matches what is really running.
@@ -111,6 +116,7 @@ RELIABLE_VOICED_SECONDS = 3.0   # emotion2vec+ hallucinates below ~3s of speech
                                 # (github.com/ddlBoJack/emotion2vec issue #41);
                                 # shorter spans get reduced EMA weight + low certainty
 MIN_RECORDED_VOICED_S = 2.0     # shorter voice check-ins aren't saved to the timeline
+KEEP_AUDIO_MAX_S = 180.0        # cap on the audio held in memory for a stored check-in
 RESCORE_INTERVAL_S = 3600       # engagement keeps changing while a victim is quiet
 
 async def rescore_loop():
@@ -121,6 +127,12 @@ async def rescore_loop():
             print(f"[monitoring] rescored {count} victims")
         except Exception as e:
             print(f"[monitoring] rescoring failed: {e}")
+        try:
+            dropped = await run_in_threadpool(monitoring_auth.purge_expired_sessions)
+            if dropped:
+                print(f"[auth] purged {dropped} expired or revoked sessions")
+        except Exception as e:
+            print(f"[auth] session purge failed: {e}")
 
 @asynccontextmanager
 async def lifespan(app):
@@ -240,16 +252,47 @@ def summarize_voice(finals):
         "transcript" : transcript or None,
     }
 
-def record_voice(user , finals):
+def store_recording(user , summary , audio=None , sample_rate=None , raw=None , kind="voice_checkin"):
+    """Best-effort: a bucket that is full or misconfigured must not cost the
+    victim the check-in that was already scored."""
+    if raw is None and audio is None:
+        return None
+    detail = {"emotion" : summary.get("emotion") ,
+              "voiced_seconds" : summary.get("voiced_seconds") ,
+              "transcript" : summary.get("transcript") if user["consent"].get("store_messages") else None}
+    try:
+        if raw is not None:
+            data , content_type , suffix = raw
+            return monitoring_storage.save_recording(
+                user , data , kind=kind , content_type=content_type , suffix=suffix ,
+                duration_s=summary.get("voiced_seconds") , detail=detail)
+        return monitoring_storage.save_recording(
+            user , monitoring_storage.encode_wav(audio , sample_rate) , kind=kind ,
+            content_type="audio/wav" , suffix=".wav" ,
+            duration_s=len(audio) / float(sample_rate) , detail=detail)
+    except Exception as e:
+        print(f"[storage] could not store the recording: {e}")
+        return None
+
+def record_voice(user , finals , audio=None , sample_rate=None , raw=None , kind="voice_checkin"):
     """Saves a signed-in victim's voice check-in to their timeline (worker thread).
-    Returns None when it wasn't saved (too short, or voice analysis consent off)."""
+    Returns None when it wasn't saved (too short, or voice analysis consent off).
+
+    The audio itself is kept only when the victim also turned on the
+    store_recordings consent - storage.save_recording() is what enforces that.
+    Pass either `raw` (the bytes as uploaded, so a voice note is stored
+    byte-for-byte) or `audio` + `sample_rate` (live PCM, encoded to WAV here).
+    """
     summary = summarize_voice(finals)
     if summary["voiced_seconds"] < MIN_RECORDED_VOICED_S:
         return None
     text = summary["transcript"]
     distress = distress_engine.score(text) if text else None
     crisis = bool(text and (CRISIS_RE.search(text) or (distress and distress["high_risk"])))
-    return monitoring.record_voice_session(user , summary , distress , crisis)
+    result = monitoring.record_voice_session(user , summary , distress , crisis)
+    if result is not None:
+        store_recording(user , summary , audio , sample_rate , raw , kind)
+    return result
 
 @app.websocket("/ws/predict")
 async def live_predict(ws : WebSocket):
@@ -263,6 +306,7 @@ async def live_predict(ws : WebSocket):
     transcribe = True            # client toggle; flips via config frames mid-session
     user = None                  # signed-in victim (token in a config frame): session is saved
     finals = []                  # finalized utterances, summarized into one check-in at the end
+    kept_audio = []              # utterance audio, only while store_recordings consent is on
     try:
         while True:
             message = await ws.receive()
@@ -321,7 +365,11 @@ async def live_predict(ws : WebSocket):
                 transcribe)         # client's transcription toggle
             if closed:
                 # The utterance is consumed: the next one starts a fresh buffer
+                consumed = buffer[:segments[-1][1]]
                 buffer = buffer[segments[-1][1]:]
+                if (user is not None and user["consent"].get("store_recordings")
+                        and sum(len(a) for a in kept_audio) < client_sr * KEEP_AUDIO_MAX_S):
+                    kept_audio.append(consumed)
 
             if result["status"] != "speech":
                 silence_cycles += 1
@@ -368,8 +416,9 @@ async def live_predict(ws : WebSocket):
         pass
     finally:
         if user is not None and finals:
+            audio = np.concatenate(kept_audio) if kept_audio else None
             try:
-                await run_in_threadpool(record_voice , user , finals)
+                await run_in_threadpool(record_voice , user , finals , audio , client_sr)
             except Exception as e:
                 print(f"[monitoring] could not save voice check-in: {e}")
 
@@ -380,8 +429,12 @@ async def predict(file : UploadFile = File(...) , user = Depends(monitoring_auth
 
 
         suffix = os.path.splitext(file.filename)[1].lower()
+        readfile = await file.read()
+        if len(readfile) > monitoring_storage.MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413 ,
+                                detail=f"Audio file is larger than the "
+                                       f"{monitoring_storage.MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit")
         with NamedTemporaryFile(delete=False , suffix=suffix) as tempfile:
-            readfile = await file.read()
             tempfile.write(readfile)
             temp_path = tempfile.name
 
@@ -402,7 +455,10 @@ async def predict(file : UploadFile = File(...) , user = Depends(monitoring_auth
 
         recorded = False
         if user is not None and user["role"] == "victim":
-            recorded = await run_in_threadpool(record_voice , user , [result]) is not None
+            # The voice note is stored exactly as it was uploaded.
+            raw = (readfile , monitoring_storage.CONTENT_TYPES.get(suffix , "application/octet-stream") , suffix)
+            recorded = await run_in_threadpool(record_voice , user , [result] , None , None ,
+                                               raw , "voice_note") is not None
 
         return JSONResponse({
              "Emotion" : EMOTIONS[prediction_index],
@@ -494,6 +550,7 @@ async def health():
         "distress" : distress_engine.status(),
         "voice_agent" : voice_agent.status() if voice_agent is not None else None,
         "monitoring" : "ok",
+        "storage" : monitoring_storage.status(),
     }
 
 @app.get("/")

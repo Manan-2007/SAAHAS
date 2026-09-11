@@ -4,15 +4,18 @@ views.
 
 main.py calls record_chat() and record_voice_session() when a signed-in
 victim chats or speaks; everything else is reached through monitoring.api.
+
+Sign-in credentials live in monitoring.auth; stored recordings in
+monitoring.storage.
 """
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import yaml
 
-from . import auth, crypto, db, questionnaires, scoring
+from . import auth, crypto, db, questionnaires, scoring, storage
 
 DAY = scoring.DAY
 NEGATIVE_EMOTIONS = ("sad", "fearful", "angry", "disgust")
@@ -54,8 +57,7 @@ def crisis_message():
         return FALLBACK_CRISIS_MESSAGE
 
 
-def iso(ts):
-    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(timespec="seconds") if ts else None
+iso = db.iso
 
 
 def _today(now):
@@ -76,14 +78,23 @@ def _insert_user(conn, role, name, language="en", phone=None, case_ref=None, con
     return user_id, token
 
 
-def create_counsellor(name):
+def create_counsellor(name, username=None, password=None):
     with db.connect() as conn:
         user_id, token = _insert_user(conn, "counsellor", name)
-    return {"user_id": user_id, "token": token, "role": "counsellor", "name": name}
+        if username and password:
+            username = auth.set_credentials(conn, user_id, username, password)
+    return {"user_id": user_id, "token": token, "role": "counsellor", "name": name,
+            "username": username if password else None}
 
 
-def register_victim(name, language="en", phone=None, case_ref=None, consent=None, created_at=None):
-    """Assigns the counsellor with the fewest victims."""
+def register_victim(name, language="en", phone=None, case_ref=None, consent=None, created_at=None,
+                    username=None, password=None):
+    """Assigns the counsellor with the fewest victims.
+
+    username + password are optional: without them the account is reachable
+    only through the access token returned here (anonymous mode); with them it
+    can be signed into again from any device.
+    """
     with db.connect() as conn:
         counsellor = conn.execute(
             "SELECT c.id, c.name_enc FROM users c "
@@ -91,7 +102,10 @@ def register_victim(name, language="en", phone=None, case_ref=None, consent=None
             "WHERE c.role = 'counsellor' GROUP BY c.id ORDER BY COUNT(v.id), c.created_at LIMIT 1").fetchone()
         user_id, token = _insert_user(conn, "victim", name, language, phone, case_ref, consent,
                                       counsellor["id"] if counsellor else None, created_at)
+        if username and password:
+            username = auth.set_credentials(conn, user_id, username, password)
     return {"user_id": user_id, "token": token, "role": "victim",
+            "username": username if password else None,
             "counsellor": crypto.dec(counsellor["name_enc"]) if counsellor else None}
 
 
@@ -103,9 +117,13 @@ def _name_of(conn, user_id):
 def profile(user):
     with db.connect() as conn:
         counsellor = _name_of(conn, user["counsellor_id"])
+        credentials = auth.credentials_of(conn, user["id"])
     return {"user_id": user["id"], "role": user["role"], "name": crypto.dec(user["name_enc"]),
             "language": user["language"], "consent": user["consent"], "counsellor": counsellor,
-            "created_at": iso(user["created_at"])}
+            "created_at": iso(user["created_at"]),
+            "username": credentials["username"] if credentials else None,
+            "has_password": credentials is not None,
+            "signed_in_with": "session" if user.get("session_id") else "access_token"}
 
 
 def update_consent(user, changes):
@@ -116,9 +134,103 @@ def update_consent(user, changes):
 
 
 def delete_account(user):
-    """Erases the account and every check-in, score, alert and event (cascade)."""
+    """Erases the account and every check-in, score, alert, event and session.
+
+    Database rows go by cascade; bucket objects have to be deleted explicitly,
+    and they go first so a failure cannot leave orphaned audio behind.
+    """
+    removed = storage.delete_all_for_user(user["id"])
     with db.connect() as conn:
         conn.execute("DELETE FROM users WHERE id = ?", (user["id"],))
+    return {"deleted": True, "recordings_deleted": removed}
+
+
+# ---------------------------------------------------------------- sign-in
+
+def login(username, password, device=None):
+    """username + password -> session token. Raises auth.AuthError."""
+    result = auth.authenticate(username, password, device)
+    user = result["user"]
+    with db.connect() as conn:
+        counsellor = _name_of(conn, user["counsellor_id"])
+    return {"token": result["token"], "session_id": result["session_id"], "user_id": user["id"],
+            "role": user["role"], "name": crypto.dec(user["name_enc"]), "username": result["username"],
+            "language": user["language"], "consent": user["consent"], "counsellor": counsellor,
+            "expires_at": iso(db.now() + auth.SESSION_TTL)}
+
+
+def set_credentials(user, username, password):
+    """Adds a username + password to an account that only had an access token,
+    or changes the username. Raises auth.AuthError."""
+    with db.connect() as conn:
+        username = auth.set_credentials(conn, user["id"], username, password)
+    return {"username": username, "has_password": True}
+
+
+def list_sessions(user, now=None):
+    """The account holder's own "where am I signed in" list."""
+    now = now or db.now()
+    with db.connect() as conn:
+        rows = conn.execute("SELECT * FROM sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? "
+                            "ORDER BY last_seen_at DESC", (user["id"], now)).fetchall()
+    return [{"id": r["id"], "device": r["device"], "started_at": iso(r["created_at"]),
+             "last_seen_at": iso(r["last_seen_at"]), "expires_at": iso(r["expires_at"]),
+             "current": r["id"] == user.get("session_id")} for r in rows]
+
+
+def revoke_session(user, session_id):
+    with db.connect() as conn:
+        if not auth.revoke_session(conn, user["id"], session_id):
+            raise NotFound("No such active session on this account")
+    return {"revoked": True, "session_id": session_id}
+
+
+def sign_out(user, all_devices=False):
+    """Ends this session, or every session on the account."""
+    with db.connect() as conn:
+        if all_devices:
+            return {"signed_out": auth.revoke_all_sessions(conn, user["id"])}
+        if user.get("session_id") is None:
+            # An access token is not a session; rotate_token() retires that one.
+            return {"signed_out": 0}
+        auth.revoke_session(conn, user["id"], user["session_id"])
+    return {"signed_out": 1}
+
+
+def rotate_token(user):
+    """Replaces the access token, e.g. when the old one may have been seen.
+    The new one is shown once, like the original."""
+    token = auth.new_token()
+    with db.connect() as conn:
+        conn.execute("UPDATE users SET token_hash = ? WHERE id = ?", (auth.hash_token(token), user["id"]))
+    return {"token": token}
+
+
+# ---------------------------------------------------------------- recordings
+
+def list_recordings(user_id):
+    return storage.list_recordings(user_id)
+
+
+def delete_recording(user, attachment_id):
+    if not storage.delete_recording(user["id"], attachment_id):
+        raise NotFound("No such recording")
+    return {"deleted": True}
+
+
+def victim_recordings(counsellor, victim_id):
+    with db.connect() as conn:
+        _assigned_victim(conn, counsellor, victim_id)
+    return storage.list_recordings(victim_id)
+
+
+def victim_recording_bytes(counsellor, victim_id, attachment_id):
+    with db.connect() as conn:
+        _assigned_victim(conn, counsellor, victim_id)
+    found = storage.load_recording(victim_id, attachment_id)
+    if found is None:
+        raise NotFound("No such recording")
+    return found
 
 
 # ---------------------------------------------------------------- recording

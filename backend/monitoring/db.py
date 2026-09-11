@@ -1,5 +1,8 @@
 """SQLite storage for the monitoring timeline (data/sahaas.db).
 
+Recordings themselves live in the storage bucket (monitoring.storage); the
+attachments table here only points at them.
+
 Every call opens its own short-lived connection, which keeps it safe from
 FastAPI's worker threads. Set SAHAAS_DATA_DIR to put the data elsewhere.
 """
@@ -9,6 +12,7 @@ import sqlite3
 import time
 import uuid
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 DATA_DIR = Path(os.environ.get("SAHAAS_DATA_DIR", Path(__file__).resolve().parent.parent / "data"))
@@ -27,6 +31,40 @@ CREATE TABLE IF NOT EXISTS users (
     token_hash TEXT UNIQUE NOT NULL,
     created_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS credentials (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    username_index TEXT UNIQUE NOT NULL,   -- keyed HMAC of the lowercased username
+    username_enc TEXT NOT NULL,            -- display form
+    password_hash TEXT NOT NULL,           -- scrypt$n$r$p$salt$hash
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until REAL,
+    password_changed_at REAL NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT UNIQUE NOT NULL,
+    device TEXT,                   -- coarse client label, for "where am I signed in"
+    created_at REAL NOT NULL,
+    expires_at REAL NOT NULL,
+    last_seen_at REAL NOT NULL,
+    revoked_at REAL
+);
+CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id, revoked_at);
+CREATE TABLE IF NOT EXISTS attachments (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL,
+    kind TEXT NOT NULL,            -- voice_note | voice_checkin
+    bucket_key TEXT NOT NULL,      -- object key inside the storage bucket
+    content_type TEXT NOT NULL,
+    bytes INTEGER NOT NULL,
+    sha256 TEXT NOT NULL,
+    duration_s REAL,
+    detail_enc TEXT                -- emotion / transcript snapshot, encrypted
+);
+CREATE INDEX IF NOT EXISTS attachments_user_time ON attachments(user_id, created_at);
 CREATE TABLE IF NOT EXISTS observations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -111,3 +149,7 @@ def new_id():
 
 def now():
     return time.time()
+
+
+def iso(ts):
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(timespec="seconds") if ts else None
