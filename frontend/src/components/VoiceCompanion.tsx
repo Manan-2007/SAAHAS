@@ -6,12 +6,12 @@ import {
   Sparkles,
   ArrowLeft,
   ShieldCheck,
-  CheckCircle2,
   Volume2,
   Upload,
   Loader2,
   WifiOff,
 } from 'lucide-react';
+import { Orb, OrbState } from './Orb';
 import {
   EMOTIONS,
   EmotionReading,
@@ -248,6 +248,16 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
   const isBusy = phase === 'connecting' || phase === 'finishing';
   const offline = backend === 'offline';
 
+  // Map the check-in phase onto the listening orb's expressive states.
+  const orbState: OrbState =
+    phase === 'connecting' || phase === 'finishing'
+      ? 'thinking'
+      : phase === 'recording'
+      ? 'listening'
+      : phase === 'done'
+      ? (heardNothing ? 'idle' : 'happy')
+      : 'idle';
+
   const topTones = summary
     ? [...EMOTIONS].sort((a, b) => summary.probabilities[b] - summary.probabilities[a]).slice(0, 3)
     : [];
@@ -258,13 +268,13 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
       <div className="flex items-center justify-between">
         <button
           onClick={onBack}
-          className="p-2 rounded-xl bg-white border border-[#ddeaf2] text-[#3d4947] hover:text-[#00685d] flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
+          className="p-2 rounded-xl bg-white border border-[#e5dac4] text-[#5c5142] hover:text-[#9c6743] flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Dashboard</span>
         </button>
 
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#00685d] bg-[#e9f6fd] px-3 py-1 rounded-full border border-[#ddeaf2]">
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#9c6743] bg-[#efe7d6] px-3 py-1 rounded-full border border-[#e5dac4]">
           <ShieldCheck className="w-3.5 h-3.5" />
           <span>Ephemeral Audio · Never saved</span>
         </span>
@@ -279,22 +289,22 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
               The voice emotion service isn't responding. Start the backend, then try again.
             </p>
           </div>
-          <button onClick={refreshHealth} className="font-semibold text-[#00685d] hover:underline shrink-0">
+          <button onClick={refreshHealth} className="font-semibold text-[#9c6743] hover:underline shrink-0">
             Retry
           </button>
         </div>
       )}
 
       {/* Main Sanctuary Voice Sphere Card */}
-      <div className="relative rounded-3xl bg-gradient-to-b from-white to-[#f4faff] border border-[#ddeaf2] p-6 sm:p-8 shadow-xs flex flex-col items-center justify-center text-center gap-6 overflow-hidden">
+      <div className="relative rounded-3xl bg-gradient-to-b from-white to-[#f5f1e8] border border-[#e5dac4] p-6 sm:p-8 shadow-xs flex flex-col items-center justify-center text-center gap-6 overflow-hidden">
         {/* Soothing background aura */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full bg-[#a3ede4]/30 blur-3xl pointer-events-none"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full bg-[#e7d3b5]/30 blur-3xl pointer-events-none"></div>
 
         <div className="relative">
-          <span className="text-xs uppercase tracking-wider font-bold text-[#00685d]">
+          <span className="text-xs uppercase tracking-wider font-bold text-[#9c6743]">
             Gentle Voice Check-in
           </span>
-          <h2 className="text-xl sm:text-2xl font-bold text-[#111d23] mt-1">
+          <h2 className="text-xl sm:text-2xl font-bold text-[#352e24] mt-1">
             {phase === 'connecting'
               ? "Preparing a quiet space..."
               : isRecording
@@ -305,7 +315,7 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
               ? "Check-in Complete"
               : "Express feeling without typing"}
           </h2>
-          <p className="text-xs sm:text-sm text-[#3d4947] mt-1 max-w-sm mx-auto leading-relaxed">
+          <p className="text-xs sm:text-sm text-[#5c5142] mt-1 max-w-sm mx-auto leading-relaxed">
             {isRecording
               ? prompts[promptIdx]
               : isBusy
@@ -316,42 +326,25 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
           </p>
         </div>
 
-        {/* Pulsing Animated Sphere */}
-        <div className="relative flex items-center justify-center my-4">
-          {isRecording && (
-            <>
-              <div
-                className="absolute w-48 h-48 rounded-full bg-[#8cf5e4]/40 pointer-events-none transition-transform duration-150"
-                style={{ transform: `scale(${0.85 + level * 0.35})` }}
-              ></div>
-              <div className="absolute w-40 h-40 rounded-full bg-[#008376]/20 animate-pulse pointer-events-none"></div>
-            </>
-          )}
+        {/* Interactive listening orb — communicates idle, listening, thinking
+            and complete states while the voice check-in runs. */}
+        <div className="relative flex flex-col items-center justify-center my-1">
+          <Orb state={orbState} micVolume={Math.round(level * 255)} size={196} />
 
-          <div
-            className={`relative w-32 h-32 rounded-full flex flex-col items-center justify-center shadow-lg transition-all duration-500 ${
-              isRecording
-                ? 'bg-gradient-to-br from-[#00685d] to-[#008376] text-white ring-8 ring-[#a3ede4]/50 scale-105'
-                : hasCompleted
-                ? 'bg-[#166963] text-white ring-4 ring-[#a3ede4]'
-                : 'bg-gradient-to-br from-[#8cf5e4] to-[#a3ede4] text-[#00201c]'
-            }`}
-          >
-            {isRecording ? (
-              <div className="flex flex-col items-center gap-1">
-                <Mic className="w-8 h-8 text-white" />
-                <span className="text-lg font-mono font-bold tracking-tight">
-                  {Math.floor(secondsRemaining / 60)}:{(secondsRemaining % 60).toString().padStart(2, '0')}
-                </span>
-              </div>
-            ) : isBusy ? (
-              <Loader2 className="w-10 h-10 text-[#00685d] animate-spin" />
-            ) : hasCompleted ? (
-              <CheckCircle2 className="w-12 h-12 text-[#a3ede4]" />
-            ) : (
-              <Mic className="w-12 h-12 text-[#00685d]" />
-            )}
-          </div>
+          {isRecording && (
+            <span
+              className="-mt-1 text-lg font-mono font-bold tracking-tight text-[#9c6743] tabular-nums"
+              aria-live="off"
+            >
+              {Math.floor(secondsRemaining / 60)}:{(secondsRemaining % 60).toString().padStart(2, '0')}
+            </span>
+          )}
+          {isBusy && (
+            <span className="-mt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-[#9c6743]">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              {phase === 'connecting' ? 'Preparing a quiet space…' : 'Holding what you shared…'}
+            </span>
+          )}
         </div>
 
         {/* Live waveform, driven by the actual mic level */}
@@ -361,19 +354,19 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
               {[40, 65, 85, 50, 95, 70, 45, 80, 60, 90, 55, 75, 40].map((height, i) => (
                 <span
                   key={i}
-                  className="w-1.5 bg-[#00685d] rounded-full transition-all duration-150"
+                  className="w-1.5 bg-[#9c6743] rounded-full transition-all duration-150"
                   style={{ height: `${Math.max(10, height * (0.2 + level * 0.8))}%` }}
                 ></span>
               ))}
             </div>
 
             <span
-              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-white border border-[#ddeaf2] shadow-2xs"
-              style={{ color: live && hearingVoice ? TONE_COLORS[live.emotion] : '#6d7a77' }}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-white border border-[#e5dac4] shadow-2xs"
+              style={{ color: live && hearingVoice ? TONE_COLORS[live.emotion] : '#8a7d68' }}
             >
               <span
                 className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: live && hearingVoice ? TONE_COLORS[live.emotion] : '#b7cacd' }}
+                style={{ backgroundColor: live && hearingVoice ? TONE_COLORS[live.emotion] : '#cbbda4' }}
               ></span>
               {live && hearingVoice
                 ? `Your tone feels ${TONE_WORDS[live.emotion]}${live.certainty === 'low' ? ' (still settling)' : ''}`
@@ -381,7 +374,7 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
             </span>
 
             {transcribe && live?.transcript && (
-              <p className="text-xs text-[#3d4947] italic max-w-sm">"{live.transcript}"</p>
+              <p className="text-xs text-[#5c5142] italic max-w-sm">"{live.transcript}"</p>
             )}
           </div>
         )}
@@ -392,7 +385,7 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
             <button
               onClick={handleStartRecording}
               disabled={phase === 'connecting' || offline}
-              className="px-6 py-3 rounded-2xl bg-[#00685d] text-white font-semibold text-sm shadow-md hover:bg-[#008376] active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
+              className="px-6 py-3 rounded-2xl bg-[#9c6743] text-white font-semibold text-sm shadow-md hover:bg-[#b3654a] active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
             >
               <Mic className="w-4 h-4" />
               <span>Start 60s Check-in</span>
@@ -412,7 +405,7 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
           {hasCompleted && (
             <button
               onClick={handleReset}
-              className="px-5 py-2.5 rounded-xl bg-white border border-[#ddeaf2] text-[#00685d] font-semibold text-xs hover:bg-[#e9f6fd] transition-all flex items-center gap-1.5 shadow-2xs"
+              className="px-5 py-2.5 rounded-xl bg-white border border-[#e5dac4] text-[#9c6743] font-semibold text-xs hover:bg-[#efe7d6] transition-all flex items-center gap-1.5 shadow-2xs"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Record Another Check-in</span>
@@ -420,12 +413,12 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
           )}
 
           {(phase === 'idle' || isRecording) && (
-            <label className="inline-flex items-center gap-2 text-xs text-[#3d4947] cursor-pointer select-none">
+            <label className="inline-flex items-center gap-2 text-xs text-[#5c5142] cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={transcribe}
                 onChange={(e) => handleTranscribeToggle(e.target.checked)}
-                className="accent-[#00685d]"
+                className="accent-[#9c6743]"
               />
               <span>Show my words on screen (English only)</span>
             </label>
@@ -436,7 +429,7 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={offline}
-                className="text-xs font-semibold text-[#00685d] flex items-center gap-1 hover:underline disabled:opacity-50 disabled:pointer-events-none"
+                className="text-xs font-semibold text-[#9c6743] flex items-center gap-1 hover:underline disabled:opacity-50 disabled:pointer-events-none"
               >
                 <Upload className="w-3.5 h-3.5" />
                 <span>Or share a voice note (.wav / .mp3)</span>
@@ -461,9 +454,9 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
 
       {/* Nothing was heard - silence is a valid check-in too */}
       {hasCompleted && heardNothing && (
-        <div className="rounded-2xl bg-white p-5 border border-[#ddeaf2] shadow-xs flex items-start gap-3 animate-fadeIn">
-          <Sparkles className="w-5 h-5 text-[#00685d] shrink-0" />
-          <p className="text-xs sm:text-sm text-[#3d4947] leading-relaxed">
+        <div className="rounded-2xl bg-white p-5 border border-[#e5dac4] shadow-xs flex items-start gap-3 animate-fadeIn">
+          <Sparkles className="w-5 h-5 text-[#9c6743] shrink-0" />
+          <p className="text-xs sm:text-sm text-[#5c5142] leading-relaxed">
             Silence is welcome too. No speech was picked up, so nothing was read from this check-in -
             simply holding this space still counts.
           </p>
@@ -472,28 +465,28 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
 
       {/* Gentle Reflection & Baseline Update Card */}
       {hasCompleted && summary && (
-        <div className="rounded-2xl bg-white p-5 border border-[#ddeaf2] shadow-xs flex flex-col gap-3 animate-fadeIn">
+        <div className="rounded-2xl bg-white p-5 border border-[#e5dac4] shadow-xs flex flex-col gap-3 animate-fadeIn">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-[#00685d]">
+            <div className="flex items-center gap-2 text-[#9c6743]">
               <Sparkles className="w-5 h-5" />
-              <h3 className="text-sm font-bold text-[#111d23]">Empathetic Sound Reflection</h3>
+              <h3 className="text-sm font-bold text-[#352e24]">Empathetic Sound Reflection</h3>
             </div>
             {baselineUpdated && (
-              <span className="text-[11px] font-semibold text-[#1d6e67] bg-[#a3ede4]/40 px-2.5 py-0.5 rounded-full">
+              <span className="text-[11px] font-semibold text-[#7a5a3f] bg-[#e7d3b5]/40 px-2.5 py-0.5 rounded-full">
                 Baseline Updated
               </span>
             )}
           </div>
 
-          <p className="text-xs sm:text-sm text-[#3d4947] leading-relaxed italic bg-[#e9f6fd]/50 p-3.5 rounded-xl border border-[#ddeaf2]/60">
+          <p className="text-xs sm:text-sm text-[#5c5142] leading-relaxed italic bg-[#efe7d6]/50 p-3.5 rounded-xl border border-[#e5dac4]/60">
             "{reflectionFor(summary)}"
           </p>
 
           <div className="flex flex-col gap-1.5">
             {topTones.map((e) => (
-              <div key={e} className="flex items-center gap-2 text-[11px] text-[#3d4947]">
+              <div key={e} className="flex items-center gap-2 text-[11px] text-[#5c5142]">
                 <span className="w-16 capitalize">{TONE_WORDS[e]}</span>
-                <div className="flex-1 h-1.5 rounded-full bg-[#e9f6fd] overflow-hidden">
+                <div className="flex-1 h-1.5 rounded-full bg-[#efe7d6] overflow-hidden">
                   <div
                     className="h-full rounded-full"
                     style={{ width: `${Math.round(summary.probabilities[e])}%`, backgroundColor: TONE_COLORS[e] }}
@@ -505,19 +498,19 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
           </div>
 
           {summary.transcript && (
-            <p className="text-[11px] text-[#6d7a77] leading-relaxed">
+            <p className="text-[11px] text-[#8a7d68] leading-relaxed">
               <span className="font-semibold">What I heard:</span> "{summary.transcript}"
             </p>
           )}
 
           {!baselineUpdated && (
-            <p className="text-[11px] text-[#6d7a77]">
+            <p className="text-[11px] text-[#8a7d68]">
               Only a little speech came through, so your well-being trends were left as they were.
             </p>
           )}
 
           <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2 text-xs text-[#6d7a77]">
+            <div className="flex items-center gap-2 text-xs text-[#8a7d68]">
               <span>Stress: <strong>{TREND_LABELS[summary.stress]}</strong></span>
               <span>·</span>
               <span>Energy: <strong>{TREND_LABELS[summary.energy]}</strong></span>
@@ -525,7 +518,7 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
 
             <button
               onClick={toggleTone}
-              className="text-xs font-semibold text-[#00685d] flex items-center gap-1 hover:underline"
+              className="text-xs font-semibold text-[#9c6743] flex items-center gap-1 hover:underline"
             >
               <Volume2 className="w-3.5 h-3.5" />
               <span>{isPlayingAudio ? 'Pause Tone' : 'Play Soothing Tone'}</span>
