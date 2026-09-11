@@ -116,6 +116,15 @@ the voice call screen (3b).
       file itself, so fetch it **with the auth header** and turn the blob into an
       object URL (`URL.createObjectURL`); a plain `<audio src>` can't send the
       header. Delete with `DELETE /me/recordings/{id}`.
+- [x] **The conversation carries on** (only when `consent.store_messages`):
+      `GET /me/conversation` → `{turns: [{role, content, at, channel}], stored}`,
+      oldest first, where `channel` is `chat` or `voice`. Both sides of every
+      exchange are kept - typed and spoken alike - so Safe Chat reopens where it
+      left off and a voice call knows what was typed earlier (and the other way
+      round). Safe Chat loads this on mount and shows past voice turns as
+      ordinary bubbles. `DELETE /me/conversation` erases it without touching the
+      check-in timeline; turning `store_messages` off erases it too. Nothing is
+      kept for guests or without that consent, and `turns` is then `[]`.
 - [ ] **Saved indicator (optional):** `/chat` returns `recorded` and `/predict`
       returns `Recorded` (true or false). A small "saved to your journey" tick is enough.
       Voice check-ins with less than 2 seconds of speech are not saved.
@@ -172,7 +181,7 @@ dashboard, and anything the backend doesn't measure shows "—".
 | `tier` | `stable`, `watch`, `elevated`, `high` (plus `crisis: true/false`) |
 | `trend.direction` | `rising`, `falling`, `steady`, `not_enough_data` |
 | alert `level` | `crisis`, `high`, `watch` |
-| alert `reason` | `crisis_signal`, `high_distress`, `rising_distress`, `gone_quiet`, `upcoming_event` |
+| alert `reason` | `crisis_signal`, `high_distress`, `rising_distress`, `gone_quiet`, `upcoming_event`, `hearing_soon`, `bail_no_notice`, `entitlement_unpaid`, `adjournment_streak` |
 | alert `status` | `open`, `acknowledged`, `resolved` |
 
 ## 3b. Voice call screen ("Talk with SAHAAS")
@@ -180,13 +189,13 @@ dashboard, and anything the backend doesn't measure shows "—".
 A live, one-on-one spoken conversation. You talk, the agent answers out loud
 with a voice that adapts to how you sound, and you can talk over it to interrupt.
 
-- [ ] **Connect** to `ws://<host>/ws/converse`. It's already covered by the
+- [x] **Connect** to `ws://<host>/ws/converse`. It's already covered by the
       existing `/ws` proxy entry.
-- [ ] **Microphone:** capture exactly like the Voice Companion does
+- [x] **Microphone:** capture exactly like the Voice Companion does
       (`getUserMedia` with `echoCancellation`, `noiseSuppression` and
       `autoGainControl` all true), and send raw Float32 mono PCM as binary frames,
       continuously. On Safari, create the `AudioContext` inside the tap handler.
-- [ ] **First frame** (text):
+- [x] **First frame** (text):
       ```json
       {"type": "start", "sampleRate": 48000, "language": "auto", "token": "<token>",
        "barge_in": true, "greet": true}
@@ -195,29 +204,143 @@ with a voice that adapts to how you sound, and you can talk over it to interrupt
       - `language`: `"en"`, `"hi"`, or `"auto"` (detect per turn). Use the app's language setting.
       - `token` is optional: with it, the conversation is saved to the victim's journey.
       - `greet: true`: the agent says hello first.
-- [ ] **Play the agent's voice.** Each `{"type": "agent_audio", "sampleRate": 24000,
+- [x] **Play the agent's voice.** Each `{"type": "agent_audio", "sampleRate": 24000,
       "samples": N}` message is followed by **one binary frame** of Int16 mono
       PCM. Convert it (`int16 / 32768` → Float32), put it in an `AudioBuffer` at
       24 kHz, and schedule the buffers back-to-back on one `AudioContext`: keep a
       `nextStartTime` so sentences flow without gaps. When the queue runs dry,
       send `{"type": "playback_done"}`.
-- [ ] **Interruptions:** on `{"type": "interrupted"}`, stop every scheduled
+- [x] **Interruptions:** on `{"type": "interrupted"}`, stop every scheduled
       source immediately and clear the queue. The server already stopped talking.
       Add a "Stop" button that sends `{"type": "interrupt"}`.
-- [ ] **States for the orb:** `{"type": "state", "state": "listening" | "thinking" | "speaking"}`.
-- [ ] **Captions (optional):** `user_turn.transcript` (respect the "show my words"
+- [x] **States for the orb:** `{"type": "state", "state": "listening" | "thinking" | "speaking"}`.
+      ⚠ `speaking` ends as soon as the server has *sent* the audio - measured 0.3 s in,
+      while 3.3 s of it still has to play. Drive "the agent is talking" (and whether
+      the Stop button is live) from your own playback queue, not from this message.
+- [x] **Captions (optional):** `user_turn.transcript` (respect the "show my words"
       toggle) and each `agent_text.text` sentence, which arrives just before its audio.
-- [ ] **How you sounded (optional, gentle):** `user_turn.voice.tone_word`
+- [x] **How you sounded (optional, gentle):** `user_turn.voice.tone_word`
       (`settled`, `steady`, `warm`, `heavy`, `tense`, `uneasy`, `strained`, `stirred`).
       Something like "You sound a little heavy" is fine. No numbers, and nothing when
       `voice.certainty` is `"low"`.
-- [ ] **Crisis:** on `{"type": "crisis", "message"}`, show the crisis banner with
+- [x] **Crisis:** on `{"type": "crisis", "message"}`, show the crisis banner with
       the "Call your counsellor" button, the same as in chat.
-- [ ] **End call:** send `{"type": "end"}`, then close the socket.
-- [ ] **Echo:** if the agent keeps interrupting itself on laptop speakers,
+- [x] **End call:** send `{"type": "end"}`, then close the socket.
+- [x] **Echo:** if the agent keeps interrupting itself on laptop speakers,
       suggest headphones or start with `"barge_in": false`. Then the mic is
       ignored while the agent talks, until you send `playback_done`.
 - Expect the agent's first words about 3 s after you stop speaking (measured 3.0–3.2 s on an M4 Pro).
+
+## 5. Case-aware distress ("the calendar is the stressor")
+
+**Read this before building anything in this section.** Everything below exists
+because of one finding: for a victim of an atrocity, most distress is not
+generated inside their head - it is generated by the justice system's calendar.
+Hearing dates, adjournments, the accused applying for bail, relief money that
+never arrives. The research is in `CHANGES.md`; the short version is that
+Nayar (2025) calls this *secondary victimization* - the process meant to deliver
+justice becomes a second source of harm.
+
+That matters for the product because problem statement 26094 asks for a distress
+**prediction** system, and until now SAHAAS only reacted. Court dates are known
+in advance, so distress around them is forecastable. These four features turn the
+Dynamic Distress Score from a thermometer into a forecast.
+
+Victim-facing rules from section 2 still hold absolutely: **victims never see
+scores, tiers, numbers, severities or the word "risk".** All of that is
+counsellor-only. The victim side of this section is dates, entitlements and
+gentle sentences.
+
+### 5a. Case calendar and the distress forecast
+
+The backend now raises a victim's predicted distress in the days *before* a
+hearing, without waiting for them to say anything.
+
+- [ ] **Victim - "What's coming up":** `GET /me/case`. Returns
+      `{"upcoming": [{id, kind, date, days_until, label}], "entitlements": [...]}`.
+      `label` is already written in the victim's language and is non-clinical
+      ("Court date on Thursday"). Show it on Home as a calm, plain card. Never
+      add a countdown that feels like a threat, and never show `forecast`
+      (it isn't in this response - that's deliberate).
+- [ ] **Counsellor - forecast:** `GET /counsellor/victims/{id}` gains
+      `forecast: {peak_score, peak_on, driver}` when a hearing is within 14 days.
+      `driver` is a short human string ("Hearing on 2026-09-18"). Show it as a
+      dotted continuation of the existing timeline chart.
+- [ ] **Counsellor - who needs attention this week:** `GET /counsellor/forecast`
+      → `[{victim_id, name, score, peak_score, peak_on, driver}]`, sorted by
+      predicted peak. This is the "triage by change, not by level" screen - a
+      counsellor with 200 cases cannot read 200 numbers.
+
+New `kind` values for events: `bail_hearing`, `parole`, `adjournment`,
+`trial_end` join the existing `hearing`, `fir`, `chargesheet`, `compensation`,
+`counselling`, `other`.
+
+### 5b. Entitlement tracker ("what you are owed, and did it arrive")
+
+Under the SC/ST (Prevention of Atrocities) Rules, relief is paid in **stages**:
+25% when the FIR is filed, 50% at charge sheet, 25% when the trial ends
+(₹85,000-₹8,25,000 depending on the offence). Travel and maintenance (TAME,
+Rule 11) must be paid within **three days** of any trip to the police, hospital
+or court. Most victims are never told any of this, and economic hardship is
+named explicitly in the problem statement.
+
+- [ ] **Victim:** the `entitlements` array from `GET /me/case` →
+      `[{id, stage, label, due_on, status}]`. Render each as a single question
+      with three buttons: **Yes, it arrived / No, not yet / I'm not sure** →
+      `POST /me/entitlements/{id}` with `{"status": "received"|"not_received"|"unknown"}`.
+      `label` is plain language, already translated. Do **not** show amounts -
+      the backend does not send them to victims, because a number someone is
+      owed but has not received is its own kind of distress.
+- [ ] **Counsellor:** `GET /counsellor/victims/{id}/entitlements` →
+      `[{id, stage, label, amount, due_on, status, answered_at}]` (counsellors
+      *do* see `amount`). Create with
+      `POST /counsellor/victims/{id}/entitlements`
+      `{"stage": "chargesheet", "amount": 412500, "due_on": "2026-09-20"}`,
+      update with `PATCH /counsellor/entitlements/{id}`.
+      A `not_received` answer is the actionable one - surface it prominently.
+
+`stage` values: `fir`, `chargesheet`, `trial_end`, `tame`, `other`.
+`status` values: `due`, `received`, `not_received`, `unknown`.
+
+### 5c. Engagement: silence is a signal, not an absence
+
+A person who stops answering is the **highest**-risk person, not the lowest -
+withdrawal is the documented precursor to abandoning the case entirely. The
+score already had a coarse `engagement` component; it is now richer.
+
+- [ ] **Counsellor:** `components.engagement` is unchanged in shape (0-100), but
+      `details.engagement` now carries
+      `{days_since_last_contact, reply_latency_trend, message_length_trend, missed_checkins}`.
+      Show these as the "why" behind a `gone_quiet` alert rather than a bare number.
+- [ ] Nothing changes on the victim side. Do not tell a victim they have been quiet.
+
+### 5d. Section 15A bail watchdog
+
+The Supreme Court held in *Hariram Bhambhi v. Satyanarayan* (2021) that notice to
+the victim before **any** bail, discharge, parole or sentencing proceeding under
+the SC/ST Act is mandatory, and that its absence makes the order void. In
+practice victims often learn the accused got bail only when they see him.
+
+- [ ] **Counsellor:** when adding a `bail_hearing` or `parole` event, the dialog
+      needs one extra checkbox - **"Victim has been given notice (s.15A)"** →
+      `notice_given: true|false` on `POST /counsellor/victims/{id}/events`.
+      If it is false and the hearing is within 7 days, the backend raises a
+      `bail_no_notice` alert. Show that alert with its own icon: it is a legal
+      failure, not a mood reading.
+- [ ] **Victim:** a `bail_hearing` appears in `GET /me/case` like any other date,
+      worded gently. Do not use the words "bail", "accused" or "released" in the
+      victim UI - the backend already sends a softened `label`.
+
+### 5e. New alert reasons
+
+Add these to the alert queue in section 3. Same shape as the existing ones.
+
+| reason | level | means |
+|---|---|---|
+| `hearing_soon` | `watch` | A hearing is within 7 days |
+| `bail_no_notice` | `high` | Bail/parole hearing near and s.15A notice not recorded |
+| `entitlement_unpaid` | `high` | A relief stage is overdue and the victim said it never arrived |
+| `adjournment_streak` | `watch` | 3 or more adjournments in 90 days |
 
 ## 4. Remove or reword
 
@@ -314,6 +437,24 @@ with a voice that adapts to how you sound, and you can talk over it to interrupt
 
 ## Update log (what changed for the frontend)
 
+**2026-09-11 (case-aware distress - section 5)**
+- New **section 5**: the Distress Score now has a fifth component,
+  `case_pressure`, driven by the justice-system calendar rather than by what the
+  person says. Weights are now questionnaires 0.40, text 0.22, voice 0.13,
+  engagement 0.13, case_pressure 0.12 (renormalised when a signal is missing,
+  as before).
+- New victim route `GET /me/case` (upcoming dates + entitlement questions, no
+  numbers) and `POST /me/entitlements/{id}`.
+- New counsellor routes `GET /counsellor/forecast`,
+  `GET|POST /counsellor/victims/{id}/entitlements`,
+  `PATCH /counsellor/entitlements/{id}`.
+- `POST /counsellor/victims/{id}/events` accepts four new `kind` values
+  (`bail_hearing`, `parole`, `adjournment`, `trial_end`) and a `notice_given`
+  flag for s.15A.
+- `GET /counsellor/victims/{id}` gains `forecast` when a hearing is within 14 days.
+- Four new alert reasons: `hearing_soon`, `bail_no_notice`, `entitlement_unpaid`,
+  `adjournment_streak`.
+
 **2026-09-11 (merged and wired together)**
 - `feat/backend-auth` and `feat/recordings-storage` merged into `main`, and the
   frontend now uses them (sections 1–4).
@@ -369,3 +510,10 @@ with a voice that adapts to how you sound, and you can talk over it to interrupt
   (Safe Chat does this now).
 - Repo docs for everyone (and their Claude sessions): `CLAUDE.md` (project context and rules) and
   `CHANGES.md` (history) at the repo root.
+- Section 3b (the live voice call) is built: `frontend/src/lib/converseApi.ts`
+  (socket, mic, playback queue, barge-in) and `frontend/src/components/VoiceCall.tsx`
+  (the screen). Reached from the Voice tab and the home dashboard.
+- The conversation is now stored (with `store_messages`) and carries across the
+  chat, the voice call and a reload: `GET /me/conversation`,
+  `DELETE /me/conversation` → section 2. `/ws/converse` seeds a call from it
+  when you pass `token`, so a new call is not a blank slate.
