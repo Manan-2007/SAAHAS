@@ -127,7 +127,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Explainable AI Note */}
-        <div className="p-4 space-y-2 bg-[#efe7d6]/70 m-4 rounded-xl border border-[#e5dac4]">
+        <button
+          type="button"
+          onClick={() => {
+            onSelectTab('how-scoring');
+            onCloseMobile();
+          }}
+          className={`p-4 space-y-2 m-4 rounded-xl border text-left transition-colors ${
+            activeTab === 'how-scoring'
+              ? 'bg-[#e7d3b5] border-[#c8a97e]'
+              : 'bg-[#efe7d6]/70 border-[#e5dac4] hover:bg-[#efe7d6]'
+          }`}
+        >
           <div className="flex items-center gap-2">
             <span className="material-symbols-outlined text-[#8a6a4a] text-[20px]">
               auto_awesome
@@ -142,9 +153,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
           <p className="font-['Plus_Jakarta_Sans'] text-[12px] text-[#5c5142] leading-relaxed">
-            Scores use only what the client consented to: check-ins, chat and voice. See How SAHAAS Scores.
+            Scores use only what the client consented to. <span className="font-semibold text-[#9c6743] underline">See how SAHAAS scores →</span>
           </p>
-        </div>
+        </button>
       </aside>
     </>
   );

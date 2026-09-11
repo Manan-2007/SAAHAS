@@ -5,6 +5,7 @@ export type NavigationTab =
   | 'case-detail-signals'
   | 'interventions'
   | 'recovery-outcomes'
+  | 'how-scoring'
   | 'system-settings';
 
 export interface InterventionItem {
