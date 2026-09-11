@@ -1,0 +1,29 @@
+# SAHAAS distress model - rates one message on a 4-level distress scale:
+#   0 none      calm, everyday
+#   1 low       stress, sadness, worry
+#   2 moderate  depression, hopelessness, passive wish to be dead
+#   3 high      suicidal thoughts, plan, or attempt
+# Used by /distress and by chat crisis detection. Train with ./train_distress.sh
+
+# Apache-2.0 BERT trained on 17 Indian languages (incl. Hindi, Punjabi and
+# romanized/Hinglish text). Swap for FacebookAI/xlm-roberta-base if needed.
+base_model: google/muril-base-cased
+model_dir: model            # relative to this folder
+
+data:
+  valid_fraction: 0.1
+  max_per_source_level: 6000   # caps each (dataset, level) pair so no source dominates
+  min_chars: 12
+  max_chars: 2000
+
+training:
+  epochs: 2
+  batch_size: 16           # messages held in memory at once
+  grad_accumulation: 2     # update after 2 batches -> learns exactly like batch 32, half the memory
+  learning_rate: 3.0e-5
+  max_length: 160
+  warmup_fraction: 0.06
+  seed: 0
+
+serving:
+  high_risk_threshold: 0.5     # P(level 3) at or above this flags a crisis in chat

@@ -1,0 +1,25 @@
+# Live voice conversation (/ws/converse)
+
+asr:
+  # Multilingual Whisper (Hindi + English + 97 more), ~1.6 GB in memory
+  model: mlx-community/whisper-large-v3-turbo
+
+tts:
+  # Fast, natural-sounding TTS with English and Hindi voices
+  model: mlx-community/Kokoro-82M-bf16
+  sample_rate: 24000
+  voices:
+    en: af_heart       # warm female voice; male alternatives: am_michael, am_adam
+    hi: hf_alpha       # Hindi female; male alternative: hm_omega
+  lang_codes:
+    en: a
+    hi: h
+
+turn:
+  end_silence_ms: 700    # pause that ends your turn (natural conversation: 500-800 ms)
+  min_speech_ms: 350     # shorter sounds (coughs, "mm") don't count as a turn
+  max_turn_s: 30         # a turn this long is answered even without a pause
+  barge_in_ms: 500       # speech needed to interrupt the agent while it talks
+
+reply:
+  max_tokens: 160        # spoken replies stay short

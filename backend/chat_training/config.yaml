@@ -1,0 +1,55 @@
+# SAHAAS chat model - training and serving settings.
+# Used by ./train_chat.sh (training) and chat_engine.py (the /chat endpoint).
+
+# Base model to fine-tune (MLX format, Apple Silicon). Qwen3-4B trains
+# comfortably on a 24 GB Mac. For a stronger (slower) companion, try
+# mlx-community/Qwen3-14B-4bit - it needs ~18 GB free while training.
+base_model: mlx-community/Qwen3-4B-Instruct-2507-4bit
+
+# Trained LoRA adapter, relative to this folder. The backend loads it
+# automatically and hot-reloads it when a new training run finishes.
+adapter_path: adapters
+
+data:
+  # Short system line baked into training examples (the full
+  # system_prompt.txt is ~350 tokens and would make every step ~3x slower).
+  # Leave empty to train with the full prompt.
+  training_system_prompt: You are SAHAAS, a warm, trauma-informed emotional support companion.
+  valid_fraction: 0.05
+  max_context_turns: 8     # conversation turns kept before each reply
+  min_reply_chars: 40      # drop one-liners ("ok", "I see") - little empathy to learn
+  max_reply_chars: 1200    # drop essay answers - chat replies should feel conversational
+  max_turn_chars: 2000
+  drop_personal_claims: true   # drop replies where the supporter describes their own life
+                               # ("my wife...", "when I was a kid") - SAHAAS must not pretend to have one
+  max_per_source: 8000     # stops one huge dataset drowning out the others
+  source_caps:             # per-dataset overrides (folder name under datasets/)
+    Estwld__empathetic_dialogues_llm: 2000   # casual chit-chat: some adds warmth, too much makes replies small-talky
+  max_examples: 20000      # overall cap (0 = no cap)
+
+training:
+  iters: 1000              # ~20-40 min for the 4B model on an M4 Pro
+  batch_size: 4
+  learning_rate: 1.0e-5
+  num_layers: 16           # transformer layers that get LoRA adapters (-1 = all)
+  lora_rank: 16
+  lora_dropout: 0.05
+  lora_scale: 20.0
+  max_seq_length: 2048
+  grad_checkpoint: true    # lower memory, slightly slower
+  steps_per_eval: 200
+  save_every: 100
+  val_batches: 10
+
+generation:
+  max_tokens: 400
+  temperature: 0.7
+  top_p: 0.9
+
+safety:
+  # Shown in the chat whenever a message suggests risk of harm.
+  # Numbers are for India - edit for your region.
+  crisis_message: >-
+    If you're thinking about harming yourself or you're in danger right now,
+    please reach out immediately: Emergency 112 · Women Helpline 181 ·
+    Tele-MANAS 14416 (24x7 mental health support).

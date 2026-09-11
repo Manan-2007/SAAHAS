@@ -1,0 +1,5 @@
+# Monitoring database and its encryption key - personal data, never commit
+data/
+venv/
+__pycache__/
+.pytest_cache/

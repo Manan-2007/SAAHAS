@@ -1,0 +1,8 @@
+datasets/*
+!datasets/README.md
+data/
+model/
+model_staging/
+model_old/
+model_previous/
+model_quick/

@@ -1,0 +1,113 @@
+"""SQLite storage for the monitoring timeline (data/sahaas.db).
+
+Every call opens its own short-lived connection, which keeps it safe from
+FastAPI's worker threads. Set SAHAAS_DATA_DIR to put the data elsewhere.
+"""
+
+import os
+import sqlite3
+import time
+import uuid
+from contextlib import contextmanager
+from pathlib import Path
+
+DATA_DIR = Path(os.environ.get("SAHAAS_DATA_DIR", Path(__file__).resolve().parent.parent / "data"))
+DB_PATH = DATA_DIR / "sahaas.db"
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    role TEXT NOT NULL CHECK (role IN ('victim', 'counsellor')),
+    name_enc TEXT NOT NULL,
+    phone_enc TEXT,
+    case_ref_enc TEXT,
+    language TEXT NOT NULL DEFAULT 'en',
+    counsellor_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    consent TEXT NOT NULL DEFAULT '{}',
+    token_hash TEXT UNIQUE NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS observations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL,
+    source TEXT NOT NULL,          -- chat | voice | questionnaire | system
+    metric TEXT NOT NULL,          -- text_distress | voice_distress | voice_arousal | voice_valence | crisis | activity
+    value REAL NOT NULL,
+    detail_enc TEXT
+);
+CREATE INDEX IF NOT EXISTS obs_user_metric_time ON observations(user_id, metric, created_at);
+CREATE TABLE IF NOT EXISTS questionnaires (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL,
+    instrument TEXT NOT NULL,
+    total INTEGER NOT NULL,
+    severity TEXT NOT NULL,
+    flags TEXT NOT NULL DEFAULT '',
+    answers_enc TEXT NOT NULL,
+    channel TEXT NOT NULL DEFAULT 'app'
+);
+CREATE INDEX IF NOT EXISTS q_user_time ON questionnaires(user_id, instrument, created_at);
+CREATE TABLE IF NOT EXISTS scores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL,
+    score REAL NOT NULL,
+    tier TEXT NOT NULL,
+    crisis INTEGER NOT NULL,
+    confidence REAL NOT NULL,
+    components TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS scores_user_time ON scores(user_id, created_at);
+CREATE TABLE IF NOT EXISTS alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL,
+    level TEXT NOT NULL,           -- crisis | high | watch
+    reason TEXT NOT NULL,
+    message TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    handled_by TEXT,
+    handled_at REAL,
+    note_enc TEXT
+);
+CREATE INDEX IF NOT EXISTS alerts_status_time ON alerts(status, created_at);
+CREATE TABLE IF NOT EXISTS case_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    event_date TEXT NOT NULL,      -- YYYY-MM-DD
+    kind TEXT NOT NULL,
+    title_enc TEXT NOT NULL,
+    created_by TEXT,
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS events_user_date ON case_events(user_id, event_date);
+"""
+
+
+@contextmanager
+def connect():
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def init():
+    with connect() as conn:
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.executescript(SCHEMA)
+
+
+def new_id():
+    return uuid.uuid4().hex
+
+
+def now():
+    return time.time()

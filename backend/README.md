@@ -30,8 +30,13 @@ diagram, and how the pipeline was built.
      probabilities + prosody (see the root README for the response shape).
    - `WS /ws/predict` — stream raw Float32 PCM for live analysis.
    - `GET /health` — liveness plus which models loaded
-     (`{"status", "engine", "dimensional", "transcription"}`), for showing an
-     offline state in the UI.
+     (`{"status", "engine", "dimensional", "transcription", "chat"}`), for
+     showing an offline state in the UI.
+   - `POST /chat` — `{"messages": [{"role": "user", "content": "..."}], "tone": "sad"}`
+     → `{"reply", "crisis", "crisis_message", "model"}`. Empathetic chat
+     model (Apple Silicon only; returns 503 elsewhere). `tone` is an optional
+     emotion from the voice pipeline. Train it with `./train_chat.sh`; see
+     [`chat_training/README.md`](chat_training/README.md).
 
 4. Set `CORS_ORIGINS` to the frontend's actual origin(s) instead of the
    permissive local default:

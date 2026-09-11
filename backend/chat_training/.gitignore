@@ -1,0 +1,5 @@
+datasets/*
+!datasets/README.md
+data/
+adapters/
+adapters_training/

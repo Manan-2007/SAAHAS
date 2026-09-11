@@ -1,8 +1,12 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import asyncio
 import json
 import time
-from fastapi import FastAPI , UploadFile , File , HTTPException , WebSocket
+from contextlib import asynccontextmanager
+from typing import Literal
+from pydantic import BaseModel , Field
+from fastapi import FastAPI , UploadFile , File , HTTPException , WebSocket , Depends
 from fastapi.responses import JSONResponse , FileResponse
 from starlette.websockets import WebSocketDisconnect
 from starlette.concurrency import run_in_threadpool
@@ -16,6 +20,9 @@ from emotion_engine import load_engine , load_wavlm_engine , synthesize_calm , p
 from dimensional import load_dimensional_engine
 from text_emotion import load_text_engine , fuse_text
 from speaker_session import SpeakerSession
+from chat_engine import load_chat_engine , CRISIS_RE
+from distress_engine import DistressEngine
+from monitoring import api as monitoring_api , auth as monitoring_auth , db as monitoring_db , service as monitoring
 from tempfile import NamedTemporaryFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -61,6 +68,16 @@ text_engine = load_text_engine()
 if text_engine is not None:
     print(f"[emotion-engine] text engine: {text_engine.name}")
 
+# SAHAAS chat model (MLX, Apple Silicon). Loads in the background so the
+# emotion API is available immediately; fine-tune it with ./train_chat.sh.
+chat_engine = load_chat_engine()
+
+# Message -> distress level 0-3; train with ./train_distress.sh
+distress_engine = DistressEngine()
+
+# Victim monitoring: accounts, questionnaires, Distress Score, alerts (monitoring/)
+monitoring_db.init()
+
 # Human-readable description of the classifiers actually loaded, surfaced in
 # the UI and API so the reported stack matches what is really running.
 ENGINE_LABEL = " + ".join([e.name for e in (engine , wavlm_engine) if e is not None])
@@ -93,8 +110,25 @@ CONFIDENT_MARGIN = 0.12   # lead over the runner-up needed for certainty
 RELIABLE_VOICED_SECONDS = 3.0   # emotion2vec+ hallucinates below ~3s of speech
                                 # (github.com/ddlBoJack/emotion2vec issue #41);
                                 # shorter spans get reduced EMA weight + low certainty
+MIN_RECORDED_VOICED_S = 2.0     # shorter voice check-ins aren't saved to the timeline
+RESCORE_INTERVAL_S = 3600       # engagement keeps changing while a victim is quiet
 
-app = FastAPI()
+async def rescore_loop():
+    while True:
+        await asyncio.sleep(RESCORE_INTERVAL_S)
+        try:
+            count = await run_in_threadpool(monitoring.recompute_all)
+            print(f"[monitoring] rescored {count} victims")
+        except Exception as e:
+            print(f"[monitoring] rescoring failed: {e}")
+
+@asynccontextmanager
+async def lifespan(app):
+    task = asyncio.create_task(rescore_loop())
+    yield
+    task.cancel()
+
+app = FastAPI(lifespan=lifespan)
 
 # Set CORS_ORIGINS to a comma-separated list of allowed origins when
 # integrating this backend into another project's frontend (e.g.
@@ -110,6 +144,8 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers
 )
+
+app.include_router(monitoring_api.router)
 
 # static/ ships this project's own demo UI. It's optional: when this backend
 # is dropped into another project that brings its own frontend, static/ can
@@ -189,6 +225,32 @@ def analyze_and_predict(window , sr , require_recent=True , thorough=True , sess
             "prosody" : prosody , "voiced_seconds" : result["voiced_seconds"] ,
             "transcript" : transcript}
 
+def summarize_voice(finals):
+    """One voice check-in from its finalized utterances, weighted by voiced time."""
+    weights = np.array([max(f["voiced_seconds"] , 0.5) for f in finals])
+    probs = np.average(np.array([f["probs"] for f in finals]) , axis=0 , weights=weights)
+    valences = [f["prosody"]["valence"] for f in finals if f["prosody"].get("valence") is not None]
+    transcript = " ".join(f["transcript"] for f in finals if f.get("transcript")).strip()
+    return {
+        "probabilities" : {EMOTIONS[i] : float(probs[i] * 100) for i in range(len(EMOTIONS))},
+        "emotion" : EMOTIONS[int(np.argmax(probs))],
+        "valence" : float(np.mean(valences)) if valences else None,
+        "arousal" : float(np.average([f["prosody"]["arousal"] for f in finals] , weights=weights)),
+        "voiced_seconds" : float(sum(f["voiced_seconds"] for f in finals)),
+        "transcript" : transcript or None,
+    }
+
+def record_voice(user , finals):
+    """Saves a signed-in victim's voice check-in to their timeline (worker thread).
+    Returns None when it wasn't saved (too short, or voice analysis consent off)."""
+    summary = summarize_voice(finals)
+    if summary["voiced_seconds"] < MIN_RECORDED_VOICED_S:
+        return None
+    text = summary["transcript"]
+    distress = distress_engine.score(text) if text else None
+    crisis = bool(text and (CRISIS_RE.search(text) or (distress and distress["high_risk"])))
+    return monitoring.record_voice_session(user , summary , distress , crisis)
+
 @app.websocket("/ws/predict")
 async def live_predict(ws : WebSocket):
     await ws.accept()
@@ -199,6 +261,8 @@ async def live_predict(ws : WebSocket):
     silence_cycles = 0
     session = SpeakerSession()   # this connection's speaker baseline
     transcribe = True            # client toggle; flips via config frames mid-session
+    user = None                  # signed-in victim (token in a config frame): session is saved
+    finals = []                  # finalized utterances, summarized into one check-in at the end
     try:
         while True:
             message = await ws.receive()
@@ -211,6 +275,12 @@ async def live_predict(ws : WebSocket):
                     client_sr = int(config.get("sampleRate" , client_sr))
                     if "transcribe" in config:
                         transcribe = bool(config["transcribe"])
+                    if config.get("token"):
+                        found = await run_in_threadpool(monitoring_auth.user_for_token , str(config["token"]))
+                        user = found if found and found["role"] == "victim" else None
+                        if user is None:
+                            await ws.send_json({"status" : "error" ,
+                                                "detail" : "Invalid token - this session will not be saved"})
                 except (ValueError , TypeError):
                     pass
                 continue
@@ -260,6 +330,8 @@ async def live_predict(ws : WebSocket):
                 await ws.send_json({"status" : "silence"})
                 continue
             silence_cycles = 0
+            if closed and user is not None:
+                finals.append(result)
 
             # Finals (complete utterances - the model's training condition)
             # dominate the EMA; interims are provisional and scale with how
@@ -294,9 +366,15 @@ async def live_predict(ws : WebSocket):
             })
     except WebSocketDisconnect:
         pass
+    finally:
+        if user is not None and finals:
+            try:
+                await run_in_threadpool(record_voice , user , finals)
+            except Exception as e:
+                print(f"[monitoring] could not save voice check-in: {e}")
 
 @app.post("/predict")
-async def predict(file : UploadFile = File(...)):
+async def predict(file : UploadFile = File(...) , user = Depends(monitoring_auth.optional_user)):
         if not file.filename.lower().endswith((".wav" , ".mp3")):
             raise HTTPException(status_code=400 , detail="Only .wav and .mp3 audio files are supported")
 
@@ -322,6 +400,10 @@ async def predict(file : UploadFile = File(...)):
         finally:
             os.unlink(temp_path)
 
+        recorded = False
+        if user is not None and user["role"] == "victim":
+            recorded = await run_in_threadpool(record_voice , user , [result]) is not None
+
         return JSONResponse({
              "Emotion" : EMOTIONS[prediction_index],
              "Confidence" : float(probs[prediction_index] * 100),
@@ -330,8 +412,76 @@ async def predict(file : UploadFile = File(...)):
              "VoicedSeconds" : result["voiced_seconds"],
              "Transcript" : result.get("transcript"),
              "Engine" : ENGINE_LABEL,
+             "Recorded" : recorded,
              "Status" : "Success"
         })
+
+class DistressRequest(BaseModel):
+    text : str = Field(min_length=1 , max_length=4000)
+
+@app.post("/distress")
+async def distress(req : DistressRequest):
+    result = await run_in_threadpool(distress_engine.score , req.text)
+    if result is None:
+        raise HTTPException(status_code=503 , detail="Distress model not trained yet - run ./train_distress.sh")
+    return result
+
+class ChatTurn(BaseModel):
+    role : Literal["user" , "assistant"]
+    content : str = Field(max_length=4000)
+
+class ChatRequest(BaseModel):
+    messages : list[ChatTurn] = Field(min_length=1 , max_length=40)
+    tone : str | None = None      # emotion detected in the latest voice note
+
+@app.post("/chat")
+async def chat(req : ChatRequest , user = Depends(monitoring_auth.optional_user)):
+    if req.messages[-1].role != "user":
+        raise HTTPException(status_code=422 , detail="The last message must come from the user")
+    text = req.messages[-1].content
+    tone = req.tone if req.tone in EMOTIONS else None
+    # The distress model backs up the keyword check: a high-risk rating puts
+    # the chat model in safety mode and shows the helpline banner.
+    distress_result = await run_in_threadpool(distress_engine.score , text)
+    at_risk = bool(distress_result and distress_result["high_risk"])
+    # Signed-in victims: the message's distress feeds their timeline even if
+    # the chat model itself is unavailable
+    recorded = False
+    if user is not None and user["role"] == "victim":
+        await run_in_threadpool(monitoring.record_chat , user , text , distress_result ,
+                                at_risk or bool(CRISIS_RE.search(text)))
+        recorded = True
+    if chat_engine is None:
+        raise HTTPException(status_code=503 , detail="Chat model unavailable on this server")
+    try:
+        result = await asyncio.wrap_future(
+            chat_engine.submit([m.model_dump() for m in req.messages] , tone , at_risk))
+    except Exception as e:
+        raise HTTPException(status_code=503 , detail=f"Chat model failed: {e}")
+    return {**result , "distress" : distress_result , "model" : chat_engine.model_name , "recorded" : recorded}
+
+# Live one-on-one voice conversation (voice_agent/): Whisper hears the words,
+# the emotion models hear the voice, the chat model answers, Kokoro speaks.
+from types import SimpleNamespace
+from voice_agent.engines import load_voice_agent
+from voice_agent.session import ConversationSession
+
+voice_agent = load_voice_agent()
+voice_deps = SimpleNamespace(
+    analyze=analyze_and_predict , speech_segments=speech_segments , chat=chat_engine ,
+    distress=distress_engine , crisis_re=CRISIS_RE , crisis_message=monitoring.crisis_message ,
+    record_chat=monitoring.record_chat , record_voice=record_voice ,
+    user_for_token=monitoring_auth.user_for_token , emotions=EMOTIONS , pick_headline=pick_headline ,
+    SpeakerSession=SpeakerSession)
+
+@app.websocket("/ws/converse")
+async def converse(ws : WebSocket):
+    await ws.accept()
+    if voice_agent is None or chat_engine is None:
+        await ws.send_json({"type" : "error" , "detail" : "Voice conversation is unavailable on this server"})
+        await ws.close()
+        return
+    await ConversationSession(ws , voice_agent , voice_deps).run()
 
 @app.get("/health")
 async def health():
@@ -340,6 +490,10 @@ async def health():
         "engine" : ENGINE_LABEL,
         "dimensional" : dim_engine.name if dim_engine is not None else None,
         "transcription" : text_engine is not None,
+        "chat" : chat_engine.status() if chat_engine is not None else None,
+        "distress" : distress_engine.status(),
+        "voice_agent" : voice_agent.status() if voice_agent is not None else None,
+        "monitoring" : "ok",
     }
 
 @app.get("/")
