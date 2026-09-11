@@ -1,50 +1,50 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #00685d;
+  --color-primary: #9c6743;
   --color-on-primary: #ffffff;
-  --color-primary-container: #008376;
-  --color-on-primary-container: #f4fffb;
-  --color-primary-fixed: #8cf5e4;
-  --color-primary-fixed-dim: #6fd8c8;
-  --color-on-primary-fixed: #00201c;
-  --color-on-primary-fixed-variant: #005048;
+  --color-primary-container: #b3654a;
+  --color-on-primary-container: #fffdf7;
+  --color-primary-fixed: #ecdcbf;
+  --color-primary-fixed-dim: #d9bf97;
+  --color-on-primary-fixed: #3a2c1e;
+  --color-on-primary-fixed-variant: #7a4a30;
 
-  --color-secondary: #166963;
+  --color-secondary: #8a6a4a;
   --color-on-secondary: #ffffff;
-  --color-secondary-container: #a3ede4;
-  --color-on-secondary-container: #1d6e67;
-  --color-secondary-fixed: #a6f0e7;
-  --color-secondary-fixed-dim: #8ad4cb;
-  --color-on-secondary-fixed: #00201d;
-  --color-on-secondary-fixed-variant: #00504a;
+  --color-secondary-container: #e7d3b5;
+  --color-on-secondary-container: #7a5a3f;
+  --color-secondary-fixed: #e7d3b5;
+  --color-secondary-fixed-dim: #d9bf97;
+  --color-on-secondary-fixed: #3a2c1e;
+  --color-on-secondary-fixed-variant: #7a5a3f;
 
-  --color-tertiary: #4e5f62;
+  --color-tertiary: #837562;
   --color-on-tertiary: #ffffff;
-  --color-tertiary-container: #66787a;
-  --color-on-tertiary-container: #f6feff;
-  --color-tertiary-fixed: #d3e6e9;
-  --color-tertiary-fixed-dim: #b7cacd;
-  --color-on-tertiary-fixed: #0d1e21;
-  --color-on-tertiary-fixed-variant: #394a4c;
+  --color-tertiary-container: #9a8b76;
+  --color-on-tertiary-container: #fffdf7;
+  --color-tertiary-fixed: #e2d6c0;
+  --color-tertiary-fixed-dim: #cbbda4;
+  --color-on-tertiary-fixed: #352e24;
+  --color-on-tertiary-fixed-variant: #5c5142;
 
-  --color-surface: #f4faff;
-  --color-surface-dim: #cfdce4;
-  --color-surface-bright: #f4faff;
+  --color-surface: #f5f1e8;
+  --color-surface-dim: #d2c3a9;
+  --color-surface-bright: #f5f1e8;
   --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #e9f6fd;
-  --color-surface-container: #e3f0f8;
-  --color-surface-container-high: #ddeaf2;
-  --color-surface-container-highest: #d7e4ec;
-  --color-surface-variant: #d7e4ec;
+  --color-surface-container-low: #efe7d6;
+  --color-surface-container: #ece2ce;
+  --color-surface-container-high: #e5dac4;
+  --color-surface-container-highest: #ddd0b8;
+  --color-surface-variant: #ddd0b8;
 
-  --color-on-surface: #111d23;
-  --color-on-surface-variant: #3d4947;
-  --color-inverse-surface: #263238;
-  --color-inverse-on-surface: #e6f3fb;
-  --color-outline: #6d7a77;
-  --color-outline-variant: #bcc9c6;
-  --color-surface-tint: #006a60;
+  --color-on-surface: #352e24;
+  --color-on-surface-variant: #5c5142;
+  --color-inverse-surface: #3a2c1e;
+  --color-inverse-on-surface: #f3ece0;
+  --color-outline: #8a7d68;
+  --color-outline-variant: #cabca6;
+  --color-surface-tint: #9c6743;
 
   --color-error: #ba1a1a;
   --color-on-error: #ffffff;
@@ -65,9 +65,18 @@
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', sans-serif;
-    background-color: #f4faff;
-    color: #111d23;
+    background-color: #f5f1e8;
+    color: #352e24;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Accessible keyboard focus ring app-wide. `:where()` keeps specificity at 0
+     so the `!important` reliably wins over per-element `focus:outline-none`,
+     while mouse clicks (no :focus-visible) stay ring-free. */
+  :where(button, a, [role="button"], input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid #9c6743 !important;
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 }
 
@@ -90,5 +99,47 @@
 }
 .pt-safe {
   padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+
+/* Gentle entrance animations (used across views). Kept subtle so surfaces
+   settle in calmly rather than drawing attention. */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.4s ease-out both;
+}
+.animate-fadeInUp {
+  animation: fadeInUp 0.45s ease-out both;
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-slideInRight {
+  animation: slideInRight 0.22s ease-out both;
+}
+
+/* Respect users who prefer reduced motion — trauma-informed default. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fadeIn,
+  .animate-fadeInUp,
+  .animate-slideInRight {
+    animation: none;
+  }
+}
+
+/* Hide scrollbars on horizontal chip / suggestion strips while keeping scroll. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
