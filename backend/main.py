@@ -429,7 +429,8 @@ async def predict(file : UploadFile = File(...) , user = Depends(monitoring_auth
 
 
         suffix = os.path.splitext(file.filename)[1].lower()
-        readfile = await file.read()
+        # Read at most one byte past the limit, so an oversized upload is never held whole in memory
+        readfile = await file.read(monitoring_storage.MAX_UPLOAD_BYTES + 1)
         if len(readfile) > monitoring_storage.MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413 ,
                                 detail=f"Audio file is larger than the "

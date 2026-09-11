@@ -58,7 +58,8 @@ class LocalBucket:
 
     def _path(self, key):
         path = (self.root / key).resolve()
-        if not str(path).startswith(str(self.root.resolve())):
+        # is_relative_to, not a string prefix: ".../bucket-old" starts with ".../bucket"
+        if not path.is_relative_to(self.root.resolve()):
             raise StorageError("Refusing a bucket key that escapes the bucket directory")
         return path
 

@@ -125,8 +125,60 @@ def test_credentials_can_be_added_to_a_token_only_account():
 
     r = client.put("/me/credentials", json={"username": "later", "password": PASSWORD},
                    headers=bearer(v["token"]))
-    assert r.status_code == 200 and r.json() == {"username": "later", "has_password": True}
+    assert r.status_code == 200
+    assert r.json() == {"username": "later", "has_password": True, "other_sessions_signed_out": 0}
     assert login("later").json()["user_id"] == v["user_id"]
+
+
+def test_replacing_credentials_needs_the_current_password():
+    register(username="sunita")
+    phone = login("sunita").json()["token"]
+    laptop = login("sunita").json()["token"]
+    new = {"username": "sunita2", "password": "a whole new phrase"}
+
+    # Someone holding an unlocked phone must not be able to take the account over
+    assert client.put("/me/credentials", json=new, headers=bearer(laptop)).status_code == 401
+    assert client.put("/me/credentials", json={**new, "current_password": "not it"},
+                      headers=bearer(laptop)).status_code == 401
+    assert login("sunita").status_code == 200
+
+    r = client.put("/me/credentials", json={**new, "current_password": PASSWORD}, headers=bearer(laptop))
+    assert r.status_code == 200 and r.json()["other_sessions_signed_out"] >= 1
+    assert client.get("/me", headers=bearer(phone)).status_code == 401
+    assert client.get("/me", headers=bearer(laptop)).status_code == 200
+    assert login("sunita2", "a whole new phrase").status_code == 200
+
+
+# ---------------------------------------------------------------- onboarding profile
+
+def test_onboarding_profile_is_saved_encrypted_and_returned_by_me():
+    v = register(name="Sunita", username="sunita")
+    assert client.get("/me", headers=bearer(v["token"])).json()["profile"] is None
+
+    answers = {"display_name": "Suni", "language": "hi", "coping": "Talking it out",
+               "low_time": "Evenings", "channel": "Speaking out loud", "baseline_mood": 3, "comfort": "Slow breathing"}
+    r = client.put("/me/profile", json=answers, headers=bearer(v["token"]))
+    assert r.status_code == 200 and r.json()["name"] == "Suni" and r.json()["language"] == "hi"
+
+    me = client.get("/me", headers=bearer(v["token"])).json()
+    assert me["name"] == "Suni" and me["language"] == "hi"
+    assert me["profile"]["coping"] == "Talking it out" and me["profile"]["baseline_mood"] == 3
+    assert me["profile"]["completed_at"]
+    with db.connect() as conn:
+        stored = conn.execute("SELECT data_enc FROM profiles").fetchone()["data_enc"]
+    assert "Talking it out" not in stored
+
+
+def test_onboarding_profile_is_validated_victim_only_and_erased_with_the_account():
+    v = register(username="sunita")
+    assert client.put("/me/profile", json={"baseline_mood": 9}, headers=bearer(v["token"])).status_code == 422
+    c = service.create_counsellor("Dr. Ananya")
+    assert client.put("/me/profile", json={"coping": "x"}, headers=bearer(c["token"])).status_code == 403
+
+    client.put("/me/profile", json={"coping": "Quiet time alone"}, headers=bearer(v["token"]))
+    assert client.delete("/me", headers=bearer(v["token"])).status_code == 200
+    with db.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM profiles").fetchone()[0] == 0
 
 
 def test_lockout_after_repeated_failures():

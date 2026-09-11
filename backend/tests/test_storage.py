@@ -105,6 +105,12 @@ def test_a_bucket_key_cannot_escape_the_bucket_directory():
         bucket.put("../../escaped.wav", AUDIO)
 
 
+def test_a_sibling_folder_sharing_the_prefix_is_outside_the_bucket():
+    bucket = storage.bucket()                             # .../bucket
+    with pytest.raises(storage.StorageError):
+        bucket.put(f"../{bucket.root.name}-old/escaped.wav", AUDIO)
+
+
 def test_wav_encoding_roundtrip():
     tone = np.sin(np.linspace(0, 40, 8000)).astype(np.float32)
     wav = storage.encode_wav(tone, 16000)

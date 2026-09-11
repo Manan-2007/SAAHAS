@@ -51,6 +51,19 @@ class LoginRequest(BaseModel):
 class CredentialsRequest(BaseModel):
     username: str = Field(min_length=3, max_length=60)
     password: str = Field(min_length=auth.MIN_PASSWORD_LENGTH, max_length=auth.MAX_PASSWORD_LENGTH)
+    # Required once the account has a password: replacing it needs the old one
+    current_password: str | None = Field(default=None, max_length=auth.MAX_PASSWORD_LENGTH)
+
+
+class ProfileRequest(BaseModel):
+    """Onboarding answers: the person's own normal, to read later check-ins against."""
+    display_name: str | None = Field(default=None, min_length=1, max_length=80)
+    language: Language | None = None
+    coping: str | None = Field(default=None, max_length=80)
+    low_time: str | None = Field(default=None, max_length=80)
+    channel: str | None = Field(default=None, max_length=80)
+    baseline_mood: int | None = Field(default=None, ge=1, le=5)
+    comfort: str | None = Field(default=None, max_length=80)
 
 
 class PasswordChangeRequest(BaseModel):
@@ -149,8 +162,9 @@ def logout(req: LogoutRequest | None = None, user=Depends(auth.current_user)):
 
 @router.put("/me/credentials")
 def set_credentials(req: CredentialsRequest, user=Depends(auth.current_user)):
-    """Attaches a username + password to an account, or changes the username."""
-    return _or_auth_error(service.set_credentials, user, req.username, req.password)
+    """Attaches a username + password to a token-only account, or replaces them
+    (send current_password; other devices are signed out)."""
+    return _or_auth_error(service.set_credentials, user, req.username, req.password, req.current_password)
 
 
 @router.post("/me/password")
@@ -178,6 +192,12 @@ def revoke_session(session_id: int, user=Depends(auth.current_user)):
 @router.get("/me")
 def me(user=Depends(auth.current_user)):
     return service.profile(user)
+
+
+@router.put("/me/profile")
+def save_profile(req: ProfileRequest, user=Depends(auth.victim)):
+    answers = req.model_dump(exclude={"display_name", "language"})
+    return service.save_profile(user, answers, req.display_name, req.language)
 
 
 @router.patch("/me/consent")

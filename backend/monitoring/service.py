@@ -114,16 +114,41 @@ def _name_of(conn, user_id):
     return crypto.dec(row["name_enc"]) if row else None
 
 
+def _profile_of(conn, user_id):
+    row = conn.execute("SELECT data_enc FROM profiles WHERE user_id = ?", (user_id,)).fetchone()
+    return crypto.dec_json(row["data_enc"]) if row else None
+
+
 def profile(user):
     with db.connect() as conn:
         counsellor = _name_of(conn, user["counsellor_id"])
         credentials = auth.credentials_of(conn, user["id"])
+        onboarding = _profile_of(conn, user["id"])
     return {"user_id": user["id"], "role": user["role"], "name": crypto.dec(user["name_enc"]),
             "language": user["language"], "consent": user["consent"], "counsellor": counsellor,
             "created_at": iso(user["created_at"]),
             "username": credentials["username"] if credentials else None,
             "has_password": credentials is not None,
-            "signed_in_with": "session" if user.get("session_id") else "access_token"}
+            "signed_in_with": "session" if user.get("session_id") else "access_token",
+            "profile": onboarding}
+
+
+def save_profile(user, answers, display_name=None, language=None, now=None):
+    """Onboarding answers (the person's own baseline), encrypted. The display
+    name and language also update the account: the app greets and replies in them."""
+    now = now or db.now()
+    data = {**answers, "completed_at": iso(now)}
+    display_name = (display_name or "").strip()
+    with db.connect() as conn:
+        conn.execute("INSERT INTO profiles (user_id, data_enc, updated_at) VALUES (?, ?, ?) "
+                     "ON CONFLICT(user_id) DO UPDATE SET data_enc = excluded.data_enc, updated_at = excluded.updated_at",
+                     (user["id"], crypto.enc_json(data), now))
+        if display_name:
+            conn.execute("UPDATE users SET name_enc = ? WHERE id = ?", (crypto.enc(display_name), user["id"]))
+        if language:
+            conn.execute("UPDATE users SET language = ? WHERE id = ?", (language, user["id"]))
+    return {"profile": data, "name": display_name or crypto.dec(user["name_enc"]),
+            "language": language or user["language"]}
 
 
 def update_consent(user, changes):
@@ -159,12 +184,19 @@ def login(username, password, device=None):
             "expires_at": iso(db.now() + auth.SESSION_TTL)}
 
 
-def set_credentials(user, username, password):
+def set_credentials(user, username, password, current_password=None):
     """Adds a username + password to an account that only had an access token,
-    or changes the username. Raises auth.AuthError."""
+    or replaces them. Replacing needs the current password and signs every
+    other device out, like auth.change_password(). Raises auth.AuthError."""
     with db.connect() as conn:
+        existing = conn.execute("SELECT password_hash FROM credentials WHERE user_id = ?",
+                                (user["id"],)).fetchone()
+        if existing is not None and not (current_password
+                                         and auth.verify_password(current_password, existing["password_hash"])):
+            raise auth.AuthError("Current password is incorrect")
         username = auth.set_credentials(conn, user["id"], username, password)
-    return {"username": username, "has_password": True}
+        revoked = auth.revoke_all_sessions(conn, user["id"], user.get("session_id")) if existing else 0
+    return {"username": username, "has_password": True, "other_sessions_signed_out": revoked}
 
 
 def list_sessions(user, now=None):

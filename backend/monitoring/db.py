@@ -52,6 +52,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     revoked_at REAL
 );
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id, revoked_at);
+CREATE TABLE IF NOT EXISTS profiles (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    data_enc TEXT NOT NULL,        -- onboarding answers (personal baseline), encrypted
+    updated_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS attachments (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
