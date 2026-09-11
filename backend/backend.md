@@ -175,7 +175,9 @@ with a voice that adapts to how you sound, and you can talk over it to interrupt
 | Speech → text (voice call) | Whisper large-v3-turbo (MLX) | Hindi + English, language detected per turn |
 | Agent's voice (voice call) | Kokoro-82M | English + Hindi voices, ~8x faster than real time; speaking speed and wording adapt to how you sound |
 | Backup voice emotion | RAVDESS CNN | Used only if the main models can't load |
-| Chat replies | Qwen3-4B-Instruct (4-bit, runs on the Mac with MLX) | Behaviour set by a trauma-informed system prompt; Apple Silicon only |
+| Hindi → English (chat + voice call) | Helsinki-NLP opus-mt-hi-en | Lets the chat model read Hindi messages in English, where it's strongest |
+| English → Hindi (chat + voice call) | AI4Bharat IndicTrans2 (200M) | Turns the chat model's English reply into natural Hindi. ⚠ One-time setup: whoever runs the backend accepts its terms at huggingface.co/ai4bharat/indictrans2-en-indic-dist-200M while logged in to Hugging Face. Without it, the chat model writes Hindi itself (weaker). `/health` → `chat.translation.hindi` shows `ready` once it's active. |
+| Chat replies | Qwen3-4B-Instruct (4-bit, runs on the Mac with MLX) | Behaviour set by a trauma-informed system prompt; Apple Silicon only. Chosen over Qwen3-8B after a side-by-side test: 8B was 0.7 s slower per reply and only slightly better in Hindi. |
 
 ### Trained by us
 
@@ -252,7 +254,13 @@ with a voice that adapts to how you sound, and you can talk over it to interrupt
 - `/chat` response: new fields `distress` and `recorded`. `/predict`: new field `Recorded`.
 - `/health` now also reports `chat`, `distress`, `voice_agent` and `monitoring`.
 - New: live voice call over `/ws/converse` → section 3b.
+- Hindi messages (chat and voice call) are now answered via translation: Hindi → English → chat model →
+  Hindi. Same endpoints and fields, so no frontend change. Hinglish (Hindi in English letters) isn't
+  translated yet; the chat model handles it directly.
 - Chat replies now match the moment: casual answers to everyday messages, and
   therapist-style listening only when something is hard. The voice call's
   greeting is casual too. No frontend change needed, except the Safe Chat
   history item in section 2.
+- `/health` → `chat.translation.hindi`: `ready`, `unavailable` or `not loaded yet`.
+- Repo docs for everyone (and their Claude sessions): `CLAUDE.md` (project context and rules) and
+  `CHANGES.md` (history) at the repo root.

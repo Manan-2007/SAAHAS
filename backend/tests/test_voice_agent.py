@@ -57,6 +57,9 @@ class FakeChat:
         self.calls = []
         self.pool = ThreadPoolExecutor(max_workers=1)
 
+    def translation_ready(self, language):
+        return False
+
     def submit_stream(self, messages, on_text, should_stop, **kwargs):
         self.calls.append({"messages": messages, **kwargs})
 

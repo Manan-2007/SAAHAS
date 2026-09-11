@@ -11,6 +11,8 @@ from pathlib import Path
 
 import yaml
 
+from translation import StreamingTranslator, Translator, detect_language, translate_history
+
 TRAIN_DIR = Path(__file__).resolve().parent / "chat_training"
 MAX_HISTORY = 16
 
@@ -43,6 +45,10 @@ SAFETY_INSTRUCTION = (
     "gently ask whether they are safe right now, and encourage reaching emergency help or their counsellor "
     "immediately. Do not list phone numbers; they are shown separately.")
 
+TRANSLATION_INSTRUCTION = (
+    "\n\nLanguage: the person writes in Hindi. You see their messages translated into English. Reply only "
+    "in English, in short, simple sentences; your reply is translated into Hindi before they see it.")
+
 
 def load_config():
     with open(TRAIN_DIR / "config.yaml") as f:
@@ -62,6 +68,7 @@ class ChatModel:
         self._prompt_file = TRAIN_DIR / "system_prompt.txt"
         self._prompt_mtime = None
         self._load_prompt()
+        self.translator = Translator()
         gen = self.cfg.get("generation", {})
         self.max_tokens = int(gen.get("max_tokens", 400))
         self.sampler = make_sampler(temp=float(gen.get("temperature", 0.7)),
@@ -102,7 +109,7 @@ class ChatModel:
         base = self.cfg["base_model"].rsplit("/", 1)[-1]
         return f"{base} + SAHAAS adapter" if self.fine_tuned else f"{base} (not fine-tuned yet)"
 
-    def _prompt(self, messages, tone=None, at_risk=False, voice_context=None, spoken=None):
+    def _prompt(self, messages, tone=None, at_risk=False, voice_context=None, spoken=None, translated_from=None):
         """voice_context: a sentence describing how the user sounded (live voice
         conversations); tone: just the emotion of their latest voice note."""
         last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
@@ -118,36 +125,73 @@ class ChatModel:
                        f"their emotions from it.")
         if spoken:
             system += "\n\n" + spoken
+        if translated_from:
+            system += TRANSLATION_INSTRUCTION
         if crisis:
             system += SAFETY_INSTRUCTION
 
         chat = [{"role": "system", "content": system}] + messages[-MAX_HISTORY:]
-        return self.tokenizer.apply_chat_template(chat, add_generation_prompt=True, tokenize=False), crisis
+        # enable_thinking=False: Qwen3 hybrid models (8B, 14B) otherwise reason silently
+        # before every reply; templates without a thinking mode ignore it
+        return self.tokenizer.apply_chat_template(chat, add_generation_prompt=True, tokenize=False,
+                                                  enable_thinking=False), crisis
 
     def _result(self, text, crisis):
         text = re.sub(r"<think>.*?</think>", "", text, flags=re.S).strip()
         return {"reply": text, "crisis": crisis, "crisis_message": self.crisis_message if crisis else None}
 
+    def _translation_plan(self, messages, language, at_risk):
+        """(messages for the model, at_risk, language to translate the reply into or None)."""
+        if not language or language == "en" or not self.translator.ready(language):
+            return messages, at_risk, None
+        last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+        at_risk = at_risk or bool(CRISIS_RE.search(last_user))     # judge the original words, not a translation
+        return translate_history(messages, language, self.translator), at_risk, language
+
     def reply(self, messages, tone=None, at_risk=False):
-        """at_risk: the distress model flagged the last message as high risk."""
+        """at_risk: the distress model flagged the last message as high risk.
+        Hindi messages are answered in English by the model and translated back."""
         from mlx_lm import generate
-        prompt, crisis = self._prompt(messages, tone, at_risk)
+        last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+        messages, at_risk, target = self._translation_plan(messages, detect_language(last_user), at_risk)
+        prompt, crisis = self._prompt(messages, tone, at_risk, translated_from=target)
         text = generate(self.model, self.tokenizer, prompt=prompt, max_tokens=self.max_tokens, sampler=self.sampler)
-        return self._result(text, crisis)
+        result = self._result(text, crisis)
+        if target:
+            english = result["reply"]
+            result["reply"] = self.translator.from_english(english, target)
+            self.translator.remember(result["reply"], english)
+        return result
 
     def stream(self, messages, on_text, should_stop, at_risk=False, voice_context=None, spoken=None,
-               max_tokens=None):
+               max_tokens=None, reply_language=None):
         """Like reply(), but calls on_text(piece) as tokens arrive and stops
-        early when should_stop() turns true (the user interrupted)."""
+        early when should_stop() turns true (the user interrupted).
+        reply_language="hi": the model answers in English and each finished
+        sentence is translated before it's passed on."""
         from mlx_lm import stream_generate
-        prompt, crisis = self._prompt(messages, None, at_risk, voice_context, spoken)
+        messages, at_risk, target = self._translation_plan(messages, reply_language, at_risk)
+        prompt, crisis = self._prompt(messages, None, at_risk, voice_context, spoken, translated_from=target)
+        sentences = StreamingTranslator(lambda s: self.translator.from_english(s, target)) if target else None
         text = ""
+
+        def emit(piece):
+            nonlocal text
+            text += piece
+            on_text(piece)
+
         for response in stream_generate(self.model, self.tokenizer, prompt=prompt,
                                         max_tokens=max_tokens or self.max_tokens, sampler=self.sampler):
             if should_stop():
                 break
-            text += response.text
-            on_text(response.text)
+            if sentences is None:
+                emit(response.text)
+            else:
+                for sentence in sentences.feed(response.text):
+                    emit(sentence + " ")
+        if sentences is not None and not should_stop():
+            for sentence in sentences.flush():
+                emit(sentence + " ")
         return self._result(text, crisis)
 
 
@@ -162,6 +206,7 @@ class ChatEngine:
 
     def _load_model(self):
         self._model = ChatModel()
+        self._model.translator.ready("hi")     # load the Hindi translators now, not on the first Hindi message
 
     def _ready_model(self):
         if self._model is None:
@@ -179,8 +224,12 @@ class ChatEngine:
         return self._executor.submit(self._reply, messages, tone, at_risk)
 
     def submit_stream(self, messages, on_text, should_stop, **kwargs):
-        """kwargs: at_risk, voice_context, spoken, max_tokens (see ChatModel.stream)."""
+        """kwargs: at_risk, voice_context, spoken, max_tokens, reply_language (see ChatModel.stream)."""
         return self._executor.submit(self._stream, messages, on_text, should_stop, kwargs)
+
+    def translation_ready(self, language):
+        """Whether replies in `language` go through translation (never blocks)."""
+        return self._model is not None and self._model.translator.loaded(language)
 
     @property
     def model_name(self):
@@ -191,7 +240,8 @@ class ChatEngine:
             return {"ready": False, "model": None}
         if self._loading.exception() is not None:
             return {"ready": False, "model": None, "error": str(self._loading.exception())}
-        return {"ready": True, "model": self._model.name, "fine_tuned": self._model.fine_tuned}
+        return {"ready": True, "model": self._model.name, "fine_tuned": self._model.fine_tuned,
+                "translation": self._model.translator.status()}
 
 
 def load_chat_engine():

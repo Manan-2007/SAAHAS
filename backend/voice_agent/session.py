@@ -250,11 +250,14 @@ class ConversationSession:
             post(pending[0])
             post(None)
 
+        # Hindi: the model answers in English and each sentence is translated
+        translate = language != "en" and self.deps.chat.translation_ready(language)
         job = self.deps.chat.submit_stream(
             list(self.history), on_text, cancel.is_set,
             voice_context=voice["description"] if voice else None,
-            spoken=style.spoken_instructions(tone, language),
-            at_risk=crisis, max_tokens=self.max_tokens)
+            spoken=style.spoken_instructions(tone, "en" if translate else language),
+            at_risk=crisis, max_tokens=self.max_tokens,
+            reply_language=language if translate else None)
         job.add_done_callback(on_finished)
 
         spoken = await self._speak(sentences, cancel, language, tone["speed"])

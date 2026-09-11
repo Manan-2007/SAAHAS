@@ -40,3 +40,7 @@ pyyaml>=6
 # SAHAAS chat model (/chat) + its fine-tuning (./train_chat.sh). MLX only
 # runs on Apple Silicon; elsewhere /chat is disabled and the rest works.
 mlx-lm>=0.31 ; sys_platform == "darwin" and platform_machine == "arm64"
+
+# Hindi <-> English translation around the chat model (translation.py)
+sentencepiece>=0.2
+sacremoses>=0.1
