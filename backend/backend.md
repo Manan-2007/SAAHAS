@@ -41,6 +41,9 @@ Interactive API docs: http://127.0.0.1:8000/docs
       ```
       → `{"user_id", "token", "role": "victim", "username", "counsellor": "Dr. Ananya Sharma"}`
       Returns 400 if `data_storage` is false. In that case offer anonymous use instead.
+      There is now a third consent toggle, `store_recordings` (default **false**):
+      "keep the audio of my voice check-ins". Label it clearly - it is the only
+      consent that makes the app keep a recording of someone's voice.
 - [ ] **Offer a username + password on the sign-up screen** (optional fields).
       Add `"username": "sunita", "password": "..."` to the same
       `POST /auth/register` body. Send both or neither (422 otherwise); the
@@ -82,8 +85,9 @@ Interactive API docs: http://127.0.0.1:8000/docs
       `[{id, date, kind, title, days_until}]`. `kind` is one of
       `hearing | fir | chargesheet | compensation | counselling | other`.
 - [ ] **Settings screen:** consent toggles with `PATCH /me/consent`
-      (`{"voice_analysis": false}`) and a "Delete all my data" button
-      (`DELETE /me`, then clear the token and go to the start screen).
+      (`{"voice_analysis": false}`, `{"store_recordings": true}`) and a
+      "Delete all my data" button (`DELETE /me` → `{"deleted", "recordings_deleted"}`,
+      then clear the token and go to the start screen).
 - [ ] **Change password** (only when `has_password`): `POST /me/password` with
       `{"current_password", "new_password"}` → `{"changed", "other_sessions_signed_out"}`.
       401 means the current password was wrong. Warn first that other devices
@@ -93,6 +97,13 @@ Interactive API docs: http://127.0.0.1:8000/docs
       "Sign out this device" button per row (`DELETE /me/sessions/{id}`).
       Mark the `current: true` row. This is also the "someone else has my
       phone" escape hatch, so put it somewhere findable in Settings.
+- [ ] **My voice notes** (only when `consent.store_recordings`):
+      `GET /me/recordings` → `[{id, at, kind, content_type, bytes, duration_s, detail}]`
+      where `kind` is `voice_note` (an uploaded file) or `voice_checkin` (a live
+      session). Play with `GET /me/recordings/{id}/audio` - it returns the audio
+      file itself, so fetch it **with the auth header** and turn the blob into an
+      object URL (`URL.createObjectURL`); a plain `<audio src>` can't send the
+      header. Delete with `DELETE /me/recordings/{id}`.
 - [ ] **Saved indicator (optional):** `/chat` returns `recorded` and `/predict`
       returns `Recorded` (true or false). A small "saved to your journey" tick is enough.
       Voice check-ins with less than 2 seconds of speech are not saved.
@@ -131,6 +142,14 @@ Replace the mock clients in `CounsellorCommandCentre.tsx` with real data.
       `POST /counsellor/victims/{id}/events` with
       `{"kind": "hearing", "date": "2026-09-14", "title": "District court"}`, and
       delete with `DELETE /counsellor/events/{id}`.
+- [ ] **Recordings (only if the victim consented):**
+      `GET /counsellor/victims/{id}/recordings` →
+      `[{id, at, kind, duration_s, detail}]`, played from
+      `GET /counsellor/victims/{id}/recordings/{rec_id}/audio` (fetch with the
+      auth header, then `URL.createObjectURL`, as in section 2). An empty list
+      is the normal case - `store_recordings` is off by default. Show whose
+      consent is on from `consent.store_recordings` on the client page so the
+      absence of audio doesn't look like a bug.
 
 **Values to design for**
 
@@ -279,7 +298,7 @@ with a voice that adapts to how you sound, and you can talk over it to interrupt
 
 ## Update log (what changed for the frontend)
 
-**2026-09-11 (auth)**
+**2026-09-11 (auth + storage)**
 - New: **username + password sign-in.** `POST /auth/login` returns a session
   token that works exactly like the registration token; `POST /auth/logout`
   ends it. Credentials are optional - registration without them still returns
@@ -290,7 +309,16 @@ with a voice that adapts to how you sound, and you can talk over it to interrupt
 - **A 401 can now happen mid-use** (sessions expire after 30 days, and a
   password change or a revoked device invalidates tokens). Handle it as
   "signed out" everywhere → section 1.
+- New consent toggle `store_recordings` (default **false**) and, behind it,
+  stored audio: `GET /me/recordings`, `/me/recordings/{id}/audio`,
+  `DELETE /me/recordings/{id}`, plus the counsellor's read-only view →
+  sections 2 and 3. `/predict` and the live check-in save the audio only when
+  this toggle is on.
 - `GET /me` also returns `username`, `has_password` and `signed_in_with`.
+- `DELETE /me` now returns `{"deleted", "recordings_deleted"}` and empties the
+  victim's audio from the bucket as well.
+- `/predict` returns **413** when the uploaded file is over 25 MB.
+- `/health` also reports `storage` (which bucket is configured).
 
 **2026-09-11**
 - New: sign-up, questionnaires, well-being summary, events, and all

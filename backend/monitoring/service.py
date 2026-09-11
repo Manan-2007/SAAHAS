@@ -5,16 +5,17 @@ views.
 main.py calls record_chat() and record_voice_session() when a signed-in
 victim chats or speaks; everything else is reached through monitoring.api.
 
-Sign-in credentials live in monitoring.auth.
+Sign-in credentials live in monitoring.auth; stored recordings in
+monitoring.storage.
 """
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import yaml
 
-from . import auth, crypto, db, questionnaires, scoring
+from . import auth, crypto, db, questionnaires, scoring, storage
 
 DAY = scoring.DAY
 NEGATIVE_EMOTIONS = ("sad", "fearful", "angry", "disgust")
@@ -56,8 +57,7 @@ def crisis_message():
         return FALLBACK_CRISIS_MESSAGE
 
 
-def iso(ts):
-    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(timespec="seconds") if ts else None
+iso = db.iso
 
 
 def _today(now):
@@ -134,10 +134,15 @@ def update_consent(user, changes):
 
 
 def delete_account(user):
-    """Erases the account and every check-in, score, alert, event, session and
-    credential (cascade)."""
+    """Erases the account and every check-in, score, alert, event and session.
+
+    Database rows go by cascade; bucket objects have to be deleted explicitly,
+    and they go first so a failure cannot leave orphaned audio behind.
+    """
+    removed = storage.delete_all_for_user(user["id"])
     with db.connect() as conn:
         conn.execute("DELETE FROM users WHERE id = ?", (user["id"],))
+    return {"deleted": True, "recordings_deleted": removed}
 
 
 # ---------------------------------------------------------------- sign-in
@@ -200,6 +205,32 @@ def rotate_token(user):
         conn.execute("UPDATE users SET token_hash = ? WHERE id = ?", (auth.hash_token(token), user["id"]))
     return {"token": token}
 
+
+# ---------------------------------------------------------------- recordings
+
+def list_recordings(user_id):
+    return storage.list_recordings(user_id)
+
+
+def delete_recording(user, attachment_id):
+    if not storage.delete_recording(user["id"], attachment_id):
+        raise NotFound("No such recording")
+    return {"deleted": True}
+
+
+def victim_recordings(counsellor, victim_id):
+    with db.connect() as conn:
+        _assigned_victim(conn, counsellor, victim_id)
+    return storage.list_recordings(victim_id)
+
+
+def victim_recording_bytes(counsellor, victim_id, attachment_id):
+    with db.connect() as conn:
+        _assigned_victim(conn, counsellor, victim_id)
+    found = storage.load_recording(victim_id, attachment_id)
+    if found is None:
+        raise NotFound("No such recording")
+    return found
 
 
 # ---------------------------------------------------------------- recording

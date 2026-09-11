@@ -53,7 +53,11 @@ diagram, and how the pipeline was built.
    Comma-separate multiple origins. Omit it (or leave unset) to allow any
    origin, which is fine for local development but not for production.
 
-5. `static/` and the `GET /` / `GET /app` routes are this project's own demo
+5. Decide where recordings go. The default needs no setup: encrypted
+   files under `data/bucket/`. To use a bucket instead, see **Storage**
+   below.
+
+6. `static/` and the `GET /` / `GET /app` routes are this project's own demo
    UI (orb + waveform), kept only as a reference implementation of a
    WebSocket client. They are optional — delete `static/` entirely if the
    target project's frontend is what serves the UI; `main.py` detects its
@@ -100,6 +104,41 @@ Counsellor accounts come from the CLI:
 ./venv/bin/python manage.py sign-out --user-id <id>           # revoke every session
 ```
 
+## Storage
+
+Voice notes and live check-in audio go to a bucket, but **only** for victims
+who turned on the `store_recordings` consent - it defaults to off, and
+`storage.save_recording()` is what enforces it, so no caller can bypass it.
+The audio is saved as part of recording a check-in, so turning
+`voice_analysis` off stops the recordings too.
+Every object is encrypted with the same key as the database fields before it
+is written, so an S3 provider only ever holds ciphertext. Keys are
+`<user_id>/<attachment_id>.<ext>`, which is what makes `DELETE /me` able to
+empty one victim's audio in a single call.
+
+| `SAHAAS_STORAGE` | Where recordings go |
+|---|---|
+| `local` (default) | Encrypted files under `data/bucket/` (`SAHAAS_BUCKET_DIR` to move them) |
+| `s3` | Any S3-compatible bucket: Supabase Storage, MinIO, Cloudflare R2, AWS S3 |
+
+```bash
+SAHAAS_STORAGE=s3 \
+SAHAAS_S3_BUCKET=sahaas-recordings \
+SAHAAS_S3_ENDPOINT=https://<project>.supabase.co/storage/v1/s3 \
+SAHAAS_S3_REGION=ap-south-1 \
+AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... \
+./venv/bin/uvicorn main:app --port 8000
+```
+
+`s3` needs `boto3` (`pip install boto3`); omit `SAHAAS_S3_ENDPOINT` for AWS.
+`GET /health` and `manage.py storage-status` report the active driver, so a
+misconfigured bucket shows up before the first upload.
+
+    GET    /me/recordings                  -> [{id, at, kind, bytes, duration_s, detail}]
+    GET    /me/recordings/{id}/audio       -> the audio file
+    DELETE /me/recordings/{id}
+    GET    /counsellor/victims/{vid}/recordings[/{id}/audio]   # assigned victims only
+
 ## Requirements
 
 Python 3.12 (TensorFlow, used only for the fallback CNN, does not yet support
@@ -119,8 +158,9 @@ backend/
 ├── text_emotion.py          # ASR (faster-whisper) + text-emotion branch
 ├── speaker_session.py       # per-session speaker calibration
 ├── extract_feature.py       # MFCC extraction for the fallback CNN
-├── monitoring/              # accounts, auth, Distress Score, alerts
+├── monitoring/              # accounts, auth, storage, Distress Score, alerts
 │   ├── auth.py              # passwords (scrypt), sessions, bearer-token deps
+│   ├── storage.py           # recordings bucket: local encrypted files or S3
 │   ├── crypto.py            # field encryption + keyed blind index for lookups
 │   └── db.py                # SQLite schema
 ├── eval/                    # two-corpus accuracy harness (CREMA-D, MELD)
