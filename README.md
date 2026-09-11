@@ -50,6 +50,16 @@ npm run dev
   `POST /predict`.
 - **Well-being trends**: a check-in with at least 2 s of speech updates
   Stress / Energy / Fatigue, which the Home Dashboard renders.
+- **Safe Chat**: SAHAAS AI replies come from a local language model
+  (`POST /chat`, Qwen3-4B on Apple Silicon via MLX) with a trauma-informed
+  system prompt. Chat voice notes go through the voice emotion model, and
+  the detected tone gently informs the reply. Messages suggesting self-harm
+  or danger show a helpline banner with a "call your counsellor" button. If
+  the chat model is unavailable, the chat falls back to scripted replies.
+- **Training the chat**: drop datasets into
+  `backend/chat_training/datasets/` and run `backend/train_chat.sh`. See
+  [`backend/chat_training/README.md`](backend/chat_training/README.md) for
+  where to get data and how to judge the results.
 - **API client**: `frontend/src/lib/emotionApi.ts` wraps every backend call.
 - **Health**: `GET /health` reports whether the service is up and which
   models loaded; the frontend uses it to show the offline state.

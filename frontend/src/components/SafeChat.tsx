@@ -1,38 +1,165 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Send, 
-  Mic, 
-  MicOff, 
-  Lock, 
-  Eye, 
-  EyeOff, 
-  Trash2, 
-  Sparkles, 
-  Phone, 
-  ArrowLeft, 
-  ShieldCheck, 
-  Volume2 
+import {
+  Send,
+  Mic,
+  MicOff,
+  Eye,
+  EyeOff,
+  Trash2,
+  Phone,
+  ArrowLeft,
+  ShieldCheck,
+  Volume2,
+  X,
 } from 'lucide-react';
-import { ChatMessage, AppView } from '../types';
+import { ChatMessage } from '../types';
 import { INITIAL_CHAT_MESSAGES, USER_PROFILE } from '../data/mockData';
+import {
+  ChatTurn,
+  Emotion,
+  EmotionReading,
+  LiveSession,
+  MicrophoneError,
+  chatReply,
+  startLiveSession,
+} from '../lib/emotionApi';
+import { SessionSummary, Trend, applyMetricUpdates, reflectionFor, summarize } from '../lib/voiceReflection';
+
+const VOICE_NOTE_MAX_SECONDS = 60;
+const CHAT_HISTORY_TURNS = 16;
+
+// Client-side safety net so the banner shows even when the chat model is
+// offline; the backend runs the same check.
+const CRISIS_RE = /\b(suicid\w*|kill(ing)? myself|end(ing)? (my life|it all)|want(ed)? to die|wanna die|don'?t want to (live|be alive|be here)|better off dead|no reason to live|self[- ]?harm\w*|hurt(ing)? myself|cut(ting)? myself|overdos\w*|(going|gonna|trying) to (kill|hurt) me|not safe (at home|right now|here)|in danger)\b/i;
+
+const DEFAULT_CRISIS_MESSAGE =
+  "If you're thinking about harming yourself or you're in danger right now, please reach out immediately: Emergency 112 · Women Helpline 181 · Tele-MANAS 14416 (24x7 mental health support).";
+
+const TONE_FOLLOW_UPS: Record<Emotion, string> = {
+  calm: 'Hold onto this steadiness - you can come back to it whenever you need.',
+  neutral: "I'm here whenever you want to say more.",
+  happy: "It's good to hear that warmth. Let yourself notice it.",
+  sad: 'Heaviness is allowed here. Resting right now is productive care.',
+  angry: 'Those feelings make sense. If it helps, let your shoulders drop and unclench your jaw for a moment.',
+  disgust: "Whatever you're carrying, you don't have to hold it alone. Take a slow breath out.",
+  fearful: "You're safe in this present moment. Would you like to try a slow breath together?",
+  surprised: "Take a moment to let things settle. There's no rush here.",
+};
+
+function voiceNoteReply(s: SessionSummary | null): string {
+  if (!s) {
+    return "I didn't pick up any speech in that voice note, and that's okay - silence is welcome here too. I'm still with you.";
+  }
+  return `Thank you for sharing your voice. ${reflectionFor(s)} ${TONE_FOLLOW_UPS[s.emotion]}`;
+}
+
+// Used only when the chat model is unreachable
+function scriptedReply(text: string): string {
+  const t = text.toLowerCase();
+  if (t.includes('overwhelm') || t.includes('hearing') || t.includes('court')) {
+    return `I hear how heavy this feels. Court proceedings can trigger intense bodily alarms. Let's remember: you do not have to know all legal answers. Your advocate speaks for procedural steps. If you feel panic rising, you can request a 5-minute comfort recess at any point. Would you like to practice a 30-second sensory grounding right now?`;
+  }
+  if (t.includes('ground') || t.includes('breathe')) {
+    return `Let's ground together: Feel the solid surface beneath you. Plant both feet flat. Inhale gently for 4 counts... 1, 2, 3, 4. Hold gently... 2, 3. Exhale like blowing through a straw... 1, 2, 3, 4, 5, 6. You are safe in this present second.`;
+  }
+  return `Thank you for sharing that with me. It takes courage to put feelings into words. Take all the time you need. I am here with you, completely without judgment.`;
+}
+
+const COUNSELLOR_REPLY = `Sunita, Dr. Ananya here. I read your words carefully. Your feelings are 100% valid and protective. You don't have to face this alone. I will be reviewing our prep notes with you before the session on Saturday, and our court liaison is confirmed for Thursday. Take a slow sip of water right now.`;
+
+function toChatTurns(messages: ChatMessage[]): ChatTurn[] {
+  return messages
+    .filter((m) => m.sender !== 'counsellor' && m.id !== 'msg-cleared')
+    .map((m): ChatTurn => ({ role: m.sender === 'user' ? 'user' : 'assistant', content: m.text }))
+    .slice(-CHAT_HISTORY_TURNS);
+}
+
+const formatDuration = (seconds: number) =>
+  `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`;
+
+const timestampNow = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+type VoiceStage = 'idle' | 'connecting' | 'recording' | 'processing';
 
 interface SafeChatProps {
   onBack: () => void;
   onOpenCall: () => void;
+  onUpdateMetric?: (metricId: string, trend: Trend, description?: string) => void;
 }
 
-export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall }) => {
+export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdateMetric }) => {
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_CHAT_MESSAGES);
   const [inputText, setInputText] = useState('');
   const [activePartner, setActivePartner] = useState<'sahaas' | 'counsellor'>('sahaas');
   const [discreetMode, setDiscreetMode] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [voiceStage, setVoiceStage] = useState<VoiceStage>('idle');
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [crisisMessage, setCrisisMessage] = useState<string | null>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef(messages);
+  const voiceSessionRef = useRef<LiveSession | null>(null);
+  const voiceReadingsRef = useRef<EmotionReading[]>([]);
+  const voiceStartRef = useRef(0);
+  const lastToneRef = useRef<Emotion | null>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    messagesRef.current = messages;
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      voiceSessionRef.current?.stop();
+      voiceSessionRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (voiceStage !== 'recording') return;
+    const timer = setInterval(() => setRecordSeconds((s) => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, [voiceStage]);
+
+  useEffect(() => {
+    if (voiceStage === 'recording' && recordSeconds >= VOICE_NOTE_MAX_SECONDS) finishVoiceNote();
+  }, [voiceStage, recordSeconds]);
+
+  const appendMessage = (msg: ChatMessage) => {
+    messagesRef.current = [...messagesRef.current, msg];
+    setMessages(messagesRef.current);
+  };
+
+  const postSahaas = (text: string) =>
+    appendMessage({
+      id: `bot-${Date.now()}-${messagesRef.current.length}`,
+      sender: 'sahaas',
+      senderName: 'SAHAAS Sanctuary',
+      text,
+      timestamp: timestampNow(),
+    });
+
+  const flagIfCrisis = (text: string) => {
+    if (CRISIS_RE.test(text)) setCrisisMessage((m) => m ?? DEFAULT_CRISIS_MESSAGE);
+  };
+
+  const askSahaas = async (fallback: () => string) => {
+    setIsTyping(true);
+    let reply: string;
+    try {
+      const res = await chatReply(toChatTurns(messagesRef.current), lastToneRef.current);
+      reply = res.reply;
+      if (res.crisis) setCrisisMessage(res.crisis_message || DEFAULT_CRISIS_MESSAGE);
+    } catch {
+      reply = fallback();
+    }
+    if (!mountedRef.current) return;
+    postSahaas(reply);
+    setIsTyping(false);
+  };
 
   const promptSuggestions = [
     "I'm feeling very overwhelmed about the hearing",
@@ -42,89 +169,122 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall }) => {
   ];
 
   const handleSendMessage = (textToSend?: string) => {
-    const text = textToSend || inputText;
-    if (!text.trim()) return;
+    const text = (textToSend || inputText).trim();
+    if (!text || isTyping) return;
 
-    const userMsg: ChatMessage = {
+    appendMessage({
       id: `usr-${Date.now()}`,
       sender: 'user',
       senderName: USER_PROFILE.name,
-      text: text.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
+      text,
+      timestamp: timestampNow(),
+    });
     if (!textToSend) setInputText('');
-    setIsTyping(true);
+    flagIfCrisis(text);
 
-    // Realistic trauma-informed response
-    setTimeout(() => {
-      let replyText = '';
-      if (activePartner === 'counsellor') {
-        replyText = `Sunita, Dr. Ananya here. I read your words carefully. Your feelings are 100% valid and protective. You don't have to face this alone. I will be reviewing our prep notes with you before the session on Saturday, and our court liaison is confirmed for Thursday. Take a slow sip of water right now.`;
-      } else {
-        if (text.toLowerCase().includes('overwhelm') || text.toLowerCase().includes('hearing') || text.toLowerCase().includes('court')) {
-          replyText = `I hear how heavy this feels. Court proceedings can trigger intense bodily alarms. Let's remember: you do not have to know all legal answers. Your advocate speaks for procedural steps. If you feel panic rising, you can request a 5-minute comfort recess at any point. Would you like to practice a 30-second sensory grounding right now?`;
-        } else if (text.toLowerCase().includes('ground') || text.toLowerCase().includes('breathe')) {
-          replyText = `Let's ground together: Feel the solid surface beneath you. Plant both feet flat. Inhale gently for 4 counts... 1, 2, 3, 4. Hold gently... 2, 3. Exhale like blowing through a straw... 1, 2, 3, 4, 5, 6. You are safe in this present second.`;
-        } else {
-          replyText = `Thank you for sharing that with me. It takes courage to put feelings into words. Take all the time you need. I am here with you, completely without judgment.`;
-        }
-      }
-
-      const botMsg: ChatMessage = {
-        id: `bot-${Date.now()}`,
-        sender: activePartner === 'counsellor' ? 'counsellor' : 'sahaas',
-        senderName: activePartner === 'counsellor' ? USER_PROFILE.assignedCounsellor : 'SAHAAS Sanctuary',
-        text: replyText,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-
-      setMessages((prev) => [...prev, botMsg]);
-      setIsTyping(false);
-    }, 1200);
+    if (activePartner === 'counsellor') {
+      setIsTyping(true);
+      setTimeout(() => {
+        if (!mountedRef.current) return;
+        appendMessage({
+          id: `csl-${Date.now()}`,
+          sender: 'counsellor',
+          senderName: USER_PROFILE.assignedCounsellor,
+          text: COUNSELLOR_REPLY,
+          timestamp: timestampNow(),
+        });
+        setIsTyping(false);
+      }, 1200);
+      return;
+    }
+    askSahaas(() => scriptedReply(text));
   };
 
-  const handleSendVoiceNote = () => {
-    setIsRecordingAudio(true);
-    setTimeout(() => {
-      setIsRecordingAudio(false);
-      const audioMsg: ChatMessage = {
-        id: `aud-${Date.now()}`,
-        sender: 'user',
-        senderName: USER_PROFILE.name,
-        text: 'Voice note (0:08) - "Sharing my thoughts gently without typing..."',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isAudio: true,
-        audioDuration: '0:08',
-      };
-      setMessages((prev) => [...prev, audioMsg]);
-      setIsTyping(true);
+  // Voice notes go through the voice emotion backend: the detected tone
+  // shapes the reply, and the transcript (English) becomes the note text.
+  const startVoiceNote = async () => {
+    voiceReadingsRef.current = [];
+    setRecordSeconds(0);
+    setVoiceStage('connecting');
+    try {
+      const session = await startLiveSession({
+        transcribe: true,
+        onReading: (r) => voiceReadingsRef.current.push(r),
+        onConnectionLost: () => finishVoiceNote(),
+      });
+      if (!mountedRef.current) {
+        session.stop();
+        return;
+      }
+      voiceSessionRef.current = session;
+      voiceStartRef.current = Date.now();
+      setVoiceStage('recording');
+    } catch (e) {
+      setVoiceStage('idle');
+      postSahaas(
+        e instanceof MicrophoneError
+          ? "I couldn't reach your microphone. You can allow it in your browser settings - or simply type to me, whichever feels easier."
+          : "Voice notes aren't available right now because the voice analysis service isn't reachable. You can still type to me here.",
+      );
+    }
+  };
 
+  const finishVoiceNote = async () => {
+    const session = voiceSessionRef.current;
+    if (!session) return;
+    voiceSessionRef.current = null;
+    const seconds = Math.max(1, Math.round((Date.now() - voiceStartRef.current) / 1000));
+    setVoiceStage('processing');
+    await session.stop({ flush: true });
+    if (!mountedRef.current) return;
+
+    const summary = summarize(voiceReadingsRef.current);
+    const transcript = summary?.transcript ?? '';
+    appendMessage({
+      id: `aud-${Date.now()}`,
+      sender: 'user',
+      senderName: USER_PROFILE.name,
+      text: transcript ? `Voice note - "${transcript}"` : 'Voice note',
+      timestamp: timestampNow(),
+      isAudio: true,
+      audioDuration: formatDuration(seconds),
+    });
+    if (summary) {
+      lastToneRef.current = summary.emotion;
+      if (onUpdateMetric) applyMetricUpdates(summary, onUpdateMetric);
+    }
+    flagIfCrisis(transcript);
+    setVoiceStage('idle');
+
+    if (transcript) {
+      askSahaas(() => voiceNoteReply(summary));
+    } else {
+      setIsTyping(true);
       setTimeout(() => {
-        const responseMsg: ChatMessage = {
-          id: `bot-aud-${Date.now()}`,
-          sender: 'sahaas',
-          senderName: 'SAHAAS Sanctuary',
-          text: 'Thank you for sharing your voice. It is warm, steady, and heard. You sounded calm despite the tiredness. Resting right now is productive care.',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        };
-        setMessages((prev) => [...prev, responseMsg]);
+        if (!mountedRef.current) return;
+        postSahaas(voiceNoteReply(summary));
         setIsTyping(false);
-      }, 1500);
-    }, 2500);
+      }, 700);
+    }
+  };
+
+  const handleVoiceButton = () => {
+    if (voiceStage === 'idle') startVoiceNote();
+    else if (voiceStage === 'recording') finishVoiceNote();
   };
 
   const handleClearHistory = () => {
-    setMessages([
+    lastToneRef.current = null;
+    messagesRef.current = [
       {
         id: 'msg-cleared',
         sender: 'sahaas',
         senderName: 'SAHAAS Sanctuary',
         text: 'Chat history cleared. Ephemeral memory wiped from active session.',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timestamp: timestampNow(),
       }
-    ]);
+    ];
+    setMessages(messagesRef.current);
   };
 
   return (
@@ -132,7 +292,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall }) => {
       {/* Top Chat Partner Bar */}
       <div className="bg-white rounded-2xl p-3 shadow-2xs border border-[#ddeaf2] flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
-          <button 
+          <button
             onClick={onBack}
             className="p-1.5 rounded-lg text-[#3d4947] hover:bg-[#e9f6fd] transition-colors"
             title="Back to Dashboard"
@@ -226,7 +386,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall }) => {
               >
                 {msg.isAudio ? (
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
                       <Volume2 className="w-4 h-4 text-white" />
                     </div>
                     <div className="flex flex-col">
@@ -235,7 +395,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall }) => {
                     </div>
                   </div>
                 ) : (
-                  <p>{msg.text}</p>
+                  <p className="whitespace-pre-line">{msg.text}</p>
                 )}
               </div>
             </div>
@@ -252,6 +412,30 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall }) => {
 
         <div ref={chatBottomRef} />
       </div>
+
+      {/* Immediate-safety banner */}
+      {crisisMessage && (
+        <div className="mt-2 rounded-2xl bg-[#fff1ef] border border-[#ffdad6] p-3 flex items-start gap-2.5 text-xs text-[#5c1a14]">
+          <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0 text-[#ba1a1a]" />
+          <div className="flex-1 leading-relaxed">
+            <p>{crisisMessage}</p>
+            <button
+              onClick={onOpenCall}
+              className="mt-1.5 inline-flex items-center gap-1 font-semibold text-[#ba1a1a] hover:underline"
+            >
+              <Phone className="w-3.5 h-3.5" />
+              <span>Call your counsellor now</span>
+            </button>
+          </div>
+          <button
+            onClick={() => setCrisisMessage(null)}
+            className="p-1 text-[#93000a]/60 hover:text-[#93000a]"
+            title="Dismiss"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Suggested gentle conversation starters */}
       <div className="py-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
@@ -276,29 +460,38 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall }) => {
       >
         <button
           type="button"
-          onClick={handleSendVoiceNote}
-          className={`p-2.5 rounded-xl transition-colors ${
-            isRecordingAudio 
-              ? 'bg-red-500 text-white animate-pulse' 
+          onClick={handleVoiceButton}
+          disabled={voiceStage === 'connecting' || voiceStage === 'processing'}
+          className={`p-2.5 rounded-xl transition-colors disabled:opacity-50 ${
+            voiceStage === 'recording'
+              ? 'bg-red-500 text-white animate-pulse'
               : 'text-[#166963] hover:bg-[#e9f6fd]'
           }`}
-          title="Send a gentle voice note"
+          title={voiceStage === 'recording' ? 'Tap to send your voice note' : 'Send a gentle voice note'}
         >
-          {isRecordingAudio ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+          {voiceStage === 'recording' ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
         </button>
 
         <input
           type="text"
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
-          placeholder={isRecordingAudio ? "Recording audio note (3s)..." : "Share whatever is on your mind..."}
-          disabled={isRecordingAudio}
+          placeholder={
+            voiceStage === 'connecting'
+              ? 'Opening your microphone...'
+              : voiceStage === 'recording'
+              ? `Recording ${formatDuration(recordSeconds)} - tap the mic to send`
+              : voiceStage === 'processing'
+              ? 'Listening to your voice note...'
+              : 'Share whatever is on your mind...'
+          }
+          disabled={voiceStage !== 'idle'}
           className="flex-1 bg-transparent text-sm text-[#111d23] placeholder-[#6d7a77] outline-none px-1"
         />
 
         <button
           type="submit"
-          disabled={!inputText.trim() || isRecordingAudio}
+          disabled={!inputText.trim() || voiceStage !== 'idle' || isTyping}
           className="p-2.5 rounded-xl bg-[#00685d] text-white disabled:opacity-40 hover:bg-[#008376] active:scale-95 transition-all shadow-2xs"
           title="Send message"
         >

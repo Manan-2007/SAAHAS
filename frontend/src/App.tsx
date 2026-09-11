@@ -76,6 +76,7 @@ export default function App() {
           <SafeChat
             onBack={() => setCurrentView('home-dashboard')}
             onOpenCall={() => setIsCallOpen(true)}
+            onUpdateMetric={handleUpdateMetric}
           />
         )}
 

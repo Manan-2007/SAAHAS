@@ -11,6 +11,7 @@ export default defineConfig(({mode}) => {
   const proxy = {
     '/health': {target: backend, changeOrigin: true},
     '/predict': {target: backend, changeOrigin: true},
+    '/chat': {target: backend, changeOrigin: true},
     '/ws': {target: backend, changeOrigin: true, ws: true},
   };
 

@@ -37,6 +37,7 @@ backend/                 FastAPI + local ML (Python 3.12, Apple Silicon for the 
   backend.md             frontend instructions + models (update with every backend change)
 frontend/                React + Vite + Tailwind (from Google AI Studio)
 start.sh / start.bat     run backend + frontend together
+train_all.sh             download data + train the distress model (--with-chat also fine-tunes the chat)
 ```
 
 ## Running

@@ -97,18 +97,24 @@ export interface LiveSession {
 const CHUNK = 4096;
 const FLUSH_TIMEOUT_MS = 4000;
 
+// Must be called directly from a click/tap handler.
 export async function startLiveSession(h: LiveSessionHandlers): Promise<LiveSession> {
+  // Created before any await so it is still inside the user gesture; Safari
+  // otherwise leaves the context suspended and captures nothing.
+  const ctx = new AudioContext();
+  const resumed = ctx.resume();
+
   let stream: MediaStream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
   } catch {
+    ctx.close();
     throw new MicrophoneError('Microphone access was not granted.');
   }
 
-  const ctx = new AudioContext();
-  await ctx.resume();
+  await resumed.catch(() => {});
   const sampleRate = ctx.sampleRate;
 
   const ws = new WebSocket(wsUrl('/ws/predict'));
@@ -203,4 +209,32 @@ export async function startLiveSession(h: LiveSessionHandlers): Promise<LiveSess
       ws.close();
     },
   };
+}
+
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatResponse {
+  reply: string;
+  crisis: boolean;
+  crisis_message: string | null;
+  model: string | null;
+}
+
+// Replies from the SAHAAS chat model (fine-tuned with backend/train_chat.sh).
+// tone: the emotion detected in the person's latest voice note, if any.
+export async function chatReply(messages: ChatTurn[], tone?: Emotion | null): Promise<ChatResponse> {
+  const res = await fetch(httpUrl('/chat'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, tone: tone ?? null }),
+    signal: AbortSignal.timeout(120000),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Chat failed (${res.status})`);
+  }
+  return data;
 }

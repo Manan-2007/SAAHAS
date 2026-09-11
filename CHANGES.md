@@ -69,13 +69,23 @@ every notable change. Backend changes also go in `backend/backend.md` → Update
   made casual.
 - Voice check-ins (Voice Companion) stream to `/ws/predict`; voice notes go to `/predict`.
 
-### Not in the repo yet (local changes on jais's machine)
-- Frontend wiring: `App.tsx`, `SafeChat.tsx`, `VoiceCompanion.tsx`, `emotionApi.ts`,
-  `vite.config.ts`, `voiceReflection.ts`. The frontend teammate should review and
-  merge these.
-- Root `README.md` updates and `train_all.sh`.
+### Frontend
+- Safe Chat uses `/chat` for SAHAAS AI replies (scripted replies if the backend is
+  down). Its mic records real voice notes through the emotion model, and replies take
+  the tone into account. Messages that suggest risk show a crisis banner with
+  helplines and a "call your counsellor" button.
+- Voice Companion streams the mic to `/ws/predict` for a live tone read, accepts
+  `.wav`/`.mp3` voice notes (`/predict`), writes a gentle reflection, and updates the
+  dashboard's Stress/Energy/Fatigue rows. Summary logic shared in
+  `src/lib/voiceReflection.ts`.
+- Vite proxies `/chat` too. Root `README.md` covers running both halves, and
+  `train_all.sh` downloads data and trains the distress model (`--with-chat` also
+  fine-tunes the chat).
+- Still to do on the frontend: the monitoring screens (sign-up, questionnaires,
+  counsellor dashboard, voice call). See `backend/backend.md`.
 
 ### Commits
 - `2a47028` initial commit.
 - `65259e0` backend: monitoring, distress model, voice call.
-- Next: translation, prompt fixes, and these docs.
+- `8eb17b5` Hindi via translation, friendlier chat, CLAUDE.md + CHANGES.md.
+- Next: frontend wiring, root README and train_all.sh.
