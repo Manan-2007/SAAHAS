@@ -22,8 +22,13 @@ Interactive API docs: http://127.0.0.1:8000/docs
       `/counsellor/*` calls. For live voice, add it to the first WebSocket config
       frame: `{"sampleRate": 48000, "transcribe": true, "token": "<token>"}`.
       Without a token the app still works, but nothing is saved.
+      The token is whatever `/auth/register` or `/auth/login` returned - the
+      frontend treats both the same way.
 - [ ] **Store the token in memory or `sessionStorage`, never `localStorage`.**
       Quick Exit must clear it (`sessionStorage.clear()`), because victims may share phones.
+- [ ] **Treat a 401 on any call as "signed out":** drop the token and show the
+      sign-in screen. Sessions expire (30 days), and changing the password or
+      revoking a device invalidates other tokens, so this will happen in normal use.
 
 ## 2. Victim screens
 
@@ -34,8 +39,27 @@ Interactive API docs: http://127.0.0.1:8000/docs
       {"name": "Sunita", "language": "hi", "phone": null, "case_ref": null,
        "consent": {"data_storage": true, "voice_analysis": true, "store_messages": false}}
       ```
-      → `{"user_id", "token", "role": "victim", "counsellor": "Dr. Ananya Sharma"}`
+      → `{"user_id", "token", "role": "victim", "username", "counsellor": "Dr. Ananya Sharma"}`
       Returns 400 if `data_storage` is false. In that case offer anonymous use instead.
+- [ ] **Offer a username + password on the sign-up screen** (optional fields).
+      Add `"username": "sunita", "password": "..."` to the same
+      `POST /auth/register` body. Send both or neither (422 otherwise); the
+      password must be 8+ characters (422), and a taken username returns 409.
+      Explain the trade-off in one line: **without** them the account lives
+      only on this device (losing the token loses the journey), **with** them
+      she can sign in again on any phone.
+- [ ] **Sign-in screen.** `POST /auth/login` with `{"username", "password"}`
+      → `{"token", "expires_at", "user_id", "role", "name", "language", "consent", "counsellor"}`.
+      Route on `role`: `victim` to the app, `counsellor` to the Command Centre.
+      Handle `401` ("Incorrect username or password" - show it as-is, it is
+      deliberately vague) and `429` (locked out after 5 wrong tries; the
+      `detail` already says how many minutes).
+- [ ] **"Add a password" prompt for token-only accounts.** `GET /me` returns
+      `has_password` and `username`; when `has_password` is false, offer
+      `PUT /me/credentials` with `{"username", "password"}`.
+- [ ] **Sign out:** `POST /auth/logout` with `{"all_devices": false}`, then
+      clear the token. Quick Exit should **not** call this - it must be
+      instant and leave no trace of a deliberate action; just clear storage.
 - [ ] **Check-in questionnaires** (replace the mocked 3-question "Quick Daily
       Check-in" in `WellBeingTracker.tsx`):
       1. `GET /me/due` → `[{instrument, name, due, next_due_at}]`. Show the items where `due: true`.
@@ -60,6 +84,15 @@ Interactive API docs: http://127.0.0.1:8000/docs
 - [ ] **Settings screen:** consent toggles with `PATCH /me/consent`
       (`{"voice_analysis": false}`) and a "Delete all my data" button
       (`DELETE /me`, then clear the token and go to the start screen).
+- [ ] **Change password** (only when `has_password`): `POST /me/password` with
+      `{"current_password", "new_password"}` → `{"changed", "other_sessions_signed_out"}`.
+      401 means the current password was wrong. Warn first that other devices
+      will be signed out; this device stays signed in.
+- [ ] **"Where I'm signed in" list:** `GET /me/sessions` →
+      `[{id, device, started_at, last_seen_at, expires_at, current}]`, with a
+      "Sign out this device" button per row (`DELETE /me/sessions/{id}`).
+      Mark the `current: true` row. This is also the "someone else has my
+      phone" escape hatch, so put it somewhere findable in Settings.
 - [ ] **Saved indicator (optional):** `/chat` returns `recorded` and `/predict`
       returns `Recorded` (true or false). A small "saved to your journey" tick is enough.
       Voice check-ins with less than 2 seconds of speech are not saved.
@@ -75,8 +108,10 @@ Interactive API docs: http://127.0.0.1:8000/docs
 
 Replace the mock clients in `CounsellorCommandCentre.tsx` with real data.
 
-- [ ] **Login:** for now, a field to paste a counsellor token (from
-      `manage.py create-counsellor "Name"` or `seed-demo`).
+- [ ] **Login:** the same `POST /auth/login` screen as victims - counsellors
+      created with `manage.py create-counsellor "Name" --username ananya` sign
+      in with a username and password, and `role: "counsellor"` in the response
+      is what routes them here. Pasting a token still works for `seed-demo`.
 - [ ] **Caseload list:** `GET /counsellor/victims`, already sorted most urgent
       first. Per row: `name`, `case_ref`, `score` (0–100), `tier`, `crisis`,
       `trend.direction` + `trend.change_7d`, `open_alerts`, `last_contact_at`, `next_event`.
@@ -243,6 +278,19 @@ with a voice that adapts to how you sound, and you can talk over it to interrupt
 ---
 
 ## Update log (what changed for the frontend)
+
+**2026-09-11 (auth)**
+- New: **username + password sign-in.** `POST /auth/login` returns a session
+  token that works exactly like the registration token; `POST /auth/logout`
+  ends it. Credentials are optional - registration without them still returns
+  a long-lived token, which is the anonymous path → sections 1 and 2.
+- New: `PUT /me/credentials` (add a password to a token-only account),
+  `POST /me/password` (change it), `POST /me/token/rotate`,
+  `GET /me/sessions` + `DELETE /me/sessions/{id}` ("where am I signed in") → section 2.
+- **A 401 can now happen mid-use** (sessions expire after 30 days, and a
+  password change or a revoked device invalidates tokens). Handle it as
+  "signed out" everywhere → section 1.
+- `GET /me` also returns `username`, `has_password` and `signed_in_with`.
 
 **2026-09-11**
 - New: sign-up, questionnaires, well-being summary, events, and all

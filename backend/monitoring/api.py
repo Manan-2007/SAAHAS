@@ -1,16 +1,19 @@
 """HTTP routes for victim monitoring.
 
   public       GET  /questionnaires, /questionnaires/{id}
-  victims      POST /auth/register, /me/*
+  accounts     POST /auth/register, /auth/login, /auth/logout
+  victims      /me/*   (profile, consent, check-ins, sessions)
   counsellors  /counsellor/*   (accounts created with `python manage.py create-counsellor`)
 
-Send the token from /auth/register (or manage.py) as `Authorization: Bearer <token>`.
+Every authenticated route takes `Authorization: Bearer <token>`, where the
+token is either the access token from /auth/register (or manage.py) or a
+session token from /auth/login. See monitoring.auth for the difference.
 """
 
 import datetime as dt
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from . import auth, questionnaires, service
@@ -24,13 +27,36 @@ class Consent(BaseModel):
     voice_analysis: bool = True
     store_messages: bool = False
 
-
 class RegisterRequest(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     language: Language = "en"
     phone: str | None = Field(default=None, max_length=20)
     case_ref: str | None = Field(default=None, max_length=60)
     consent: Consent
+    # Optional: without them the account exists only behind the access token
+    # returned by this call, which is the anonymous path.
+    username: str | None = Field(default=None, min_length=3, max_length=60)
+    password: str | None = Field(default=None, min_length=auth.MIN_PASSWORD_LENGTH,
+                                 max_length=auth.MAX_PASSWORD_LENGTH)
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=60)
+    password: str = Field(min_length=1, max_length=auth.MAX_PASSWORD_LENGTH)
+
+
+class CredentialsRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=60)
+    password: str = Field(min_length=auth.MIN_PASSWORD_LENGTH, max_length=auth.MAX_PASSWORD_LENGTH)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=auth.MAX_PASSWORD_LENGTH)
+    new_password: str = Field(min_length=auth.MIN_PASSWORD_LENGTH, max_length=auth.MAX_PASSWORD_LENGTH)
+
+
+class LogoutRequest(BaseModel):
+    all_devices: bool = False
 
 
 class ConsentUpdate(BaseModel):
@@ -60,6 +86,15 @@ def _or_404(fn, *args, **kwargs):
         raise HTTPException(status_code=404, detail=str(exc))
 
 
+def _or_auth_error(fn, *args, **kwargs):
+    """auth.AuthError carries its own status: 401 wrong, 409 taken, 429 locked."""
+    try:
+        return fn(*args, **kwargs)
+    except auth.AuthError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc))
+
+
+
 # ---------------------------------------------------------------- public
 
 @router.get("/questionnaires")
@@ -81,7 +116,51 @@ def register(req: RegisterRequest):
     if not req.consent.data_storage:
         raise HTTPException(status_code=400, detail="Monitoring needs consent to store check-ins. "
                                                     "Without it the app can still be used anonymously.")
-    return service.register_victim(req.name, req.language, req.phone, req.case_ref, req.consent.model_dump())
+    if bool(req.username) != bool(req.password):
+        raise HTTPException(status_code=422,
+                            detail="Send a username and a password together, or neither")
+    return _or_auth_error(service.register_victim, req.name, req.language, req.phone, req.case_ref,
+                          req.consent.model_dump(), username=req.username, password=req.password)
+
+
+@router.post("/auth/login")
+def login(req: LoginRequest, user_agent: str | None = Header(default=None)):
+    return _or_auth_error(service.login, req.username, req.password, user_agent)
+
+
+@router.post("/auth/logout")
+def logout(req: LogoutRequest | None = None, user=Depends(auth.current_user)):
+    return service.sign_out(user, all_devices=bool(req and req.all_devices))
+
+
+# ---------------------------------------------------------------- credentials
+
+@router.put("/me/credentials")
+def set_credentials(req: CredentialsRequest, user=Depends(auth.current_user)):
+    """Attaches a username + password to an account, or changes the username."""
+    return _or_auth_error(service.set_credentials, user, req.username, req.password)
+
+
+@router.post("/me/password")
+def change_password(req: PasswordChangeRequest, user=Depends(auth.current_user)):
+    return _or_auth_error(auth.change_password, user, req.current_password, req.new_password,
+                          user.get("session_id"))
+
+
+@router.post("/me/token/rotate")
+def rotate_token(user=Depends(auth.current_user)):
+    """New access token, shown once. The old one stops working immediately."""
+    return service.rotate_token(user)
+
+
+@router.get("/me/sessions")
+def my_sessions(user=Depends(auth.current_user)):
+    return service.list_sessions(user)
+
+
+@router.delete("/me/sessions/{session_id}")
+def revoke_session(session_id: int, user=Depends(auth.current_user)):
+    return _or_404(service.revoke_session, user, session_id)
 
 
 @router.get("/me")
