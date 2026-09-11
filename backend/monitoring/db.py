@@ -27,6 +27,27 @@ CREATE TABLE IF NOT EXISTS users (
     token_hash TEXT UNIQUE NOT NULL,
     created_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS credentials (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    username_index TEXT UNIQUE NOT NULL,   -- keyed HMAC of the lowercased username
+    username_enc TEXT NOT NULL,            -- display form
+    password_hash TEXT NOT NULL,           -- scrypt$n$r$p$salt$hash
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until REAL,
+    password_changed_at REAL NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT UNIQUE NOT NULL,
+    device TEXT,                   -- coarse client label, for "where am I signed in"
+    created_at REAL NOT NULL,
+    expires_at REAL NOT NULL,
+    last_seen_at REAL NOT NULL,
+    revoked_at REAL
+);
+CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id, revoked_at);
 CREATE TABLE IF NOT EXISTS observations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

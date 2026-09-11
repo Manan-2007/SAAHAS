@@ -121,6 +121,12 @@ async def rescore_loop():
             print(f"[monitoring] rescored {count} victims")
         except Exception as e:
             print(f"[monitoring] rescoring failed: {e}")
+        try:
+            dropped = await run_in_threadpool(monitoring_auth.purge_expired_sessions)
+            if dropped:
+                print(f"[auth] purged {dropped} expired or revoked sessions")
+        except Exception as e:
+            print(f"[auth] session purge failed: {e}")
 
 @asynccontextmanager
 async def lifespan(app):

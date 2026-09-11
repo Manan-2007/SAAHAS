@@ -75,6 +75,12 @@ setup.
 | `frontend/.env.local` | `BACKEND_URL` | Backend the Vite proxy targets (default `http://127.0.0.1:8000`) |
 | `frontend/.env.local` | `VITE_API_URL` | Production only: backend origin when it's hosted separately from the built frontend |
 | backend env | `CORS_ORIGINS` | Comma-separated frontend origins allowed to call the backend (default `*`) |
+| backend env | `SAHAAS_DATA_DIR` | Where the database and encryption key live (default `backend/data`) |
+| backend env | `SAHAAS_DATA_KEY` | Fernet key encrypting personal data. Generated into `data/secret.key` if unset - **back it up** |
+| backend env | `SAHAAS_SESSION_DAYS` | How long a sign-in session lasts (default `30`) |
+
+Accounts and sign-in are documented in
+[`backend/README.md`](backend/README.md) under **Auth**.
 
 For a production deploy with separate hosts, build the frontend with
 `VITE_API_URL=https://your-backend` and start the backend with
