@@ -13,11 +13,20 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 DATASETS_DIR = HERE / "datasets"
 
+# Dropped on purpose: thu-coai/esconv (CC BY-NC, and annotated with counselling
+# strategies) and ShenLab/MentalChat16K (counselling transcripts). Between them
+# they were 10.6k of 15k examples and the main source of the "breathing /
+# not alone" register. SAHAAS is meant to talk, not counsel.
 RECOMMENDED = {
-    "ShenLab/MentalChat16K": "MIT - ~16k mental-health counselling conversations",
+
     "Estwld/empathetic_dialogues_llm": "Apache-2.0 tag, derived from EmpatheticDialogues (CC BY-NC) - ~25k empathetic chats",
-    "thu-coai/esconv": "CC BY-NC 4.0 - ~1.3k long emotional-support dialogs with counselling strategies",
+
     "heliosbrahma/mental_health_chatbot_dataset": "MIT - small mental-health Q&A set",
+    # Everyday talk, so replies to "hi" or "what did you eat" sound like a person
+    # instead of a counsellor. Also the one gap live translation cannot cover:
+    # Hinglish is romanized, and opus-mt-hi-en expects Devanagari.
+    "Abhishekcr448/Hinglish-Everyday-Conversations-1M": "MIT - 1M short everyday Hinglish exchanges",
+    "ZahrizhalAli/mental_health_conversational_dataset": "MIT - English mental-health conversations",
 }
 
 

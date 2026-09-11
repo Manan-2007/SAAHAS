@@ -2,6 +2,7 @@ export type AppView =
   | 'home-dashboard' 
   | 'safe-chat' 
   | 'voice-companion' 
+  | 'voice-call' 
   | 'well-being' 
   | 'support-network'
   | 'legal-prep' 

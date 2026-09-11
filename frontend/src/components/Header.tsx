@@ -37,6 +37,8 @@ export const Header: React.FC<HeaderProps> = ({
         return 'Safe & Confidential Chat';
       case 'voice-companion':
         return 'Gentle Voice Check-in';
+      case 'voice-call':
+        return 'Talk with SAHAAS';
       case 'well-being':
         return 'Well-being & Grounding';
       case 'support-network':

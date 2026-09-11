@@ -19,7 +19,13 @@ from . import auth, crypto, db, questionnaires, scoring, storage
 
 DAY = scoring.DAY
 NEGATIVE_EMOTIONS = ("sad", "fearful", "angry", "disgust")
-EVENT_KINDS = ("hearing", "fir", "chargesheet", "compensation", "counselling", "other")
+EVENT_KINDS = ("hearing", "fir", "chargesheet", "compensation", "counselling",
+               "bail_hearing", "parole", "adjournment", "trial_end", "other")
+# Kinds where s.15A makes notice to the victim mandatory before the hearing.
+NOTICE_KINDS = ("bail_hearing", "parole")
+ENTITLEMENT_STAGES = ("fir", "chargesheet", "conviction", "trial_end",
+                      "medical_report", "post_mortem", "tame", "other")
+ENTITLEMENT_STATUS = ("due", "received", "not_received", "unknown")
 SIGNAL_METRICS = ("text_distress", "voice_distress", "voice_arousal", "voice_valence")
 LEVEL_RANK = {"crisis": 0, "high": 1, "watch": 2}
 
@@ -60,8 +66,9 @@ def crisis_message():
 iso = db.iso
 
 
-def _today(now):
-    return datetime.fromtimestamp(now).date()
+# One definition of "what day is it", shared with scoring so the victim's card
+# and the counsellor's alert can never disagree about a hearing date.
+_today = scoring.today_for
 
 
 # ---------------------------------------------------------------- accounts
@@ -155,6 +162,10 @@ def update_consent(user, changes):
     consent = {**user["consent"], **{k: v for k, v in changes.items() if v is not None}}
     with db.connect() as conn:
         conn.execute("UPDATE users SET consent = ? WHERE id = ?", (json.dumps(consent), user["id"]))
+    # Turning message storage off erases what was already kept, rather than
+    # only stopping new writes.
+    if user["consent"].get("store_messages") and not consent.get("store_messages"):
+        forget_conversation(user["id"])
     return consent
 
 
@@ -308,6 +319,59 @@ def record_chat(user, text, distress=None, crisis=False, now=None):
     return recompute(user["id"], now)
 
 
+# ---------------------------------------------------------------- conversation
+
+# How many turns are carried into a new chat or call. The chat model keeps the
+# last 16 either way; a few more here lets the UI show what came before.
+CONVERSATION_TURNS = 24
+
+
+def remember_message(user, role, text, channel="chat", now=None):
+    """Stores one turn (either side) so the conversation survives a reload, a
+    new call, or a move between the chat and the voice call.
+
+    Nothing is written without the store_messages consent, which is also what
+    the chat screen promises. Returns True when it was stored."""
+    text = (text or "").strip()
+    if not text or user is None or user["role"] != "victim":
+        return False
+    if not user["consent"].get("store_messages"):
+        return False
+    with db.connect() as conn:
+        conn.execute("INSERT INTO messages (user_id, created_at, channel, role, text_enc) "
+                     "VALUES (?, ?, ?, ?, ?)",
+                     (user["id"], now or db.now(), channel, role, crypto.enc(text)))
+    return True
+
+
+def conversation(user_id, limit=CONVERSATION_TURNS):
+    """The last turns, oldest first: [{role, content, at, channel}].
+
+    Ready to hand straight to the chat model as history."""
+    with db.connect() as conn:
+        rows = conn.execute(
+            "SELECT created_at, channel, role, text_enc FROM messages "
+            "WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+            (user_id, int(limit))).fetchall()
+    turns = []
+    for row in reversed(rows):
+        try:
+            content = crypto.dec(row["text_enc"])
+        except Exception:
+            continue            # a row written under a key we no longer have
+        turns.append({"role": row["role"], "content": content,
+                      "at": db.iso(row["created_at"]), "channel": row["channel"]})
+    return turns
+
+
+def forget_conversation(user_id):
+    """Erases the stored conversation. Used by "delete my conversation" and
+    whenever the store_messages consent is switched off."""
+    with db.connect() as conn:
+        cur = conn.execute("DELETE FROM messages WHERE user_id = ?", (user_id,))
+    return cur.rowcount
+
+
 def voice_distress(summary):
     """0-100 for one voice check-in: share of negative emotions, blended with low valence."""
     probs = summary.get("probabilities") or {}
@@ -434,7 +498,8 @@ def due_checkins(user_id, now=None):
 def _event_view(row, today):
     event_date = datetime.strptime(row["event_date"], "%Y-%m-%d").date()
     return {"id": row["id"], "date": row["event_date"], "kind": row["kind"], "title": crypto.dec(row["title_enc"]),
-            "days_until": (event_date - today).days}
+            "days_until": (event_date - today).days,
+            "notice_given": None if row["notice_given"] is None else bool(row["notice_given"])}
 
 
 def _upcoming_events(conn, user_id, now, days):
@@ -450,6 +515,240 @@ def list_events(user_id, now=None):
     with db.connect() as conn:
         rows = conn.execute("SELECT * FROM case_events WHERE user_id = ? ORDER BY event_date", (user_id,)).fetchall()
     return [_event_view(r, today) for r in rows]
+
+
+
+# ---------------------------------------------------------------- case calendar (victim side)
+
+# What a victim sees instead of the docket word. A bail hearing is still shown -
+# being ambushed by it is worse - but it is not called one. Hindi is a draft and
+# needs a native reviewer, like the questionnaire stems; Punjabi falls back to
+# English until it has been reviewed too (see CLAUDE.md, known gaps).
+VICTIM_EVENT_LABELS = {
+    "hearing":      {"en": "Court date", "hi": "अदालत की तारीख"},
+    "bail_hearing": {"en": "A court date about your case", "hi": "आपके मामले से जुड़ी अदालत की तारीख"},
+    "parole":       {"en": "A court date about your case", "hi": "आपके मामले से जुड़ी अदालत की तारीख"},
+    "trial_end":    {"en": "A court date about your case", "hi": "आपके मामले से जुड़ी अदालत की तारीख"},
+    "adjournment":  {"en": "Your case moved to a new date", "hi": "आपके मामले की तारीख बदल गई"},
+    "fir":          {"en": "A step in your case", "hi": "आपके मामले में एक कदम"},
+    "chargesheet":  {"en": "A step in your case", "hi": "आपके मामले में एक कदम"},
+    "compensation": {"en": "Support payment", "hi": "सहायता राशि"},
+    "counselling":  {"en": "Time with your counsellor", "hi": "आपके काउंसलर के साथ समय"},
+    "other":        {"en": "A date in your case", "hi": "आपके मामले की एक तारीख"},
+}
+
+# The question the victim actually answers. No amounts: a number someone is owed
+# but has not been given is its own kind of distress, so only counsellors see it.
+ENTITLEMENT_LABELS = {
+    "fir":         {"en": "Support money due when your complaint was registered",
+                    "hi": "शिकायत दर्ज होने पर मिलने वाली सहायता राशि"},
+    "chargesheet": {"en": "Support money due at the charge sheet stage",
+                    "hi": "चार्जशीट के समय मिलने वाली सहायता राशि"},
+    "trial_end":   {"en": "Support money due at the end of the case",
+                    "hi": "मामला समाप्त होने पर मिलने वाली सहायता राशि"},
+    "tame":        {"en": "Travel and daily expenses for going to the court or police station",
+                    "hi": "अदालत या थाने जाने का यात्रा और दैनिक खर्च"},
+    "other":       {"en": "Support you are entitled to", "hi": "आपको मिलने वाली सहायता"},
+}
+
+
+# The raw kind leaks the docket word ("bail_hearing"), so the victim side gets a
+# coarse one that is only good enough to pick an icon.
+VICTIM_EVENT_KIND = {
+    "hearing": "court_date", "bail_hearing": "court_date", "parole": "court_date",
+    "trial_end": "court_date", "adjournment": "date_changed",
+    "fir": "case_step", "chargesheet": "case_step",
+    "compensation": "support", "counselling": "counselling", "other": "case_step",
+}
+
+
+# The real Annexure-I schedule (G.S.R. 424(E), 14 April 2016). Loaded once.
+# Amounts and the stage split both come from the Gazette: the split is NOT a flat
+# 25/50/25 - dumping excreta is 10/50/40, rape pays 50% after the medical report,
+# murder 50% after the post-mortem, and a social boycott is paid in full at charge
+# sheet. Getting that wrong would tell someone they are owed money they are not.
+_RELIEF = None
+
+
+def relief_schedule():
+    global _RELIEF
+    if _RELIEF is None:
+        with open(Path(__file__).resolve().parent / "relief_schedule.json", encoding="utf-8") as f:
+            _RELIEF = json.load(f)
+    return _RELIEF
+
+
+def relief_for(section):
+    """The Annexure-I row for a section, or None. Match is exact then prefix, so
+    '3(1)(r)' finds its row and 'IPC 375' finds rape."""
+    key = (section or "").strip().lower()
+    entries = relief_schedule()["entries"]
+    for e in entries:
+        if e["section"].lower() == key:
+            return e
+    for e in entries:
+        if key and key in e["section"].lower():
+            return e
+    return None
+
+
+def _label(table, key, lang):
+    entry = table.get(key, table["other"])
+    return entry.get(lang) or entry["en"]
+
+
+def _entitlement_view(row, lang=None, for_counsellor=False):
+    out = {"id": row["id"], "stage": row["stage"], "due_on": row["due_on"], "status": row["status"],
+           "answered_at": iso(row["answered_at"])}
+    if for_counsellor:
+        out["amount"] = row["amount"]
+        out["note"] = crypto.dec(row["note_enc"])
+        out["label"] = _label(ENTITLEMENT_LABELS, row["stage"], "en")
+    else:
+        out["label"] = _label(ENTITLEMENT_LABELS, row["stage"], lang or "en")
+    return out
+
+
+def my_case(user, now=None, days=60):
+    """What is coming up and what is owed - the victim's view. No scores, no
+    tiers, no amounts, nothing clinical."""
+    now = now or db.now()
+    today = _today(now)
+    lang = user["language"] or "en"
+    with db.connect() as conn:
+        events = conn.execute(
+            "SELECT * FROM case_events WHERE user_id = ? AND event_date BETWEEN ? AND ? ORDER BY event_date",
+            (user["id"], today.isoformat(), (today + timedelta(days=days)).isoformat())).fetchall()
+        ents = conn.execute(
+            "SELECT * FROM entitlements WHERE user_id = ? AND status IN ('due', 'unknown', 'not_received') "
+            "ORDER BY COALESCE(due_on, '9999-12-31')", (user["id"],)).fetchall()
+    return {
+        "upcoming": [{"id": e["id"], "kind": VICTIM_EVENT_KIND.get(e["kind"], "case_step"),
+                      "date": e["event_date"],
+                      "days_until": (datetime.strptime(e["event_date"], "%Y-%m-%d").date() - today).days,
+                      "label": _label(VICTIM_EVENT_LABELS, e["kind"], lang)} for e in events],
+        "entitlements": [_entitlement_view(r, lang) for r in ents],
+    }
+
+
+def answer_entitlement(user, entitlement_id, status, now=None):
+    if status not in ENTITLEMENT_STATUS:
+        raise ValueError(f"status must be one of {', '.join(ENTITLEMENT_STATUS)}")
+    now = now or db.now()
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM entitlements WHERE id = ? AND user_id = ?",
+                           (entitlement_id, user["id"])).fetchone()
+        if row is None:
+            raise NotFound("No such entitlement")
+        conn.execute("UPDATE entitlements SET status = ?, answered_at = ? WHERE id = ?",
+                     (status, now, entitlement_id))
+    recompute(user["id"])           # "never arrived" changes the score
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM entitlements WHERE id = ?", (entitlement_id,)).fetchone()
+    return _entitlement_view(row, user["language"] or "en")
+
+
+# ---------------------------------------------------------------- entitlements (counsellor side)
+
+def list_entitlements(counsellor, victim_id):
+    with db.connect() as conn:
+        _assigned_victim(conn, counsellor, victim_id)
+        rows = conn.execute("SELECT * FROM entitlements WHERE user_id = ? "
+                            "ORDER BY COALESCE(due_on, '9999-12-31')", (victim_id,)).fetchall()
+    return [_entitlement_view(r, for_counsellor=True) for r in rows]
+
+
+def add_relief_from_schedule(counsellor, victim_id, section, now=None):
+    """Create the whole staged set for one offence, straight from Annexure-I.
+
+    Beats typing amounts by hand: the counsellor gives the section, the schedule
+    gives the total, the stages and the percentages."""
+    entry = relief_for(section)
+    if entry is None:
+        raise ValueError(f"No Annexure-I relief row matches section {section!r}")
+    now = now or db.now()
+    created = []
+    with db.connect() as conn:
+        _assigned_victim(conn, counsellor, victim_id)
+        for part in entry["stages"]:
+            amount = round(entry["amount"] * part["percent"] / 100.0, 2)
+            note = (f"{entry['offence']} [{entry['section']}] - {part['percent']}% "
+                    f"{relief_schedule()['stage_labels'][part['stage']]}")
+            cur = conn.execute(
+                "INSERT INTO entitlements (user_id, stage, amount, due_on, note_enc, asked_at, "
+                "created_by, created_at) VALUES (?, ?, ?, NULL, ?, ?, ?, ?)",
+                (victim_id, part["stage"], amount, crypto.enc(note), now, counsellor["id"], now))
+            created.append(cur.lastrowid)
+    recompute(victim_id)
+    with db.connect() as conn:
+        rows = conn.execute(f"SELECT * FROM entitlements WHERE id IN ({','.join('?' * len(created))})",
+                            created).fetchall()
+    return {"section": entry["section"], "offence": entry["offence"], "total": entry["amount"],
+            "entitlements": [_entitlement_view(r, for_counsellor=True) for r in rows]}
+
+
+def add_entitlement(counsellor, victim_id, stage, amount=None, due_on=None, note=None, now=None):
+    if stage not in ENTITLEMENT_STAGES:
+        raise ValueError(f"stage must be one of {', '.join(ENTITLEMENT_STAGES)}")
+    now = now or db.now()
+    with db.connect() as conn:
+        _assigned_victim(conn, counsellor, victim_id)
+        cur = conn.execute(
+            "INSERT INTO entitlements (user_id, stage, amount, due_on, note_enc, asked_at, created_by, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (victim_id, stage, amount, due_on, crypto.enc(note) if note else None, now, counsellor["id"], now))
+        ent_id = cur.lastrowid
+    recompute(victim_id)
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM entitlements WHERE id = ?", (ent_id,)).fetchone()
+    return _entitlement_view(row, for_counsellor=True)
+
+
+def update_entitlement(counsellor, entitlement_id, status=None, amount=None, due_on=None, note=None):
+    if status is not None and status not in ENTITLEMENT_STATUS:
+        raise ValueError(f"status must be one of {', '.join(ENTITLEMENT_STATUS)}")
+    with db.connect() as conn:
+        row = conn.execute("SELECT e.*, v.id AS vid FROM entitlements e JOIN users v ON v.id = e.user_id "
+                           "WHERE e.id = ? AND v.counsellor_id = ?",
+                           (entitlement_id, counsellor["id"])).fetchone()
+        if row is None:
+            raise NotFound("No such entitlement for your victims")
+        sets, args = [], []
+        for column, value in (("status", status), ("amount", amount), ("due_on", due_on)):
+            if value is not None:
+                sets.append(f"{column} = ?")
+                args.append(value)
+        if note is not None:
+            sets.append("note_enc = ?")
+            args.append(crypto.enc(note))
+        if sets:
+            conn.execute(f"UPDATE entitlements SET {', '.join(sets)} WHERE id = ?", (*args, entitlement_id))
+        victim_id = row["vid"]
+    recompute(victim_id)
+    with db.connect() as conn:
+        row = conn.execute("SELECT * FROM entitlements WHERE id = ?", (entitlement_id,)).fetchone()
+    return _entitlement_view(row, for_counsellor=True)
+
+
+def caseload_forecast(counsellor, now=None):
+    """Who is predicted to climb this fortnight, worst first. Triage by what is
+    coming, not by today's number."""
+    now = now or db.now()
+    out = []
+    with db.connect() as conn:
+        victims = conn.execute("SELECT id FROM users WHERE role = 'victim' AND counsellor_id = ?",
+                               (counsellor["id"],)).fetchall()
+        for v in victims:
+            latest = _latest_score(conn, v["id"])
+            if latest is None:
+                continue
+            f = scoring.forecast(conn, v["id"], latest["score"], now)
+            if f is None:
+                continue
+            out.append({"victim_id": v["id"], "name": _name_of(conn, v["id"]),
+                        "score": latest["score"], "tier": latest["tier"], **f})
+    out.sort(key=lambda r: (-r["peak_score"], r["days_until"]))
+    return out
 
 
 # ---------------------------------------------------------------- counsellor views
@@ -532,6 +831,11 @@ def victim_detail(counsellor, victim_id, now=None):
             } for q in qs],
             "alerts": [_alert_view(conn, a) for a in alert_rows],
         }
+        latest = detail["latest"]
+        detail["forecast"] = scoring.forecast(conn, victim_id, latest["score"], now) if latest else None
+        detail["entitlements"] = [_entitlement_view(r, for_counsellor=True) for r in conn.execute(
+            "SELECT * FROM entitlements WHERE user_id = ? ORDER BY COALESCE(due_on, '9999-12-31')",
+            (victim_id,)).fetchall()]
     detail["events"] = list_events(victim_id, now)
     return detail
 
@@ -563,12 +867,15 @@ def timeline(counsellor, victim_id, days=30, now=None):
     }
 
 
-def add_event(counsellor, victim_id, kind, event_date, title):
+def add_event(counsellor, victim_id, kind, event_date, title, notice_given=None):
     with db.connect() as conn:
         _assigned_victim(conn, counsellor, victim_id)
-        cur = conn.execute("INSERT INTO case_events (user_id, event_date, kind, title_enc, created_by, created_at) "
-                           "VALUES (?, ?, ?, ?, ?, ?)",
-                           (victim_id, event_date, kind, crypto.enc(title), counsellor["id"], db.now()))
+        cur = conn.execute("INSERT INTO case_events "
+                           "(user_id, event_date, kind, title_enc, notice_given, created_by, created_at) "
+                           "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                           (victim_id, event_date, kind, crypto.enc(title),
+                            None if notice_given is None else int(notice_given),
+                            counsellor["id"], db.now()))
         event_id = cur.lastrowid
     recompute(victim_id)            # an imminent hearing can raise an alert
     return next(e for e in list_events(victim_id) if e["id"] == event_id)

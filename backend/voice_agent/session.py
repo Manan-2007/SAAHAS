@@ -127,6 +127,8 @@ class ConversationSession:
                 self.user = found if found and found["role"] == "victim" else None
                 if self.user is None:
                     await self.send_json({"type": "error", "detail": "Invalid token - this conversation will not be saved"})
+                else:
+                    await self._load_history()
             await self.send_json({"type": "ready", "sampleRate": self.agent.tts.sample_rate, "barge_in": self.barge_in})
             if msg.get("greet", True):
                 self.agent_task = asyncio.create_task(self._greet())
@@ -179,6 +181,26 @@ class ConversationSession:
             self.checked = 0
             self.agent_task = asyncio.create_task(self._respond(audio))
 
+    async def _load_history(self):
+        """Carries the earlier conversation into this call, so it can pick up
+        where the chat or the last call left off. Empty without the
+        store_messages consent, which is what keeps it opt-in."""
+        try:
+            past = await run_in_threadpool(self.deps.conversation, self.user["id"])
+        except Exception as exc:
+            print(f"[voice-agent] could not load the earlier conversation: {exc}")
+            return
+        self.history = [{"role": t["role"], "content": t["content"]}
+                        for t in past if t.get("content")][-MAX_HISTORY:]
+
+    async def _remember(self, role, text):
+        if self.user is None:
+            return
+        try:
+            await run_in_threadpool(self.deps.remember, self.user, role, text, "voice")
+        except Exception as exc:
+            print(f"[voice-agent] could not store a turn: {exc}")
+
     async def _interrupt(self):
         if not self.agent_active():
             return
@@ -218,6 +240,7 @@ class ConversationSession:
                 await self.send_json({"type": "crisis", "message": deps.crisis_message()})
             if self.user is not None:
                 await run_in_threadpool(deps.record_chat, self.user, text, distress, crisis)
+                await self._remember("user", text)
 
             self.history = (self.history + [{"role": "user", "content": text}])[-MAX_HISTORY:]
             await self._reply(cancel, language, voice, crisis)
@@ -270,6 +293,9 @@ class ConversationSession:
         reply = " ".join(spoken) if cancel.is_set() or result is None else result["reply"]
         if reply:
             self.history = (self.history + [{"role": "assistant", "content": reply}])[-MAX_HISTORY:]
+            # Only what was actually said out loud: an interrupted reply is
+            # stored as the sentences the person heard, not the full draft.
+            await self._remember("assistant", reply)
         await self.send_json({"type": "agent_done", "reply": reply, "interrupted": cancel.is_set()})
         await self.send_json({"type": "state", "state": "listening"})
 
@@ -307,5 +333,6 @@ class ConversationSession:
             await self.send_json({"type": "state", "state": "speaking"})
             await self._send_speech(text, pcm, 0)
             self.history.append({"role": "assistant", "content": text})
+            await self._remember("assistant", text)
         await self.send_json({"type": "agent_done", "reply": text, "interrupted": cancel.is_set()})
         await self.send_json({"type": "state", "state": "listening"})

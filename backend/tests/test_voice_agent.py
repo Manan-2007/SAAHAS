@@ -75,8 +75,26 @@ class FakeChat:
         return self.pool.submit(run)
 
 
-def build(transcript, pieces, tts_seconds=0.2):
+class FakeStore:
+    """Stands in for the conversation storage in monitoring.service."""
+
+    def __init__(self, turns=()):
+        self.turns = list(turns)
+
+    def conversation(self, user_id, limit=24):
+        return list(self.turns)
+
+    def remember(self, user, role, text, channel="chat"):
+        self.turns.append({"role": role, "content": text, "channel": channel})
+        return True
+
+
+VICTIM = {"id": "u1", "role": "victim", "language": "en", "consent": {"store_messages": True}}
+
+
+def build(transcript, pieces, tts_seconds=0.2, user=None, store=None):
     chat = FakeChat(pieces)
+    store = store if store is not None else FakeStore()
     agent = SimpleNamespace(
         cfg=engines.load_config(),
         asr=SimpleNamespace(transcribe=lambda audio, lang: done({"text": transcript, "language": "en"})),
@@ -86,7 +104,8 @@ def build(transcript, pieces, tts_seconds=0.2):
         analyze=sad_analysis, speech_segments=energy_segments, chat=chat,
         distress=SimpleNamespace(score=lambda text: {"score": 10.0, "high_risk": False}),
         crisis_re=CRISIS_RE, crisis_message=lambda: "Emergency 112", record_chat=lambda *a: None,
-        record_voice=lambda *a: None, user_for_token=lambda token: None,
+        record_voice=lambda *a: None, user_for_token=lambda token: user,
+        conversation=store.conversation, remember=store.remember,
         emotions=EMOTIONS, pick_headline=pick_headline, SpeakerSession=SpeakerSession)
     app = FastAPI()
 
@@ -195,3 +214,48 @@ def test_unsure_emotion_guess_keeps_a_normal_tone():
 def test_clean_for_speech_strips_markdown_and_emoji():
     assert style.clean_for_speech("**You're safe** here 💛") == "You're safe here"
     assert style.clean_for_speech("1. Breathe in slowly") == "Breathe in slowly"
+
+
+# ------------------------------------------------------- conversation memory
+
+def test_a_signed_in_call_continues_the_earlier_conversation():
+    """The chat model should see what was said before this call started."""
+    store = FakeStore([{"role": "user", "content": "My hearing is on Friday.", "channel": "chat"},
+                       {"role": "assistant", "content": "That's soon. How are you feeling about it?",
+                        "channel": "chat"}])
+    client, chat = build("I could not sleep last night.", ["That makes sense."],
+                         user=VICTIM, store=store)
+    with client.websocket_connect("/ws/converse") as ws:
+        start(ws, token="t")
+        send_audio(ws, np.concatenate([speech(1.2), silence(1.0)]))
+        collect(ws, "agent_done")
+
+    seen = chat.calls[0]["messages"]
+    assert [m["content"] for m in seen[:2]] == ["My hearing is on Friday.",
+                                                "That's soon. How are you feeling about it?"]
+    assert seen[-1] == {"role": "user", "content": "I could not sleep last night."}
+
+
+def test_a_call_stores_both_sides_of_each_turn():
+    store = FakeStore()
+    client, chat = build("I could not sleep last night.", ["That makes sense. "],
+                         user=VICTIM, store=store)
+    with client.websocket_connect("/ws/converse") as ws:
+        start(ws, token="t")
+        send_audio(ws, np.concatenate([speech(1.2), silence(1.0)]))
+        collect(ws, "agent_done")
+
+    assert [(t["role"], t["channel"]) for t in store.turns] == [("user", "voice"), ("assistant", "voice")]
+    assert store.turns[0]["content"] == "I could not sleep last night."
+    assert "That makes sense." in store.turns[1]["content"]
+
+
+def test_an_anonymous_call_stores_nothing():
+    store = FakeStore()
+    client, chat = build("Just thinking out loud.", ["I'm listening."], user=None, store=store)
+    with client.websocket_connect("/ws/converse") as ws:
+        start(ws, token="t")
+        send_audio(ws, np.concatenate([speech(1.2), silence(1.0)]))
+        collect(ws, "agent_done")
+    assert store.turns == []
+    assert chat.calls[0]["messages"] == [{"role": "user", "content": "Just thinking out loud."}]

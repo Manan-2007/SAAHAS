@@ -101,27 +101,72 @@ cd backend && ./venv/bin/python -m pytest -q tests        # must pass before com
   - Tested against 8B: 8B was 0.7 s slower per reply and only slightly better in Hindi,
     with serious errors of its own. Hindi quality comes from translation instead.
   - Thinking mode is off, so Qwen3 hybrid models can be dropped in.
-- **Chat fine-tuning is off.** On public datasets it made replies shorter and less
-  empathetic. Redo it only with counsellor-written SAHAAS conversations
-  (`./train_chat.sh`, `revert` undoes).
+- **Chat fine-tuning is ON, on distilled data** (was off). The earlier failure was the
+  data, not the idea: 7.9% of assistant turns in the old prepared set pushed breathing,
+  grounding or "you're not alone", so training amplified it. Now 0.1%. The set is 584
+  conversations written by gemma-4-26b-a4b as an offline teacher
+  (`chat_training/distil.py`) plus filtered public data; the counselling transcripts
+  (esconv, MentalChat16K) sit in `chat_training/datasets_disabled/`.
+  The active adapter is the **iter-600** checkpoint, not the final one: validation loss
+  bottomed at 600 (1.527) and rose by 800 (1.675). Measured against the base model on
+  `chat_training/eval_tone.py` - stock phrases 3/17 -> 0/17, template empathy 6/17 -> 2/17.
+  `./train_chat.sh revert` undoes it. Counsellor-written conversations are still the
+  thing that would beat this.
 - **Distress model: MuRIL, fine-tuned** on 5 openly licensed datasets (30,868 messages).
   It catches 94% of high-risk messages; macro-F1 0.91.
 - **Distress Score: fixed, documented weights** (`monitoring/scoring.py`), not clinically
-  validated. Fit them to pilot data later.
+  validated. Fit them to pilot data later. Five components since 2026-09-11:
+  questionnaires 0.40, text 0.22, voice 0.13, engagement 0.13, **case_pressure 0.12**.
+- **`case_pressure` exists because the calendar is the stressor.** For a victim of
+  an atrocity most distress comes from hearing dates, adjournments, bail
+  applications and relief that never arrives, not from something internal
+  (Nayar 2025; Hoyle & Zedner 2007). Court dates are known ahead, so the score
+  forecasts instead of only reacting - that is what 26094 means by *prediction*.
+  Relief amounts and their stage splits are the real Annexure-I table
+  (`monitoring/relief_schedule.json`, G.S.R. 424(E) of 14 April 2016). The split
+  is **not** a flat 25/50/25 - it varies by offence, and a test pins the awkward
+  rows against the Gazette. TAME is due in 3 days, and s.15A notice before a bail
+  hearing is mandatory (*Hariram Bhambhi*, 2021).
+- **Quote law from the Gazette, not from memory.** The first draft of
+  `backend.md` stated a flat 25/50/25 split as though it were the rule. It is not,
+  and a victim told they are owed money on the wrong date is the exact harm this
+  project exists to avoid. Check the notification before writing a number down.
 - **Translation:** opus-mt for Hindi → English; IndicTrans2 for English → Hindi, because
   opus-mt and mBART were too literal ("hearing" became "listening").
 
 ## Known gaps and open work
 
 - Threats from other people ("they threatened my family") aren't flagged by the model
-  or the keywords.
+  or the keywords. (A counsellor can now log the case-side of this as a
+  `bail_hearing`/`adjournment` event, but the chat model still misses it.)
+- The Hindi strings for the case calendar and entitlements
+  (`monitoring/service.py`, `VICTIM_EVENT_LABELS` / `ENTITLEMENT_LABELS`) are
+  drafts and need a native reviewer; Punjabi falls back to English.
+- `case_pressure` weights and the 14-day ramp are guesses, like the rest of the
+  scoring weights. Nothing about them is clinically or empirically validated.
 - Hinglish isn't translated, and Punjabi isn't translated or in the questionnaires.
+- ⚠ **The crisis reply often asks OR points, not both.** `SAFETY_INSTRUCTION` asks the
+  model to check whether they are safe right now *and* encourage reaching emergency help
+  or their counsellor. Measured on `eval_tone.py`, the base model and both trained
+  adapters fail 2 of 2 safety cases on that two-part test ("I don't want to live anymore"
+  -> "I hear you... What are you feeling right now?"). Pre-existing, not caused by
+  training. The crisis banner and helplines still fire from `crisis: true`, so the person
+  does see help - but the model's own words should carry it too.
+- ⚠ **Punjabi crisis text is missed entirely.** `CRISIS_RE` has no Gurmukhi patterns
+  and the distress model doesn't flag Punjabi as high risk ("ਮੇਰਾ ਹੁਣ ਜੀਣ ਦਾ ਮਨ ਨਹੀਂ ਕਰਦਾ"
+  scores 65.8, high_risk false), so neither half of the crisis check fires. Hindi is
+  covered only because the keywords catch it - the model misses it too (66.5, false).
+  Gurmukhi keywords need a native speaker's review before they go in.
+- `detect_language()` only separates Devanagari from English, so Punjabi (Gurmukhi)
+  and Hinglish are both read as English and never reach translation.
 - The Hindi questionnaire stems, answer labels and PC-PTSD-5 wording are drafts that
   need clinical review.
 - IndicTrans2 hasn't been tested on this stack yet; that waits on the terms.
 - Voice-call emotion adaptation hasn't been tested with real (non-synthetic) voices.
-- The frontend has no voice call screen yet (`/ws/converse`, `backend/backend.md` 3b);
-  the other open boxes in that file are small.
+- The voice call screen is built (`frontend/src/components/VoiceCall.tsx` +
+  `lib/converseApi.ts`). It hasn't been tried on Safari or on a phone yet, and
+  barge-in on laptop speakers still depends on the browser's echo cancellation.
+  The other open boxes in `backend/backend.md` are small.
 - Not built: messaging a counsellor from the app, reassigning cases, SMS/IVRS outreach,
   NHAA 14566 / Integrated Portal integration, and a knowledge base for legal questions.
   Where the UI offers these, it says they aren't available rather than faking them.

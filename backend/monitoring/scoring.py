@@ -6,6 +6,8 @@ plus trend and alert rules.
   text            distress model scores of chat messages / voice transcripts (last 7 days)
   voice           negative affect in voice check-ins (last 7 days)
   engagement      going quiet: days since last contact, overdue questionnaires
+  case_pressure   the justice system's calendar: how close the next hearing is,
+                  repeated adjournments, and relief the person says never arrived
 
 Missing signals are left out and the weights renormalized; `confidence` is
 the share of weight that was available. Any crisis signal in the last 72 h
@@ -18,12 +20,14 @@ result and counsellor-confirmed crises.
 """
 
 import json
+from datetime import datetime, timedelta
 
 import numpy as np
 
 DAY = 86400.0
 
-WEIGHTS = {"questionnaires": 0.45, "text": 0.25, "voice": 0.15, "engagement": 0.15}
+WEIGHTS = {"questionnaires": 0.40, "text": 0.22, "voice": 0.13, "engagement": 0.13,
+           "case_pressure": 0.12}
 TIERS = [(75, "high"), (50, "elevated"), (25, "watch"), (0, "stable")]
 TIER_RANK = {"stable": 0, "watch": 1, "elevated": 2, "high": 3}
 
@@ -35,6 +39,19 @@ RISING_POINTS = 15            # 7-day rise that raises a "rising" alert
 TREND_POINTS = 10             # 7-day change that counts as rising/falling
 NEW_ACCOUNT_GRACE_DAYS = 3    # no engagement penalty right after signing up
 
+# Case pressure. A hearing is felt before it happens, so the ramp starts two
+# weeks out and peaks on the day. These are transparent starting values, like
+# the weights above - fit them to pilot data.
+HEARING_RAMP_DAYS = 14
+HEARING_KINDS = ("hearing", "bail_hearing", "parole", "trial_end")
+NOTICE_KINDS = ("bail_hearing", "parole")
+ADJOURNMENT_WINDOW_DAYS = 90
+ADJOURNMENT_POINTS = 10       # each adjournment in the window, capped
+ADJOURNMENT_CAP = 40
+ENTITLEMENT_POINTS = 40       # relief the person says never arrived
+ENTITLEMENT_OVERDUE_DAYS = 30
+NOTICE_WINDOW_DAYS = 7        # s.15A: notice must come before the hearing
+
 # questionnaire total -> 0-100 severity points, anchored on clinical bands
 ANCHORS = {
     "phq9": ([0, 5, 10, 15, 20, 27], [0, 25, 50, 70, 85, 100]),
@@ -44,6 +61,16 @@ ANCHORS = {
 }
 INSTRUMENT_WEIGHT = {"phq9": 1.0, "gad7": 1.0, "pcptsd5": 1.0, "phq4": 0.6}
 FULL_INSTRUMENTS = ("phq9", "gad7", "pcptsd5")
+
+
+def today_for(now):
+    """The calendar day `now` falls on, in the server's own timezone.
+
+    Court dates are stored as local YYYY-MM-DD, so everything that compares
+    against them has to agree on where the day boundary is. Using UTC here and
+    local time elsewhere put the two half a day apart in IST, which showed up as
+    a hearing being "today" for the alert and "tomorrow" on the victim's card."""
+    return datetime.fromtimestamp(now).date()
 
 
 def tier_for(score):
@@ -106,12 +133,17 @@ def compute(conn, user_id, now):
         components["engagement"] = engagement
         details["engagement"] = {"days_since_last_contact": round(quiet_days, 1)}
 
+    pressure, pressure_detail = case_pressure(conn, user_id, now)
+    if pressure is not None:
+        components["case_pressure"] = pressure
+        details["case_pressure"] = pressure_detail
+
     if not components:
         return None
 
     available = sum(WEIGHTS[k] for k in components)
     score = sum(WEIGHTS[k] * v for k, v in components.items()) / available
-    if set(components) == {"engagement"}:
+    if set(components) <= {"engagement"}:
         # Silence alone is a reason to reach out, not evidence of high distress
         score = min(score, 49.0)
 
@@ -140,6 +172,76 @@ def compute(conn, user_id, now):
         "components": {k: round(v, 1) for k, v in components.items()},
         "details": details,
     }
+
+
+def case_pressure(conn, user_id, now):
+    """0-100 from the case calendar alone, plus the reasons behind it.
+
+    Returns (None, None) when there is nothing on the calendar, so the weight is
+    renormalised away rather than counting a quiet docket as calm."""
+    today = today_for(now)
+    detail, points = {}, 0.0
+
+    horizon = (today + timedelta(days=HEARING_RAMP_DAYS)).isoformat()
+    row = conn.execute(
+        "SELECT event_date, kind FROM case_events WHERE user_id = ? AND kind IN "
+        f"({','.join('?' * len(HEARING_KINDS))}) AND event_date BETWEEN ? AND ? "
+        "ORDER BY event_date LIMIT 1",
+        (user_id, *HEARING_KINDS, today.isoformat(), horizon)).fetchone()
+    if row:
+        days = (datetime.strptime(row["event_date"], "%Y-%m-%d").date() - today).days
+        hearing = 100.0 * (HEARING_RAMP_DAYS - days) / HEARING_RAMP_DAYS
+        points += hearing
+        detail["next_hearing"] = {"date": row["event_date"], "kind": row["kind"],
+                                  "days_until": days, "points": round(hearing, 1)}
+
+    since = (today - timedelta(days=ADJOURNMENT_WINDOW_DAYS)).isoformat()
+    adjournments = conn.execute(
+        "SELECT COUNT(*) FROM case_events WHERE user_id = ? AND kind = 'adjournment' "
+        "AND event_date BETWEEN ? AND ?", (user_id, since, today.isoformat())).fetchone()[0]
+    if adjournments:
+        got = min(adjournments * ADJOURNMENT_POINTS, ADJOURNMENT_CAP)
+        points += got
+        detail["adjournments"] = {"count": adjournments, "window_days": ADJOURNMENT_WINDOW_DAYS,
+                                  "points": got}
+
+    overdue = (today - timedelta(days=ENTITLEMENT_OVERDUE_DAYS)).isoformat()
+    unpaid = conn.execute(
+        "SELECT COUNT(*) FROM entitlements WHERE user_id = ? AND status = 'not_received' "
+        "AND (due_on IS NULL OR due_on <= ?)", (user_id, overdue)).fetchone()[0]
+    if unpaid:
+        points += ENTITLEMENT_POINTS
+        detail["unpaid_entitlements"] = {"count": unpaid, "points": ENTITLEMENT_POINTS}
+
+    if not detail:
+        return None, None
+    return min(points, 100.0), detail
+
+
+def forecast(conn, user_id, current_score, now):
+    """What the score is likely to reach because of a hearing that is coming.
+
+    Only the calendar part moves: everything else is held at today's value, so
+    this is 'today, plus the hearing getting closer', not a claim about mood."""
+    today = today_for(now)
+    horizon = (today + timedelta(days=HEARING_RAMP_DAYS)).isoformat()
+    row = conn.execute(
+        "SELECT event_date, kind FROM case_events WHERE user_id = ? AND kind IN "
+        f"({','.join('?' * len(HEARING_KINDS))}) AND event_date BETWEEN ? AND ? "
+        "ORDER BY event_date LIMIT 1",
+        (user_id, *HEARING_KINDS, today.isoformat(), horizon)).fetchone()
+    if row is None or current_score is None:
+        return None
+    pressure_now, _ = case_pressure(conn, user_id, now)
+    # On the day itself the hearing term reaches 100; swap today's value for it
+    # and leave the other pressures (adjournments, unpaid relief) where they are.
+    days = (datetime.strptime(row["event_date"], "%Y-%m-%d").date() - today).days
+    hearing_now = 100.0 * (HEARING_RAMP_DAYS - days) / HEARING_RAMP_DAYS
+    peak_pressure = min(100.0, (pressure_now or 0.0) - hearing_now + 100.0)
+    delta = (peak_pressure - (pressure_now or 0.0)) * WEIGHTS["case_pressure"]
+    return {"peak_score": round(min(100.0, current_score + delta), 1),
+            "peak_on": row["event_date"], "days_until": days,
+            "driver": f"{row['kind'].replace('_', ' ').title()} on {row['event_date']}"}
 
 
 def trend(conn, user_id, now):
@@ -200,6 +302,37 @@ def evaluate_alerts(conn, user_id, result, trend_info, upcoming, now):
     if result["components"].get("engagement", 0) >= 70 and TIER_RANK[tier] >= TIER_RANK["watch"]:
         days = result["details"]["engagement"]["days_since_last_contact"]
         raise_alert("watch", "gone_quiet", f"No contact for {days:.0f} days while distress was {tier}", 72)
+
+    pressure_detail = result["details"].get("case_pressure", {})
+    hearing = pressure_detail.get("next_hearing")
+    if hearing and hearing["days_until"] <= 7:
+        when = "today" if hearing["days_until"] == 0 else f"in {hearing['days_until']} day(s)"
+        raise_alert("watch", "hearing_soon",
+                    f"{hearing['kind'].replace('_', ' ').title()} {when} ({hearing['date']})", 72)
+
+    # s.15A: notice before a bail or parole hearing is mandatory, and its absence
+    # voids the order (Hariram Bhambhi v. Satyanarayan, 2021). NULL counts as
+    # missing, because nobody recorded that it was given.
+    today = today_for(now)
+    for r in conn.execute(
+            "SELECT event_date, kind, notice_given FROM case_events WHERE user_id = ? AND kind IN "
+            f"({','.join('?' * len(NOTICE_KINDS))}) AND event_date BETWEEN ? AND ?",
+            (user_id, *NOTICE_KINDS, today.isoformat(),
+             (today + timedelta(days=NOTICE_WINDOW_DAYS)).isoformat())).fetchall():
+        if not r["notice_given"]:
+            raise_alert("high", "bail_no_notice",
+                        f"{r['kind'].replace('_', ' ').title()} on {r['event_date']} and no s.15A "
+                        "notice to the victim is recorded", 24)
+
+    unpaid = pressure_detail.get("unpaid_entitlements")
+    if unpaid:
+        raise_alert("high", "entitlement_unpaid",
+                    f"{unpaid['count']} relief payment(s) overdue and reported as never received", 72)
+
+    adjournments = pressure_detail.get("adjournments")
+    if adjournments and adjournments["count"] >= 3:
+        raise_alert("watch", "adjournment_streak",
+                    f"{adjournments['count']} adjournments in {adjournments['window_days']} days", 168)
 
     soon = [e for e in upcoming if e["days_until"] <= 3]
     if soon and TIER_RANK[tier] >= TIER_RANK["elevated"]:

@@ -258,6 +258,9 @@ hearing, without waiting for them to say anything.
 
 - [ ] **Victim - "What's coming up":** `GET /me/case`. Returns
       `{"upcoming": [{id, kind, date, days_until, label}], "entitlements": [...]}`.
+      Victim-side `kind` is deliberately coarse - `court_date`, `date_changed`,
+      `case_step`, `support`, `counselling` - so the docket word never reaches
+      the screen. A bail hearing arrives as `court_date`. Use it for the icon only.
       `label` is already written in the victim's language and is non-clinical
       ("Court date on Thursday"). Show it on Home as a calm, plain card. Never
       add a countdown that feels like a threat, and never show `forecast`
@@ -277,12 +280,35 @@ New `kind` values for events: `bail_hearing`, `parole`, `adjournment`,
 
 ### 5b. Entitlement tracker ("what you are owed, and did it arrive")
 
-Under the SC/ST (Prevention of Atrocities) Rules, relief is paid in **stages**:
-25% when the FIR is filed, 50% at charge sheet, 25% when the trial ends
-(₹85,000-₹8,25,000 depending on the offence). Travel and maintenance (TAME,
-Rule 11) must be paid within **three days** of any trip to the police, hospital
-or court. Most victims are never told any of this, and economic hardship is
-named explicitly in the problem statement.
+Under the SC/ST (Prevention of Atrocities) Rules relief is paid in **stages**, and
+`backend/monitoring/relief_schedule.json` now holds the real Annexure-I table as
+notified in **G.S.R. 424(E), 14 April 2016** (Ministry of Social Justice and
+Empowerment - the same ministry as the problem statement). Amounts run
+₹85,000-₹8,25,000.
+
+**The split is not one rule.** An earlier draft of this document said "25/50/25"
+for everything; the Gazette does not, and paying attention to that difference is
+the whole point of the feature - telling someone they are owed money on a date
+the rules do not name is worse than saying nothing.
+
+| offence | total | stages |
+|---|---|---|
+| Insult in public view, 3(1)(r) | ₹1,00,000 | 25% FIR · 50% charge sheet · 25% conviction |
+| Dumping excreta, 3(1)(b)/(c) | ₹1,00,000 | **10%** FIR · 50% charge sheet · **40%** conviction |
+| Assault on a woman, IPC 354/354A/354B | ₹2,00,000 | **50% FIR** · 25% charge sheet · 25% end of trial |
+| Voyeurism / stalking, IPC 354C/354D | ₹2,00,000 | 10% FIR · 50% charge sheet · 40% conviction |
+| Rape, IPC 375 | ₹5,00,000 | **50% after the medical report** · 25% charge sheet · 25% end of trial |
+| Gang rape, IPC 376D | ₹8,25,000 | 50% after the medical report · 25% charge sheet · 25% end of trial |
+| Murder or death | ₹8,25,000 | **50% after the post-mortem** · 50% charge sheet |
+| Social or economic boycott, 3(1)(zc) | ₹1,00,000 | **100% at charge sheet** |
+
+Travel and maintenance (TAME, Rule 11) is separate and must be paid within
+**three days** of a trip to the police, hospital or court. Most victims are never
+told any of this, and economic hardship is named explicitly in the problem
+statement.
+
+Stage values are therefore `fir`, `chargesheet`, `conviction`, `trial_end`,
+`medical_report`, `post_mortem`, `tame`, `other`.
 
 - [ ] **Victim:** the `entitlements` array from `GET /me/case` →
       `[{id, stage, label, due_on, status}]`. Render each as a single question
@@ -299,8 +325,17 @@ named explicitly in the problem statement.
       update with `PATCH /counsellor/entitlements/{id}`.
       A `not_received` answer is the actionable one - surface it prominently.
 
-`stage` values: `fir`, `chargesheet`, `trial_end`, `tame`, `other`.
 `status` values: `due`, `received`, `not_received`, `unknown`.
+
+- [ ] **Counsellor - create from the schedule instead of typing amounts:**
+      `GET /counsellor/relief-schedule` returns the whole Annexure-I table
+      (`entries[]` with `section`, `offence`, `amount`, `stages[]`, and
+      `stage_labels` for wording). `POST /counsellor/victims/{id}/relief`
+      `{"section": "IPC 375"}` creates the **entire staged set** in one call,
+      with each amount already worked out, and returns
+      `{section, offence, total, entitlements[]}`. An unknown section is a 422,
+      never a guess. Prefer this over the manual `POST .../entitlements`; keep the
+      manual one for TAME and anything off-schedule.
 
 ### 5c. Engagement: silence is a signal, not an absence
 

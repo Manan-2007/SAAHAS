@@ -227,6 +227,14 @@ export interface SessionInfo {
   current: boolean;
 }
 
+/** One stored turn of the conversation, from the chat or a voice call. */
+export interface ConversationTurn {
+  role: 'user' | 'assistant';
+  content: string;
+  at: string;
+  channel: 'chat' | 'voice';
+}
+
 export interface Recording {
   id: string;
   at: string;
@@ -337,9 +345,32 @@ export interface Forecast {
 }
 
 // GET /me/case — victim's own calendar. Gentle, pre-translated, NO numbers.
+// The victim side deliberately gets a COARSER kind than the counsellor side: the
+// backend collapses bail_hearing/parole/trial_end into `court_date` so the docket
+// word never reaches the screen. Use it for the icon only — the wording is in
+// `label`, which the backend has already translated.
+export type VictimEventKind =
+  | 'court_date'
+  | 'date_changed'
+  | 'case_step'
+  | 'support'
+  | 'counselling';
+
+// Same collapse, for the /me/events fallback path, which still returns raw kinds.
+export const victimKind = (kind: EventKind): VictimEventKind =>
+  kind === 'hearing' || kind === 'bail_hearing' || kind === 'parole' || kind === 'trial_end'
+    ? 'court_date'
+    : kind === 'adjournment'
+      ? 'date_changed'
+      : kind === 'compensation'
+        ? 'support'
+        : kind === 'counselling'
+          ? 'counselling'
+          : 'case_step';
+
 export interface CaseUpcoming {
   id: number;
-  kind: EventKind;
+  kind: VictimEventKind;
   date: string;
   days_until: number;
   label: string;     // already written in the victim's language, non-clinical
@@ -398,6 +429,12 @@ export const api = {
     apiFetch<Questionnaire>(`/questionnaires/${encodeURIComponent(instrument)}?lang=${lang}`, { auth: false }),
   submitQuestionnaire: (instrument: string, answers: number[]) =>
     apiFetch<SubmitResult>(`/me/questionnaires/${encodeURIComponent(instrument)}`, json('POST', { answers })),
+  // What was said before, so the chat and the voice call carry on as one
+  // conversation. Empty unless the person consented to keeping messages.
+  conversation: (limit?: number) =>
+    apiFetch<{ turns: ConversationTurn[]; stored: boolean }>(
+      `/me/conversation${limit ? `?limit=${limit}` : ''}`),
+  forgetConversation: () => apiFetch<{ deleted: number }>('/me/conversation', json('DELETE')),
   recordings: () => apiFetch<Recording[]>('/me/recordings'),
   deleteRecording: (id: string) => apiFetch<{ deleted: boolean }>(`/me/recordings/${id}`, json('DELETE')),
 
@@ -411,7 +448,12 @@ export const api = {
   acknowledgeAlert: (id: number) => apiFetch<Alert>(`/counsellor/alerts/${id}/acknowledge`, json('POST')),
   resolveAlert: (id: number, note?: string) =>
     apiFetch<Alert>(`/counsellor/alerts/${id}/resolve`, json('POST', { note: note ?? null })),
-  addEvent: (victimId: string, event: { kind: EventKind; date: string; title: string }) =>
+  addEvent: (
+    victimId: string,
+    // notice_given carries s.15A: notice to the victim before a bail or parole
+    // hearing is mandatory, and omitting it is what raises `bail_no_notice`.
+    event: { kind: EventKind; date: string; title: string; notice_given?: boolean },
+  ) =>
     apiFetch<CaseEvent>(`/counsellor/victims/${victimId}/events`, json('POST', event)),
   victimRecordings: (victimId: string) => apiFetch<Recording[]>(`/counsellor/victims/${victimId}/recordings`),
 };

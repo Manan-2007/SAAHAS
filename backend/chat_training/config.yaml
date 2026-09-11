@@ -4,7 +4,7 @@
 # Base model to fine-tune (MLX format, Apple Silicon). Qwen3-4B trains
 # comfortably on a 24 GB Mac. For a stronger (slower) companion, try
 # mlx-community/Qwen3-14B-4bit - it needs ~18 GB free while training.
-base_model: mlx-community/Qwen3-4B-Instruct-2507-4bit
+base_model: mlx-community/Qwen3-8B-4bit
 
 # Trained LoRA adapter, relative to this folder. The backend loads it
 # automatically and hot-reloads it when a new training run finishes.
@@ -14,21 +14,48 @@ data:
   # Short system line baked into training examples (the full
   # system_prompt.txt is ~350 tokens and would make every step ~3x slower).
   # Leave empty to train with the full prompt.
-  training_system_prompt: You are SAHAAS, a warm, trauma-informed emotional support companion.
+  training_system_prompt: You are SAHAAS. You talk like a warm, ordinary person - not a counsellor.
   valid_fraction: 0.05
   max_context_turns: 8     # conversation turns kept before each reply
-  min_reply_chars: 40      # drop one-liners ("ok", "I see") - little empathy to learn
+  min_reply_chars: 20      # drop "ok"/"I see" but keep short natural replies:
+                           # "Nothing on my end - I'm just here." is 34 chars and
+                           # is exactly the register we are training towards.
   max_reply_chars: 1200    # drop essay answers - chat replies should feel conversational
   max_turn_chars: 2000
   drop_personal_claims: true   # drop replies where the supporter describes their own life
                                # ("my wife...", "when I was a kid") - SAHAAS must not pretend to have one
   max_per_source: 8000     # stops one huge dataset drowning out the others
   source_caps:             # per-dataset overrides (folder name under datasets/)
-    Estwld__empathetic_dialogues_llm: 2000   # casual chit-chat: some adds warmth, too much makes replies small-talky
+    Estwld__empathetic_dialogues_llm: 800    # casual chit-chat: some adds warmth, too much makes replies small-talky
+    # Hinglish-Everyday-Conversations is parked in datasets_disabled/ for this
+    # run: it teaches casual register in romanized Hindi, and the goal here is
+    # English register. Re-enable it when working on language.
   max_examples: 20000      # overall cap (0 = no cap)
+  # Replies that push an agenda instead of talking. 7.9% of the old prepared set
+  # contained one of these, which is why training on it made the tics worse.
+  # "It sounds like" is deliberately NOT here: system_prompt.txt asks for it as
+  # tentative reflection, and the problem was overuse, not the phrase.
+  drop_phrases:
+    - "not alone"
+    - "deep breath"
+    - "breathing exercise"
+    - "ground yourself"
+    - "grounding technique"
+    - "i'm here for you"
+    - "i am here for you"
+    - "reached out"
+    - "no judgment"
+    - "take your time"
+    - "have you tried"
+    - "i'm sorry to hear"
+    - "i understand how you feel"
+    - "i know how you feel"
+    - "stay strong"
+    - "you are so strong"
+    - "everything happens for a reason"
 
 training:
-  iters: 1000              # ~20-40 min for the 4B model on an M4 Pro
+  iters: 1000              # ~20-40 min for 4B, ~45-70 min for 8B on an M4 Pro
   batch_size: 4
   learning_rate: 1.0e-5
   num_layers: 16           # transformer layers that get LoRA adapters (-1 = all)
@@ -37,7 +64,7 @@ training:
   lora_scale: 20.0
   max_seq_length: 2048
   grad_checkpoint: true    # lower memory, slightly slower
-  steps_per_eval: 200
+  steps_per_eval: 100
   save_every: 100
   val_batches: 10
 

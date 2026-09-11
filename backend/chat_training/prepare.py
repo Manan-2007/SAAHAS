@@ -230,6 +230,9 @@ def keep(example, d):
     reply = example[-1]["content"]
     if not d["min_reply_chars"] <= len(reply) <= d["max_reply_chars"]:
         return False
+    low = reply.lower()
+    if any(phrase in low for phrase in d.get("drop_phrases") or ()):
+        return False
     if any(len(m["content"]) > d["max_turn_chars"] for m in example):
         return False
     if d.get("drop_personal_claims", True) and PERSONAL_CLAIM_RE.search(reply):

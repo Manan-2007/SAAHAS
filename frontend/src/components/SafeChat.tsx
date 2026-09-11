@@ -23,6 +23,7 @@ import {
   chatReply,
   startLiveSession,
 } from '../lib/emotionApi';
+import { ConversationTurn, api } from '../lib/api';
 import { SessionSummary, Trend, applyMetricUpdates, reflectionFor, summarize } from '../lib/voiceReflection';
 
 const VOICE_NOTE_MAX_SECONDS = 60;
@@ -76,6 +77,30 @@ const welcomeMessage = (name: string | null): ChatMessage => ({
   senderName: 'SAHAAS',
   text: `Hi${name ? ` ${name}` : ''}. This is your private space - talk about anything, big or small, in English or Hindi. I'm SAHAAS, an AI companion.`,
   timestamp: timestampNow(),
+});
+
+const resumedNote = (): ChatMessage => ({
+  id: 'note-resumed',
+  sender: 'sahaas',
+  senderName: 'SAHAAS',
+  text: "Picking up where we left off. Everything here stays private and encrypted, and you can clear it whenever you want.",
+  timestamp: timestampNow(),
+});
+
+const atTime = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? timestampNow()
+    : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+// One stored turn -> one bubble. Voice-call turns look the same as typed ones:
+// it is all one conversation.
+const fromStored = (turn: ConversationTurn, i: number): ChatMessage => ({
+  id: `past-${i}`,
+  sender: turn.role === 'user' ? 'user' : 'sahaas',
+  senderName: turn.role === 'user' ? 'You' : 'SAHAAS Sanctuary',
+  text: turn.content,
+  timestamp: atTime(turn.at),
 });
 
 // Messages with a note- id are on-screen notices, never part of the conversation the model sees
@@ -134,6 +159,26 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
       voiceSessionRef.current = null;
     };
   }, []);
+
+  // What was said before - in this chat or in a voice call - so the
+  // conversation carries on instead of restarting. Signed-in victims only:
+  // a guest has no token and nothing was kept for them.
+  useEffect(() => {
+    if (user.role !== 'victim') return;
+    let live = true;
+    api.conversation()
+      .then(({ turns }) => {
+        if (!live || !mountedRef.current || turns.length === 0) return;
+        messagesRef.current = [resumedNote(), ...turns.map(fromStored)];
+        setMessages(messagesRef.current);
+      })
+      .catch(() => {
+        /* nothing kept, or the backend is down: the fresh welcome still stands */
+      });
+    return () => {
+      live = false;
+    };
+  }, [user.role]);
 
   useEffect(() => {
     if (voiceStage !== 'recording') return;

@@ -22,7 +22,7 @@ import {
 import { AppView, LanguageCode, WellBeingMetric } from '../types';
 import { TRANSLATIONS } from '../data/mockData';
 import { useAuth } from '../auth/AuthProvider';
-import { CaseUpcoming, DueCheckin, EventKind, api } from '../lib/api';
+import { CaseUpcoming, DueCheckin, VictimEventKind, api, victimKind } from '../lib/api';
 
 const TREND_COLORS: Record<WellBeingMetric['trend'], string> = {
   Improving: '#9c6743',
@@ -34,17 +34,15 @@ const TREND_COLORS: Record<WellBeingMetric['trend'], string> = {
 // Gentle, non-clinical tags. For the justice-calendar kinds (bail/parole/…) the
 // backend already sends a softened `label`; the tag never says bail, accused or
 // released — victims see dates and reassurance, never legal alarm.
-const EVENT_TAGS: Record<EventKind, string> = {
-  hearing: 'Preparation help is available',
-  fir: 'A step in your case',
-  chargesheet: 'A step in your case',
-  compensation: 'Ask your advocate about the next step',
+// Keyed by the COARSE victim kind that /me/case sends, not the counsellor's raw
+// kind. Keying this by `hearing`/`bail_hearing` rendered `undefined` for every
+// real event, because the backend never sends those words to a victim.
+const EVENT_TAGS: Record<VictimEventKind, string> = {
+  court_date: 'Preparation help is available',
+  date_changed: 'Your date has changed',
+  case_step: 'A step in your case',
+  support: 'Ask your advocate about the next step',
   counselling: 'With your counsellor',
-  other: 'Case date',
-  bail_hearing: 'Preparation help is available',
-  parole: 'Preparation help is available',
-  adjournment: 'Your date has changed',
-  trial_end: 'An important date',
 };
 
 const eventDate = (ev: { date: string }) => new Date(`${ev.date}T00:00:00`);
@@ -105,7 +103,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           .events()
           .then((list) =>
             live &&
-            setEvents(take(list.map((e) => ({ id: e.id, kind: e.kind, date: e.date, days_until: e.days_until, label: e.title })))),
+            setEvents(take(list.map((e) => ({
+              id: e.id,
+              kind: victimKind(e.kind),
+              date: e.date,
+              days_until: e.days_until,
+              label: e.title,
+            })))),
           )
           .catch(() => live && setEvents([])),
       );
@@ -232,6 +236,32 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             </div>
           </div>
           <div className="w-8 h-8 rounded-full bg-[#efe7d6] flex items-center justify-center shrink-0 group-hover:bg-[#9c6743] group-hover:text-white transition-colors">
+            <ArrowRight className="w-4 h-4" />
+          </div>
+        </button>
+
+        {/* Talk with SAHAAS: the live spoken conversation */}
+        <button
+          onClick={() => onNavigate('voice-call')}
+          className="group text-left relative rounded-2xl bg-gradient-to-r from-[#9c6743] to-[#b3654a] text-white p-4 shadow-xs hover:shadow-md transition-all active:scale-[0.99] flex items-center justify-between gap-4 border border-[#e5dac4]/60 focus:outline-none"
+        >
+          <div className="flex items-start gap-3.5 min-w-0">
+            <div className="relative w-12 h-12 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
+              <Headphones className="w-6 h-6" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-base font-semibold">Talk out loud</span>
+                <span className="px-2 py-0.5 rounded-full bg-white/20 text-[10px] font-semibold uppercase tracking-wider">
+                  Live
+                </span>
+              </div>
+              <p className="text-xs text-[#efe7d6] mt-0.5 line-clamp-2 leading-relaxed">
+                A spoken back-and-forth. Speak, pause, and it answers — talk over it whenever you want.
+              </p>
+            </div>
+          </div>
+          <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center shrink-0 group-hover:bg-white group-hover:text-[#9c6743] transition-colors">
             <ArrowRight className="w-4 h-4" />
           </div>
         </button>
@@ -399,7 +429,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     </span>
                   </div>
                 </div>
-                {ev.kind === 'hearing' && (
+                {ev.kind === 'court_date' && (
                   <button
                     onClick={() => onNavigate('legal-prep')}
                     className="px-3 py-1.5 rounded-lg bg-white text-[#352e24] hover:bg-[#9c6743] hover:text-white text-xs font-semibold shadow-2xs transition-colors shrink-0 border border-[#e5dac4]"

@@ -37,12 +37,14 @@ type Phase = 'idle' | 'connecting' | 'recording' | 'finishing' | 'done';
 
 interface VoiceCompanionProps {
   onBack: () => void;
+  /** The live back-and-forth conversation ("Talk with SAHAAS"). */
+  onTalk: () => void;
   onUpdateMetric: (metricId: string, trend: Trend, description?: string) => void;
 }
 
 const SESSION_SECONDS = 60;
 
-export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdateMetric }) => {
+export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onTalk, onUpdateMetric }) => {
   const [phase, setPhase] = useState<Phase>('idle');
   const [secondsRemaining, setSecondsRemaining] = useState(SESSION_SECONDS);
   const [backend, setBackend] = useState<'checking' | 'online' | 'offline'>('checking');
@@ -279,6 +281,25 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onUpdate
           <span>Ephemeral Audio · Never saved</span>
         </span>
       </div>
+
+      {!isRecording && !isBusy && (
+        <button
+          onClick={onTalk}
+          className="group text-left rounded-2xl bg-white border border-[#e5dac4] p-3.5 flex items-center gap-3 hover:shadow-md transition-all active:scale-[0.99] shadow-2xs"
+        >
+          <span className="w-10 h-10 rounded-full bg-[#ecdcbf] flex items-center justify-center shrink-0">
+            <Volume2 className="w-5 h-5 text-[#3a2c1e]" />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-semibold text-[#352e24] group-hover:text-[#9c6743] transition-colors">
+              Rather have a conversation?
+            </span>
+            <span className="block text-xs text-[#5c5142] mt-0.5 leading-relaxed">
+              Talk with SAHAAS out loud and it answers back — interrupt it any time.
+            </span>
+          </span>
+        </button>
+      )}
 
       {offline && !isRecording && (
         <div className="rounded-2xl bg-[#fff8f1] border border-[#f3dcc3] p-4 flex items-start gap-3 text-xs text-[#5c4630]">

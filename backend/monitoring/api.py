@@ -90,6 +90,31 @@ class EventRequest(BaseModel):
     kind: Literal[service.EVENT_KINDS]
     date: dt.date
     title: str = Field(min_length=1, max_length=200)
+    # s.15A: mandatory notice before a bail or parole hearing. None means nobody
+    # recorded it either way, which the watchdog treats as missing.
+    notice_given: bool | None = None
+
+
+class ReliefFromScheduleRequest(BaseModel):
+    section: str = Field(min_length=1, max_length=60)
+
+
+class EntitlementRequest(BaseModel):
+    stage: Literal[service.ENTITLEMENT_STAGES]
+    amount: float | None = Field(default=None, ge=0)
+    due_on: dt.date | None = None
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class EntitlementUpdate(BaseModel):
+    status: Literal[service.ENTITLEMENT_STATUS] | None = None
+    amount: float | None = Field(default=None, ge=0)
+    due_on: dt.date | None = None
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class EntitlementAnswer(BaseModel):
+    status: Literal[service.ENTITLEMENT_STATUS]
 
 
 class ResolveRequest(BaseModel):
@@ -212,6 +237,22 @@ def delete_me(user=Depends(auth.current_user)):
 
 # ---------------------------------------------------------------- recordings
 
+@router.get("/me/conversation")
+def my_conversation(limit: int = Query(default=service.CONVERSATION_TURNS, ge=1, le=100),
+                    user=Depends(auth.victim)):
+    """The last turns of the conversation, oldest first, so the chat screen and
+    the voice call carry on from where they left off. Empty without the
+    store_messages consent - nothing was kept in that case."""
+    return {"turns": service.conversation(user["id"], limit),
+            "stored": bool(user["consent"].get("store_messages"))}
+
+
+@router.delete("/me/conversation")
+def forget_my_conversation(user=Depends(auth.victim)):
+    """Erases the stored conversation without touching the check-in timeline."""
+    return {"deleted": service.forget_conversation(user["id"])}
+
+
 @router.get("/me/recordings")
 def my_recordings(user=Depends(auth.victim)):
     return service.list_recordings(user["id"])
@@ -238,6 +279,17 @@ def submit_questionnaire(instrument: str, req: AnswersRequest, user=Depends(auth
         return service.submit_questionnaire(user, instrument, req.answers, req.channel)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/me/case")
+def my_case(user=Depends(auth.victim)):
+    """Dates and entitlements only - never a score, tier or amount."""
+    return service.my_case(user)
+
+
+@router.post("/me/entitlements/{entitlement_id}")
+def answer_entitlement(entitlement_id: int, req: EntitlementAnswer, user=Depends(auth.victim)):
+    return _or_404(service.answer_entitlement, user, entitlement_id, req.status)
 
 
 @router.get("/me/due")
@@ -274,7 +326,47 @@ def victim_timeline(victim_id: str, days: int = Query(30, ge=1, le=365), user=De
 
 @router.post("/counsellor/victims/{victim_id}/events")
 def add_event(victim_id: str, req: EventRequest, user=Depends(auth.counsellor)):
-    return _or_404(service.add_event, user, victim_id, req.kind, req.date.isoformat(), req.title)
+    return _or_404(service.add_event, user, victim_id, req.kind, req.date.isoformat(), req.title,
+                   req.notice_given)
+
+
+@router.get("/counsellor/forecast")
+def caseload_forecast(user=Depends(auth.counsellor)):
+    """Who is predicted to climb because of what is on the calendar."""
+    return service.caseload_forecast(user)
+
+
+@router.get("/counsellor/victims/{victim_id}/entitlements")
+def victim_entitlements(victim_id: str, user=Depends(auth.counsellor)):
+    return _or_404(service.list_entitlements, user, victim_id)
+
+
+@router.post("/counsellor/victims/{victim_id}/entitlements")
+def add_entitlement(victim_id: str, req: EntitlementRequest, user=Depends(auth.counsellor)):
+    return _or_404(service.add_entitlement, user, victim_id, req.stage, req.amount,
+                   req.due_on.isoformat() if req.due_on else None, req.note)
+
+
+@router.get("/counsellor/relief-schedule")
+def relief_schedule(user=Depends(auth.counsellor)):
+    """Annexure-I of the SC/ST (PoA) Rules as notified - amounts and stage splits."""
+    return service.relief_schedule()
+
+
+@router.post("/counsellor/victims/{victim_id}/relief")
+def add_relief_from_schedule(victim_id: str, req: ReliefFromScheduleRequest,
+                             user=Depends(auth.counsellor)):
+    """Create the whole staged set for one offence from the Gazette schedule."""
+    try:
+        return _or_404(service.add_relief_from_schedule, user, victim_id, req.section)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.patch("/counsellor/entitlements/{entitlement_id}")
+def update_entitlement(entitlement_id: int, req: EntitlementUpdate, user=Depends(auth.counsellor)):
+    return _or_404(service.update_entitlement, user, entitlement_id, req.status, req.amount,
+                   req.due_on.isoformat() if req.due_on else None, req.note)
 
 
 @router.delete("/counsellor/events/{event_id}")

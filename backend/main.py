@@ -504,9 +504,11 @@ async def chat(req : ChatRequest , user = Depends(monitoring_auth.optional_user)
     # Signed-in victims: the message's distress feeds their timeline even if
     # the chat model itself is unavailable
     recorded = False
-    if user is not None and user["role"] == "victim":
+    is_victim = user is not None and user["role"] == "victim"
+    if is_victim:
         await run_in_threadpool(monitoring.record_chat , user , text , distress_result ,
                                 at_risk or bool(CRISIS_RE.search(text)))
+        await run_in_threadpool(monitoring.remember_message , user , "user" , text , "chat")
         recorded = True
     if chat_engine is None:
         raise HTTPException(status_code=503 , detail="Chat model unavailable on this server")
@@ -515,6 +517,10 @@ async def chat(req : ChatRequest , user = Depends(monitoring_auth.optional_user)
             chat_engine.submit([m.model_dump() for m in req.messages] , tone , at_risk))
     except Exception as e:
         raise HTTPException(status_code=503 , detail=f"Chat model failed: {e}")
+    # The reply is kept too: without it the stored conversation is one-sided
+    # and reads as a monologue when it is loaded back.
+    if is_victim:
+        await run_in_threadpool(monitoring.remember_message , user , "assistant" , result["reply"] , "chat")
     return {**result , "distress" : distress_result , "model" : chat_engine.model_name , "recorded" : recorded}
 
 # Live one-on-one voice conversation (voice_agent/): Whisper hears the words,
@@ -528,6 +534,7 @@ voice_deps = SimpleNamespace(
     analyze=analyze_and_predict , speech_segments=speech_segments , chat=chat_engine ,
     distress=distress_engine , crisis_re=CRISIS_RE , crisis_message=monitoring.crisis_message ,
     record_chat=monitoring.record_chat , record_voice=record_voice ,
+    conversation=monitoring.conversation , remember=monitoring.remember_message ,
     user_for_token=monitoring_auth.user_for_token , emotions=EMOTIONS , pick_headline=pick_headline ,
     SpeakerSession=SpeakerSession)
 

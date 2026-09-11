@@ -18,7 +18,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
   const isHomeActive = currentView === 'home-dashboard';
   const isChatActive = currentView === 'safe-chat';
-  const isVoiceActive = currentView === 'voice-companion';
+  const isVoiceActive = currentView === 'voice-call' || currentView === 'voice-companion';
   const isWellbeingActive = currentView === 'well-being';
   const isSupportActive = currentView === 'support-network' || currentView === 'legal-prep';
 
@@ -57,7 +57,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
         {/* Voice Companion Center Floating Action Button */}
         <button
-          onClick={() => onNavigate('voice-companion')}
+          onClick={() => onNavigate('voice-call')}
           aria-label={t.navVoice}
           className="flex flex-col items-center justify-center -mt-5 focus:outline-none group"
         >

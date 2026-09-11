@@ -98,7 +98,7 @@ def test_score_combines_signals_and_other_counsellors_cannot_see_victim():
                                         "arousal": 0.3, "voiced_seconds": 5})
     detail = client.get(f"/counsellor/victims/{v['user_id']}", headers=bearer(c1["token"])).json()
     assert set(detail["latest"]["components"]) == {"text", "voice"}
-    assert detail["latest"]["confidence"] == 0.4
+    assert detail["latest"]["confidence"] == 0.35
     assert client.get(f"/counsellor/victims/{v['user_id']}", headers=bearer(c2["token"])).status_code == 404
 
 
@@ -219,3 +219,241 @@ def test_alerts_not_duplicated_and_resolved_crisis_needs_a_new_signal():
 
     service.record_chat(user, "x", {"score": 90.0}, crisis=True, now=now + 42 * 3600)
     assert [a["reason"] for a in client.get("/counsellor/alerts", headers=bearer(c["token"])).json()] == ["crisis_signal"]
+
+
+# ------------------------------------------------------- conversation memory
+
+def consenting(name="Meera"):
+    """A victim who agreed to have their messages kept."""
+    return register(name, consent={"data_storage": True, "store_messages": True})
+
+
+def test_conversation_is_kept_and_read_back_in_order():
+    v = consenting()
+    user = auth.user_for_token(v["token"])
+    for role, text in (("user", "My hearing is on Friday."),
+                       ("assistant", "That's soon. How are you feeling?"),
+                       ("user", "Nervous.")):
+        assert service.remember_message(user, role, text, "chat")
+
+    r = client.get("/me/conversation", headers=bearer(v["token"]))
+    assert r.status_code == 200
+    turns = r.json()["turns"]
+    assert [t["role"] for t in turns] == ["user", "assistant", "user"]
+    assert [t["content"] for t in turns][0] == "My hearing is on Friday."
+    assert r.json()["stored"] is True
+
+
+def test_stored_messages_are_encrypted_at_rest():
+    v = consenting()
+    service.remember_message(auth.user_for_token(v["token"]), "user", "My hearing is on Friday.", "chat")
+    with db.connect() as conn:
+        row = conn.execute("SELECT text_enc FROM messages WHERE user_id = ?", (v["user_id"],)).fetchone()
+    assert "hearing" not in row["text_enc"]
+
+
+def test_nothing_is_kept_without_the_store_messages_consent():
+    v = register("Asha")          # data_storage only: messages are not kept
+    user = auth.user_for_token(v["token"])
+    assert service.remember_message(user, "user", "Please don't keep this.", "chat") is False
+    r = client.get("/me/conversation", headers=bearer(v["token"]))
+    assert r.json() == {"turns": [], "stored": False}
+
+
+def test_turning_the_consent_off_erases_what_was_kept():
+    v = consenting()
+    service.remember_message(auth.user_for_token(v["token"]), "user", "Something private.", "chat")
+    client.patch("/me/consent", json={"store_messages": False}, headers=bearer(v["token"]))
+    with db.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) c FROM messages WHERE user_id = ?",
+                            (v["user_id"],)).fetchone()["c"] == 0
+
+
+def test_a_victim_can_delete_the_conversation_on_its_own():
+    v = consenting()
+    user = auth.user_for_token(v["token"])
+    service.remember_message(user, "user", "One.", "chat")
+    service.remember_message(user, "assistant", "Two.", "voice")
+    assert client.delete("/me/conversation", headers=bearer(v["token"])).json() == {"deleted": 2}
+    assert client.get("/me/conversation", headers=bearer(v["token"])).json()["turns"] == []
+
+
+def test_deleting_the_account_takes_the_conversation_with_it():
+    v = consenting()
+    service.remember_message(auth.user_for_token(v["token"]), "user", "One.", "chat")
+    client.delete("/me", headers=bearer(v["token"]))
+    with db.connect() as conn:
+        assert conn.execute("SELECT COUNT(*) c FROM messages WHERE user_id = ?",
+                            (v["user_id"],)).fetchone()["c"] == 0
+
+
+# ---------------------------------------------------------------- case-aware distress
+
+def _days_from_today(n):
+    return (date.today() + timedelta(days=n)).isoformat()
+
+
+def test_hearing_raises_case_pressure_and_a_forecast():
+    c = service.create_counsellor("C")
+    v = register()
+    client.post(f"/counsellor/victims/{v['user_id']}/events", headers=bearer(c["token"]),
+                json={"kind": "hearing", "date": _days_from_today(4), "title": "District court"})
+    detail = client.get(f"/counsellor/victims/{v['user_id']}", headers=bearer(c["token"])).json()
+    assert detail["latest"]["components"]["case_pressure"] > 0
+    # 4 days out on a 14-day ramp
+    assert detail["latest"]["details"]["case_pressure"]["next_hearing"]["days_until"] == 4
+    assert detail["forecast"]["peak_on"] == _days_from_today(4)
+    assert detail["forecast"]["peak_score"] >= detail["latest"]["score"]
+    reasons = {a["reason"] for a in detail["alerts"]}
+    assert "hearing_soon" in reasons
+
+
+def test_bail_hearing_without_notice_raises_a_high_alert():
+    c = service.create_counsellor("C")
+    v = register()
+    client.post(f"/counsellor/victims/{v['user_id']}/events", headers=bearer(c["token"]),
+                json={"kind": "bail_hearing", "date": _days_from_today(3), "title": "Bail application",
+                      "notice_given": False})
+    detail = client.get(f"/counsellor/victims/{v['user_id']}", headers=bearer(c["token"])).json()
+    alert = next(a for a in detail["alerts"] if a["reason"] == "bail_no_notice")
+    assert alert["level"] == "high"
+    assert "15A" in alert["message"]
+
+
+def test_notice_recorded_means_no_bail_alert():
+    c = service.create_counsellor("C")
+    v = register()
+    client.post(f"/counsellor/victims/{v['user_id']}/events", headers=bearer(c["token"]),
+                json={"kind": "bail_hearing", "date": _days_from_today(3), "title": "Bail application",
+                      "notice_given": True})
+    detail = client.get(f"/counsellor/victims/{v['user_id']}", headers=bearer(c["token"])).json()
+    assert "bail_no_notice" not in {a["reason"] for a in detail["alerts"]}
+
+
+def test_victim_case_view_hides_numbers_and_softens_bail():
+    c = service.create_counsellor("C")
+    v = register()
+    client.post(f"/counsellor/victims/{v['user_id']}/events", headers=bearer(c["token"]),
+                json={"kind": "bail_hearing", "date": _days_from_today(5), "title": "Bail application"})
+    case = client.get("/me/case", headers=bearer(v["token"])).json()
+    blob = json.dumps(case).lower()
+    for banned in ("bail", "score", "tier", "distress", "risk", "accused"):
+        assert banned not in blob
+    assert case["upcoming"][0]["label"] == "A court date about your case"
+
+
+def test_entitlement_not_received_raises_alert_and_hides_amount_from_victim():
+    c = service.create_counsellor("C")
+    v = register()
+    ent = client.post(f"/counsellor/victims/{v['user_id']}/entitlements", headers=bearer(c["token"]),
+                      json={"stage": "chargesheet", "amount": 412500,
+                            "due_on": _days_from_today(-45)}).json()
+    assert ent["amount"] == 412500
+
+    case = client.get("/me/case", headers=bearer(v["token"])).json()
+    assert case["entitlements"][0]["id"] == ent["id"]
+    assert "amount" not in case["entitlements"][0]
+    assert "412500" not in json.dumps(case)
+
+    client.post(f"/me/entitlements/{ent['id']}", headers=bearer(v["token"]),
+                json={"status": "not_received"})
+    detail = client.get(f"/counsellor/victims/{v['user_id']}", headers=bearer(c["token"])).json()
+    alert = next(a for a in detail["alerts"] if a["reason"] == "entitlement_unpaid")
+    assert alert["level"] == "high"
+    assert detail["latest"]["details"]["case_pressure"]["unpaid_entitlements"]["count"] == 1
+
+
+def test_three_adjournments_raise_a_streak_alert():
+    c = service.create_counsellor("C")
+    v = register()
+    for n in (10, 40, 70):
+        client.post(f"/counsellor/victims/{v['user_id']}/events", headers=bearer(c["token"]),
+                    json={"kind": "adjournment", "date": _days_from_today(-n), "title": "Adjourned"})
+    detail = client.get(f"/counsellor/victims/{v['user_id']}", headers=bearer(c["token"])).json()
+    assert "adjournment_streak" in {a["reason"] for a in detail["alerts"]}
+
+
+def test_forecast_list_sorts_worst_first_and_is_counsellor_scoped():
+    c1 = service.create_counsellor("C1")
+    c2 = service.create_counsellor("C2")
+    near = register("Near")
+    far = register("Far")
+    for v, day in ((near, 1), (far, 12)):
+        client.post(f"/counsellor/victims/{v['user_id']}/events", headers=bearer(c1["token"]),
+                    json={"kind": "hearing", "date": _days_from_today(day), "title": "Court"})
+    rows = client.get("/counsellor/forecast", headers=bearer(c1["token"])).json()
+    assert [r["name"] for r in rows][0] == "Near"
+    assert client.get("/counsellor/forecast", headers=bearer(c2["token"])).json() == []
+
+
+def test_another_counsellor_cannot_touch_entitlements():
+    c1 = service.create_counsellor("C1")
+    c2 = service.create_counsellor("C2")
+    v = register()
+    ent = client.post(f"/counsellor/victims/{v['user_id']}/entitlements", headers=bearer(c1["token"]),
+                      json={"stage": "fir", "amount": 100000}).json()
+    assert client.get(f"/counsellor/victims/{v['user_id']}/entitlements",
+                      headers=bearer(c2["token"])).status_code == 404
+    assert client.patch(f"/counsellor/entitlements/{ent['id']}", headers=bearer(c2["token"]),
+                        json={"status": "received"}).status_code == 404
+
+
+def test_victim_card_and_score_agree_about_what_day_a_hearing_is():
+    """The victim's 'days_until' and the score's hearing ramp are computed in
+    different modules. When one used UTC and the other local time they drifted a
+    day apart in IST, so a hearing was 'today' in an alert and 'tomorrow' on the
+    card."""
+    c = service.create_counsellor("C")
+    v = register()
+    client.post(f"/counsellor/victims/{v['user_id']}/events", headers=bearer(c["token"]),
+                json={"kind": "hearing", "date": _days_from_today(2), "title": "Court"})
+    case = client.get("/me/case", headers=bearer(v["token"])).json()
+    detail = client.get(f"/counsellor/victims/{v['user_id']}", headers=bearer(c["token"])).json()
+    assert (case["upcoming"][0]["days_until"]
+            == detail["latest"]["details"]["case_pressure"]["next_hearing"]["days_until"]
+            == detail["forecast"]["days_until"] == 2)
+
+
+def test_relief_schedule_is_the_gazette_not_a_flat_25_50_25():
+    """Annexure-I does not use one split. Dumping excreta is 10/50/40, rape pays
+    half after the medical report, murder half after the post-mortem, and a social
+    boycott is paid in full at charge sheet. Telling someone otherwise would
+    promise them money on a date the rules do not."""
+    sched = service.relief_schedule()
+    assert "G.S.R. 424(E)" in sched["notification"]
+    for entry in sched["entries"]:
+        assert sum(s["percent"] for s in entry["stages"]) == 100, entry["section"]
+
+    def split(section):
+        e = service.relief_for(section)
+        return e["amount"], [(s["stage"], s["percent"]) for s in e["stages"]]
+
+    assert split("3(1)(b)") == (100000, [("fir", 10), ("chargesheet", 50), ("conviction", 40)])
+    assert split("IPC 375") == (500000, [("medical_report", 50), ("chargesheet", 25), ("trial_end", 25)])
+    assert split("IPC 376D")[0] == 825000
+    assert split("murder") == (825000, [("post_mortem", 50), ("chargesheet", 50)])
+    assert split("3(1)(zc)") == (100000, [("chargesheet", 100)])
+    assert split("3(1)(r)") == (100000, [("fir", 25), ("chargesheet", 50), ("conviction", 25)])
+
+
+def test_creating_relief_from_a_section_splits_the_real_amount():
+    c = service.create_counsellor("C")
+    v = register()
+    out = client.post(f"/counsellor/victims/{v['user_id']}/relief", headers=bearer(c["token"]),
+                      json={"section": "IPC 375"}).json()
+    assert out["total"] == 500000
+    got = {e["stage"]: e["amount"] for e in out["entitlements"]}
+    assert got == {"medical_report": 250000, "chargesheet": 125000, "trial_end": 125000}
+    # the victim is asked the question but never shown the money
+    case = client.get("/me/case", headers=bearer(v["token"])).json()
+    assert len(case["entitlements"]) == 3
+    assert "250000" not in json.dumps(case)
+    assert all("amount" not in e for e in case["entitlements"])
+
+
+def test_unknown_section_is_refused_rather_than_guessed():
+    c = service.create_counsellor("C")
+    v = register()
+    r = client.post(f"/counsellor/victims/{v['user_id']}/relief", headers=bearer(c["token"]),
+                    json={"section": "not a real section"})
+    assert r.status_code == 422

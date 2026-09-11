@@ -22,6 +22,10 @@ node_modules/
 # ---- Datasets (re-download with ./train_all.sh or the fetch scripts) ----
 **/datasets/*
 !**/datasets/README.md
+# A set we switched off still sits on disk under datasets_disabled/. It is a
+# download, not source, and esconv/EmpatheticDialogues are CC-BY-NC, so it must
+# never land in a public repo.
+**/datasets_disabled/
 backend/eval/data/
 backend/chat_training/data/
 backend/distress_training/data/

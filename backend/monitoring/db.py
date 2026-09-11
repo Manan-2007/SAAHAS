@@ -80,6 +80,19 @@ CREATE TABLE IF NOT EXISTS observations (
     detail_enc TEXT
 );
 CREATE INDEX IF NOT EXISTS obs_user_metric_time ON observations(user_id, metric, created_at);
+-- What was actually said, both sides, so a conversation can carry on where it
+-- left off: a new chat, the next voice call, or after a reload. Written only
+-- with the store_messages consent, and encrypted like every other personal
+-- field. Cascades away with the account.
+CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL,
+    channel TEXT NOT NULL DEFAULT 'chat',   -- chat | voice
+    role TEXT NOT NULL,                     -- user | assistant
+    text_enc TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS msg_user_time ON messages(user_id, created_at);
 CREATE TABLE IF NOT EXISTS questionnaires (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -126,7 +139,35 @@ CREATE TABLE IF NOT EXISTS case_events (
     created_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS events_user_date ON case_events(user_id, event_date);
+-- What the person is owed and whether it actually arrived. Relief under the
+-- SC/ST (Prevention of Atrocities) Rules is paid in stages - 25% at FIR, 50% at
+-- charge sheet, 25% when the trial ends - and travel/maintenance (TAME, Rule 11)
+-- is due within three days of a trip to the police, hospital or court. Victims
+-- are rarely told, so money that never arrives reads as "nothing happened"
+-- instead of as a missed entitlement someone can chase.
+CREATE TABLE IF NOT EXISTS entitlements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    stage TEXT NOT NULL,           -- fir | chargesheet | trial_end | tame | other
+    amount REAL,                   -- rupees; counsellor-only, never sent to victims
+    due_on TEXT,                   -- YYYY-MM-DD
+    status TEXT NOT NULL DEFAULT 'due',   -- due | received | not_received | unknown
+    note_enc TEXT,
+    asked_at REAL,
+    answered_at REAL,
+    created_by TEXT,
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ent_user_status ON entitlements(user_id, status);
 """
+
+# Columns added after the first release. SQLite has no "ADD COLUMN IF NOT
+# EXISTS", so init() checks the table first.
+MIGRATIONS = [
+    # s.15A: notice to the victim before a bail/parole hearing is mandatory
+    # (Hariram Bhambhi v. Satyanarayan, 2021). NULL means "nobody recorded it".
+    ("case_events", "notice_given", "INTEGER"),
+]
 
 
 @contextmanager
@@ -146,6 +187,10 @@ def init():
     with connect() as conn:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(SCHEMA)
+        for table, column, decl in MIGRATIONS:
+            have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+            if column not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
 
 def new_id():

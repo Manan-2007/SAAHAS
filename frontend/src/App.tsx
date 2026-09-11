@@ -5,6 +5,7 @@ import { BottomNav } from './components/BottomNav';
 import { HomeDashboard } from './components/HomeDashboard';
 import { SafeChat } from './components/SafeChat';
 import { VoiceCompanion } from './components/VoiceCompanion';
+import { VoiceCall } from './components/VoiceCall';
 import { WellBeingTracker } from './components/WellBeingTracker';
 import { SupportLegalPrep } from './components/SupportLegalPrep';
 // The counsellor dashboard is a large, separate surface — lazy-load it so the
@@ -118,9 +119,19 @@ export default function App() {
           />
         )}
 
+        {currentView === 'voice-call' && (
+          <VoiceCall
+            onBack={() => setCurrentView('home-dashboard')}
+            onOpenCall={() => setIsCallOpen(true)}
+            onCheckIn={() => setCurrentView('voice-companion')}
+            language={language}
+          />
+        )}
+
         {currentView === 'voice-companion' && (
           <VoiceCompanion
             onBack={() => setCurrentView('home-dashboard')}
+            onTalk={() => setCurrentView('voice-call')}
             onUpdateMetric={handleUpdateMetric}
           />
         )}

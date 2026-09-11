@@ -1,3 +1,45 @@
+## Case-aware distress: the calendar as a stressor (2026-09-11)
+
+The Distress Score used to read only what a person said and how they sounded.
+Both of the sources behind this change point the other way: for a victim of an
+atrocity most distress is produced by the justice system's own calendar -
+hearing dates, adjournments, a bail application, relief money that never
+arrives. Nayar (2025), *Justice or Re-traumatization*, calls this secondary
+victimization; Hoyle and Zedner (2007) describe the same collateral harm.
+
+That matters because problem statement 26094 asks for a distress **prediction**
+system and SAHAAS only reacted. Court dates are known in advance, so the
+distress around them can be forecast.
+
+- **Fifth score component, `case_pressure`** (`monitoring/scoring.py`): a 14-day
+  ramp towards the next hearing, plus adjournments in the last 90 days, plus
+  relief the person says never arrived. Weights are now questionnaires 0.40,
+  text 0.22, voice 0.13, engagement 0.13, case_pressure 0.12.
+- **Forecast**: `scoring.forecast()` holds every other signal still and moves
+  only the calendar term to its day-of maximum, so the number means "today, plus
+  the hearing getting closer" and not a claim about someone's mood.
+- **Entitlement tracker**, built on the real Annexure-I schedule as notified in
+  G.S.R. 424(E) of 14 April 2016 (`monitoring/relief_schedule.json`, 48 rows).
+  A counsellor gives the section and the backend creates the whole staged set
+  with the amounts worked out. Victims are rarely told any of this; counsellors
+  see the amounts, victims only ever see the question and three buttons.
+  An earlier draft of this file claimed relief is always staged 25/50/25. It is
+  not, and the difference matters: dumping excreta is 10/50/40, assault on a
+  woman pays 50% at FIR, rape pays 50% only after the medical report, murder 50%
+  after the post-mortem, and a social boycott is paid in full at charge sheet.
+  A test asserts each of those against the Gazette, and it caught one row that
+  had been entered wrongly.
+- **s.15A watchdog**: notice to the victim before a bail or parole hearing is
+  mandatory and its absence voids the order (*Hariram Bhambhi v. Satyanarayan*,
+  2021). A missing or unrecorded notice inside 7 days raises a `high` alert.
+- Four new alert reasons, four new event kinds, `GET /me/case`,
+  `GET /counsellor/forecast`, and entitlement routes. Full API in
+  `backend/backend.md` section 5.
+
+Victim-facing rules are unchanged and now tested: `/me/case` carries no score,
+tier or amount, and the victim-side `kind` is coarsened so the word "bail" never
+reaches the screen.
+
 # Changes
 
 What's been built and why, newest first within each area. Add a line here for
@@ -113,8 +155,94 @@ every notable change. Backend changes also go in `backend/backend.md` → Update
 - Vite proxies `/chat` too. Root `README.md` covers running both halves, and
   `train_all.sh` downloads data and trains the distress model (`--with-chat` also
   fine-tunes the chat).
+- Voice call screen ("Talk with SAHAAS", `backend/backend.md` 3b): a live spoken
+  conversation over `/ws/converse`. `src/lib/converseApi.ts` streams the mic as
+  Float32 PCM, plays the agent's sentences back-to-back on one AudioContext, and
+  drops the queue on `interrupted`; `src/components/VoiceCall.tsx` is the screen
+  (orb, captions, gentle tone line, Stop, End call, crisis banner). Reached from
+  the Voice tab and a home-dashboard card.
+  - The server calls itself `listening` again ~0.3 s in, while ~3 s of audio is
+    still playing, so the orb state and the Stop button follow the local playback
+    queue instead. Otherwise Stop is disabled for the whole time the agent is
+    audibly talking.
+  - Punjabi has no voice pipeline yet, so `pa` falls back to language detection and
+    the screen says so.
+- The conversation is remembered instead of restarting every time. Both sides of
+  every exchange are stored encrypted in a new `messages` table, and read back as
+  context: `/ws/converse` seeds a call from it (so a second call knows the first),
+  `/chat` keeps the reply as well as the message, and Safe Chat loads it on mount.
+  Chat and voice share one conversation - what you said out loud shows up in the
+  chat as ordinary bubbles.
+  - Only with the `store_messages` consent. Guests keep nothing; turning the
+    consent off erases what was kept; `DELETE /me/conversation` is the manual
+    version, and deleting the account cascades.
+  - New: `GET /me/conversation`, `DELETE /me/conversation`.
+- Chat tone (`chat_training/system_prompt.txt`): the boundaries were a footnote at
+  the end and the model walked past them. Asked "what are you up to", it invented a
+  life and even shared memories ("remember when we went to that little café?",
+  "I miss our chats") in 6 of 6 samples. "What you are" now sits above the tone
+  rules, with worked examples for being asked about itself, and 6 of 6 samples are
+  clean. Also added: answer the thing that was actually said rather than its
+  category, don't moralise at someone who says they hurt another person, and
+  "you're not alone" joins the list of stock phrases to avoid.
+- Measured, for the record: Qwen3-8B answers a serious disclosure with the same
+  template empathy as the 4B, so size is not what is missing there.
+  gemma-4-26b-a4b handles it properly but peaks at 15 GB and 15.6 tok/s, which
+  does not fit beside Whisper and Kokoro on a 24 GB machine, and it leaks a
+  `<|channel>thought` preamble that `_result` does not strip.
+- Training data added (downloaded, not yet trained on):
+  - chat: `Abhishekcr448/Hinglish-Everyday-Conversations-1M` (MIT) for everyday
+    register, capped to 3000 in `config.yaml` - uncapped, 980k rows of small talk
+    would be 98% of the set and teach only small talk. Plus
+    `ZahrizhalAli/mental_health_conversational_dataset` (MIT, 106 usable).
+  - distress: `Hate-speech-CNERG/hatexplain` (CC BY 4.0, 15,383 train) for the
+    "someone threatened me" gap. It still needs an adapter in `prepare.py`: these
+    are the aggressor's words, not the victim's, so the label mapping is a
+    judgement call, not a mechanical one.
+  - `distress_training/fetch.py` learned to read Hugging Face's auto-converted
+    parquet branch, for datasets still published as a loading script (the
+    `datasets` library dropped script support, which is why hatexplain failed).
+  - Licensing note: after this, `thu-coai/esconv` (CC BY-NC) is the single largest
+    contributor to the chat set - 8000 of 14,954 examples. That needs resolving
+    before anything trained on it ships.
+- **Chat fine-tuning is back on, with different data.** The old run failed because
+  the data was the problem: 7.9% of assistant turns in the prepared set pushed
+  breathing, grounding or "you're not alone", so training amplified exactly the
+  register we wanted gone. Now 0.1%.
+  - `chat_training/distil.py` (new): writes SAHAAS conversations with
+    gemma-4-26b-a4b as an offline teacher - the only local model that answered a
+    serious disclosure without reaching for a template. 584 dialogues / 1,058
+    training turns across everyday talk, hard moments, case and legal worries,
+    serious disclosures, questions about itself, and crisis. The teacher reasons
+    in a `<|channel>thought` block and would spend its whole budget restating the
+    brief, so the prompt closes that channel and prefills the first speaker.
+  - `chat_training/eval_tone.py` (new): the gate. 17 cases scored for stock
+    phrases, template empathy, invented personal life, casual reply length and
+    intact safety. It applies `SAFETY_INSTRUCTION` exactly as `chat_engine` does,
+    otherwise the crisis cases are judged against a prompt production never uses.
+  - ⚠ Crisis dialogues are generated under their own rules. Written with the
+    ordinary "talk like a person" rules, the teacher answered "I don't want to
+    live anymore" with a curious follow-up and never mentioned safety or help.
+    14 such dialogues were generated and removed before training; the rest are
+    produced with the runtime safety rule and must mention safety or where to
+    turn, or they are rejected.
+  - Data: esconv and MentalChat16K moved to `datasets_disabled/` (counselling
+    transcripts, the tic source). Hinglish-1M parked there too for this run - it
+    teaches register in romanized Hindi and the goal here was English.
+    `drop_phrases` in `config.yaml` filters the stock phrases from whatever
+    remains; `min_reply_chars` 40 -> 20 so short natural replies survive.
+  - `training_system_prompt` no longer says "trauma-informed emotional support
+    companion", which was itself a nudge towards the counselling register.
+  - Result, `eval_tone.py`, 17 cases, three runs each:
+    stock phrases 3/17 -> 0/17, template empathy 6/17 -> 2-4/17, invented life 0/17
+    throughout, casual replies ~14 words. iter-600 and iter-1000 are a wash on the
+    battery, so the published adapter is **iter-600** (lower validation loss, so it
+    should generalise better beyond these 17 cases). iter-1000 is kept at
+    `chat_training/adapters_training/final_iter1000_backup.safetensors`.
+    Caveat: the template-empathy regex counts "That sounds like a lovely evening" as a
+    hit, so that column over-reports on casual replies.
 - Still to do on the frontend: the monitoring screens (sign-up, questionnaires,
-  counsellor dashboard, voice call). See `backend/backend.md`.
+  counsellor dashboard). See `backend/backend.md`.
 
 ### Commits
 - `2a47028` initial commit.

@@ -1,0 +1,950 @@
+{
+  "source": "The Scheduled Castes and the Scheduled Tribes (Prevention of Atrocities) Amendment Rules, 2016, Annexure-I [see rule 12(4)] - Norms for relief amount",
+  "notification": "G.S.R. 424(E), Ministry of Social Justice and Empowerment, 14 April 2016",
+  "url": "https://poa.apcfss.in/documents/2016_Amendment_to_POA_Rules_1995_norms_for_relief.pdf",
+  "currency": "INR",
+  "retrieved": "2026-09-11",
+  "caveat": "Verify against the Gazette before relying on an amount. States may pay more, never less, and the schedule is amended from time to time.",
+  "stage_labels": {
+    "fir": "when the FIR is registered",
+    "chargesheet": "when the charge sheet is sent to the court",
+    "conviction": "when the accused are convicted by the lower court",
+    "trial_end": "on conclusion of trial by the lower court",
+    "medical_report": "after medical examination and the confirmatory medical report",
+    "post_mortem": "after the post-mortem report"
+  },
+  "entries": [
+    {
+      "sr": 1,
+      "section": "3(1)(a)",
+      "offence": "Putting any inedible or obnoxious substance in the mouth",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 2,
+      "section": "3(1)(b)",
+      "offence": "Dumping excreta, sewage or carcasses",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 10
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 40
+        }
+      ]
+    },
+    {
+      "sr": 3,
+      "section": "3(1)(c)",
+      "offence": "Dumping excreta or waste with intent to injure or insult",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 10
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 40
+        }
+      ]
+    },
+    {
+      "sr": 4,
+      "section": "3(1)(d)",
+      "offence": "Garlanding with footwear or parading naked or semi-naked",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 5,
+      "section": "3(1)(e)",
+      "offence": "Forcibly removing clothes, tonsuring head, painting face or body",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 6,
+      "section": "3(1)(f)",
+      "offence": "Wrongful occupation or cultivation of land",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ],
+      "note": "Land, premises, water supply or irrigation to be restored at Government cost"
+    },
+    {
+      "sr": 7,
+      "section": "3(1)(g)",
+      "offence": "Wrongful dispossession of land or premises, including forest rights",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 8,
+      "section": "3(1)(h)",
+      "offence": "Begar or other forms of forced or bonded labour",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 9,
+      "section": "3(1)(i)",
+      "offence": "Compelling to dispose of or carry carcasses, or to dig graves",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 10,
+      "section": "3(1)(j)",
+      "offence": "Making a person do manual scavenging, or employing them for it",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 11,
+      "section": "3(1)(k)",
+      "offence": "Dedicating a Scheduled Caste or Scheduled Tribe woman as a devadasi",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 12,
+      "section": "3(1)(l)",
+      "offence": "Prevention from voting or filing nomination",
+      "amount": 85000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 13,
+      "section": "3(1)(m)",
+      "offence": "Forcing or obstructing a Panchayat or Municipality office holder",
+      "amount": 85000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 14,
+      "section": "3(1)(n)",
+      "offence": "After-poll violence and imposition of social or economic boycott",
+      "amount": 85000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 15,
+      "section": "3(1)(o)",
+      "offence": "Offence committed for having voted or not voted for a candidate",
+      "amount": 85000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 16,
+      "section": "3(1)(p)",
+      "offence": "Instituting false, malicious or vexatious legal proceedings",
+      "amount": 85000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ],
+      "note": "Or actual legal expenses and damages, whichever is less"
+    },
+    {
+      "sr": 17,
+      "section": "3(1)(q)",
+      "offence": "Giving false and frivolous information to a public servant",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ],
+      "note": "Or actual legal expenses and damages, whichever is less"
+    },
+    {
+      "sr": 18,
+      "section": "3(1)(r)",
+      "offence": "Intentional insult or intimidation to humiliate in public view",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 19,
+      "section": "3(1)(s)",
+      "offence": "Abusing by caste name in any place within public view",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 20,
+      "section": "3(1)(t)",
+      "offence": "Destroying or defiling an object held sacred or in high esteem",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 21,
+      "section": "3(1)(u)",
+      "offence": "Promoting feelings of enmity, hatred or ill-will",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 22,
+      "section": "3(1)(v)",
+      "offence": "Disrespecting a late person held in high esteem",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 23,
+      "section": "3(1)(w)",
+      "offence": "Touching a woman without consent, with sexual intent",
+      "amount": 200000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 24,
+      "section": "3(2)(va) r/w IPC 326B",
+      "offence": "Throwing or attempting to throw acid",
+      "amount": 825000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 50
+        },
+        {
+          "stage": "medical_report",
+          "percent": 50
+        }
+      ],
+      "note": "825000 for burns over 30 per cent or on the face; 415000 for 10-30 per cent; 85000 for under 10 per cent not on the face. Treatment is the State's full responsibility."
+    },
+    {
+      "sr": 25,
+      "section": "3(2)(va) r/w IPC 354",
+      "offence": "Assault or criminal force to outrage a woman's modesty",
+      "amount": 200000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 50
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 25
+        },
+        {
+          "stage": "trial_end",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 26,
+      "section": "3(2)(va) r/w IPC 354A",
+      "offence": "Sexual harassment",
+      "amount": 200000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 50
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 25
+        },
+        {
+          "stage": "trial_end",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 27,
+      "section": "3(2)(va) r/w IPC 354B",
+      "offence": "Assault or criminal force with intent to disrobe",
+      "amount": 200000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 50
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 25
+        },
+        {
+          "stage": "trial_end",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 28,
+      "section": "3(2)(va) r/w IPC 354C",
+      "offence": "Voyeurism",
+      "amount": 200000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 10
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 40
+        }
+      ]
+    },
+    {
+      "sr": 29,
+      "section": "3(2)(va) r/w IPC 354D",
+      "offence": "Stalking",
+      "amount": 200000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 10
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 40
+        }
+      ]
+    },
+    {
+      "sr": 30,
+      "section": "3(2)(va) r/w IPC 376B",
+      "offence": "Sexual intercourse by a husband during separation",
+      "amount": 200000,
+      "stages": [
+        {
+          "stage": "medical_report",
+          "percent": 50
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 25
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 31,
+      "section": "3(2)(va) r/w IPC 376C",
+      "offence": "Sexual intercourse by a person in authority",
+      "amount": 400000,
+      "stages": [
+        {
+          "stage": "medical_report",
+          "percent": 50
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 25
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 32,
+      "section": "3(2)(va) r/w IPC 509",
+      "offence": "Word, gesture or act intended to insult a woman's modesty",
+      "amount": 200000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 33,
+      "section": "3(1)(x)",
+      "offence": "Fouling or corrupting water",
+      "amount": 825000,
+      "stages": [
+        {
+          "stage": "chargesheet",
+          "percent": 100
+        }
+      ],
+      "note": "Full cost of restoring the water source is borne by the State. The 825000 is deposited with the District Magistrate for community assets, not paid to an individual."
+    },
+    {
+      "sr": 34,
+      "section": "3(1)(y)",
+      "offence": "Denial of customary right of passage to a public resort",
+      "amount": 425000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 35,
+      "section": "3(1)(z)",
+      "offence": "Forcing a person to leave house, village or place of residence",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ],
+      "note": "The site or right to stay is restored, and a destroyed house rebuilt, at Government cost"
+    },
+    {
+      "sr": 36,
+      "section": "3(1)(za)",
+      "offence": "Obstructing use of common property, worship, public places or a profession",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 37,
+      "section": "3(1)(zb)",
+      "offence": "Causing physical harm or mental agony over an allegation of witchcraft",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 38,
+      "section": "3(1)(zc)",
+      "offence": "Imposing or threatening a social or economic boycott",
+      "amount": 100000,
+      "stages": [
+        {
+          "stage": "chargesheet",
+          "percent": 100
+        }
+      ],
+      "note": "Paid in full when the charge sheet is sent to the court"
+    },
+    {
+      "sr": 39,
+      "section": "3(2)(i) and (ii)",
+      "offence": "Giving or fabricating false evidence",
+      "amount": 415000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 40,
+      "section": "3(2)",
+      "offence": "IPC offence punishable with ten years or more",
+      "amount": 400000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 41,
+      "section": "3(2)(va)",
+      "offence": "IPC offence specified in the Schedule to the Act",
+      "amount": 200000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 42,
+      "section": "3(2)(vii)",
+      "offence": "Victimisation at the hands of a public servant",
+      "amount": 200000,
+      "stages": [
+        {
+          "stage": "fir",
+          "percent": 25
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        },
+        {
+          "stage": "conviction",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 43,
+      "section": "disability-100",
+      "offence": "Permanent incapacitation, 100 per cent",
+      "amount": 825000,
+      "stages": [
+        {
+          "stage": "medical_report",
+          "percent": 50
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        }
+      ]
+    },
+    {
+      "sr": 44,
+      "section": "disability-50",
+      "offence": "Incapacitation between 50 and 100 per cent",
+      "amount": 450000,
+      "stages": [
+        {
+          "stage": "medical_report",
+          "percent": 50
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        }
+      ]
+    },
+    {
+      "sr": 45,
+      "section": "disability-under50",
+      "offence": "Incapacitation under 50 per cent",
+      "amount": 250000,
+      "stages": [
+        {
+          "stage": "medical_report",
+          "percent": 50
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        }
+      ]
+    },
+    {
+      "sr": 46,
+      "section": "IPC 375",
+      "offence": "Rape",
+      "amount": 500000,
+      "stages": [
+        {
+          "stage": "medical_report",
+          "percent": 50
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 25
+        },
+        {
+          "stage": "trial_end",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 47,
+      "section": "IPC 376D",
+      "offence": "Gang rape",
+      "amount": 825000,
+      "stages": [
+        {
+          "stage": "medical_report",
+          "percent": 50
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 25
+        },
+        {
+          "stage": "trial_end",
+          "percent": 25
+        }
+      ]
+    },
+    {
+      "sr": 48,
+      "section": "murder",
+      "offence": "Murder or death",
+      "amount": 825000,
+      "stages": [
+        {
+          "stage": "post_mortem",
+          "percent": 50
+        },
+        {
+          "stage": "chargesheet",
+          "percent": 50
+        }
+      ],
+      "note": "In addition: pension of 5000 a month to dependants, employment for one family member, agricultural land, a house, and the children's education to graduation"
+    }
+  ]
+}
