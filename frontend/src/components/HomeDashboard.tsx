@@ -20,12 +20,43 @@ import {
   Headphones,
   Wallet,
   Check,
-  HelpCircle
+  HelpCircle,
+  AlertTriangle,
+  Meh,
+  CloudRain,
+  PhoneIncoming,
 } from 'lucide-react';
 import { AppView, LanguageCode, WellBeingMetric } from '../types';
-import { TRANSLATIONS } from '../data/mockData';
+import { TRANSLATIONS } from '../data/i18n';
 import { useAuth } from '../auth/AuthProvider';
-import { CaseUpcoming, DueCheckin, Entitlement, EntitlementStatus, VictimEventKind, api, victimKind } from '../lib/api';
+import {
+  CaseUpcoming, CheckinCall, DueCheckin, Entitlement, EntitlementStatus, Mood, SupportInfo, VictimEventKind, api, victimKind,
+} from '../lib/api';
+import { Encouragement } from './Encouragement';
+import type { SupportTab } from './Support';
+
+const MOODS: { id: Mood; label: string; icon: React.ElementType }[] = [
+  { id: 'calm', label: 'Calm', icon: Sparkles },
+  { id: 'okay', label: 'Okay', icon: SunMedium },
+  { id: 'tired', label: 'A bit tired', icon: Cloud },
+  { id: 'anxious', label: 'Anxious', icon: Meh },
+  { id: 'low', label: 'Low', icon: CloudRain },
+];
+
+const MOOD_REPLY: Record<Mood, { calm: string; warm: string }> = {
+  calm: { calm: 'Glad to hear it.', warm: 'That’s lovely to hear. Hold on to this feeling.' },
+  okay: { calm: 'Thanks for checking in.', warm: 'Okay is enough. Thank you for checking in with yourself.' },
+  tired: { calm: 'Rest counts too.', warm: 'Tired makes sense after everything. Be gentle with yourself today.' },
+  anxious: { calm: 'The Breathe button can help right now.', warm: 'That’s a heavy feeling. Try the Breathe button - you’re not alone in this.' },
+  low: { calm: 'Thank you for telling us. Your counsellor can see you checked in.', warm: 'Thank you for telling us. It’s okay to not be okay - reach out whenever you want.' },
+  reflective: { calm: 'Thanks for checking in.', warm: 'Thank you for checking in.' },
+};
+
+function greetingFor(t: { greeting: string; greetingMorning: string; greetingEvening: string }, name: string) {
+  const h = new Date().getHours();
+  const template = h < 12 ? t.greetingMorning : h >= 17 ? t.greetingEvening : t.greeting;
+  return template.replace('{name}', name);
+}
 
 const TREND_COLORS: Record<WellBeingMetric['trend'], string> = {
   Improving: '#9c6743',
@@ -67,6 +98,7 @@ function nextCheckin(due: DueCheckin[] | null): 'ready' | string | null {
 interface HomeDashboardProps {
   language: LanguageCode;
   onNavigate: (view: AppView) => void;
+  onOpenSupport: (tab: SupportTab) => void;
   onOpenCall: () => void;
   selectedMood: string;
   onMoodSelect: (mood: string) => void;
@@ -77,6 +109,7 @@ interface HomeDashboardProps {
 export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   language,
   onNavigate,
+  onOpenSupport,
   onOpenCall,
   selectedMood,
   onMoodSelect,
@@ -87,9 +120,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const { user, lock } = useAuth();
   const isVictim = user.role === 'victim';
   const firstName = user.name.trim().split(' ')[0] || user.name;
-  // Personalize the localized greeting by swapping the demo name for the user's.
-  const greeting = t.greeting.replace(/Sunita|सुनीता|ਸੁਨੀਤਾ/, firstName);
+  const greeting = greetingFor(t, firstName);
+  const warm = user.uiStyle === 'warm';
   const [events, setEvents] = useState<CaseUpcoming[] | null>(null);
+  const [support, setSupport] = useState<SupportInfo | null>(null);
+  const [call, setCall] = useState<CheckinCall | null>(null);
+  const [moodReply, setMoodReply] = useState<string | null>(null);
+  const [callError, setCallError] = useState<string | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
   const [due, setDue] = useState<DueCheckin[] | null>(null);
 
@@ -126,6 +163,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       .due()
       .then((list) => live && setDue(list))
       .catch(() => live && setDue([]));
+    api.support().then((info) => live && setSupport(info)).catch(() => {});
+    api.checkinCall().then((c) => live && setCall(c.call)).catch(() => {});
     return () => {
       live = false;
     };
@@ -139,7 +178,26 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     api.answerEntitlement(id, status).catch(() => {});
   };
 
-  const counsellorInitials = (user.counsellor ?? 'C')
+  // A mood tap is saved (it counts as checking in) and answered kindly.
+  const pickMood = (mood: Mood) => {
+    onMoodSelect(mood);
+    setMoodReply(MOOD_REPLY[mood][warm ? 'warm' : 'calm']);
+    if (isVictim) api.mood(mood).catch(() => {});
+  };
+
+  const moveCall = async (option: '1' | '2') => {
+    setCallError(null);
+    try {
+      setCall((await api.rescheduleCheckinCall(option)).call);
+    } catch (err) {
+      setCallError(err instanceof Error ? err.message : 'Could not move the call.');
+    }
+  };
+
+  const counsellorName = support?.counsellor?.name ?? user.counsellor;
+  const unread = support?.unread_messages ?? 0;
+
+  const counsellorInitials = (counsellorName ?? 'C')
     .replace(/^Dr\.?\s+/i, '')
     .split(/\s+/)
     .map((w) => w.charAt(0))
@@ -168,49 +226,71 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             </p>
           </div>
 
-          {/* Quick Mood Pulse Chips */}
+          {/* Quick mood: saved, and answered kindly */}
           <div className="flex items-center gap-2 pt-2 flex-wrap" id="mood-pill-group">
-            <button
-              onClick={() => onMoodSelect('calm')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium shadow-2xs transition-all active:scale-95 flex items-center gap-1.5 ${
-                selectedMood === 'calm'
-                  ? 'bg-[#9c6743] text-white ring-2 ring-[#9c6743]/30'
-                  : 'bg-white text-[#352e24] hover:bg-[#9c6743]/10'
-              }`}
-              type="button"
-            >
-              <Sparkles className={`w-3.5 h-3.5 ${selectedMood === 'calm' ? 'text-white' : 'text-[#8a6a4a]'}`} />
-              <span>Calm</span>
-            </button>
-
-            <button
-              onClick={() => onMoodSelect('tired')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium shadow-2xs transition-all active:scale-95 flex items-center gap-1.5 ${
-                selectedMood === 'tired'
-                  ? 'bg-[#9c6743] text-white ring-2 ring-[#9c6743]/30'
-                  : 'bg-white text-[#352e24] hover:bg-[#9c6743]/10'
-              }`}
-              type="button"
-            >
-              <Cloud className={`w-3.5 h-3.5 ${selectedMood === 'tired' ? 'text-white' : 'text-[#9c6743]'}`} />
-              <span>A bit tired</span>
-            </button>
-
-            <button
-              onClick={() => onMoodSelect('reflective')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium shadow-2xs transition-all active:scale-95 flex items-center gap-1.5 ${
-                selectedMood === 'reflective'
-                  ? 'bg-[#9c6743] text-white ring-2 ring-[#9c6743]/30'
-                  : 'bg-white text-[#352e24] hover:bg-[#9c6743]/10'
-              }`}
-              type="button"
-            >
-              <SunMedium className={`w-3.5 h-3.5 ${selectedMood === 'reflective' ? 'text-white' : 'text-[#837562]'}`} />
-              <span>Reflective</span>
-            </button>
+            {MOODS.map((m) => {
+              const Icon = m.icon;
+              const on = selectedMood === m.id;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => pickMood(m.id)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium shadow-2xs transition-all active:scale-95 flex items-center gap-1.5 ${
+                    on ? 'bg-[#9c6743] text-white ring-2 ring-[#9c6743]/30' : 'bg-white text-[#352e24] hover:bg-[#9c6743]/10'
+                  }`}
+                  type="button"
+                  aria-pressed={on}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${on ? 'text-white' : 'text-[#8a6a4a]'}`} />
+                  <span>{m.label}</span>
+                </button>
+              );
+            })}
           </div>
+          {moodReply && <p className="text-xs font-medium text-[#7a5a3f] sparkle-in">{moodReply}</p>}
         </div>
       </section>
+
+      {/* Warm style: strength-based encouragement and gentle wins */}
+      {isVictim && warm && <Encouragement language={language} firstName={firstName} />}
+
+      {/* A missed check-in call is coming: do it now, or move it (within limits) */}
+      {isVictim && call && (call.status === 'scheduled' || call.status === 'calling') && (
+        <section className="rounded-2xl bg-white p-4 shadow-xs border border-[#e5dac4]/60 flex flex-col gap-2.5">
+          <div className="flex items-start gap-3">
+            <span className="w-9 h-9 rounded-full bg-[#efe7d6] text-[#9c6743] flex items-center justify-center shrink-0">
+              <PhoneIncoming className="w-4.5 h-4.5" />
+            </span>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-[#352e24]">We missed you at your check-in</p>
+              <p className="text-xs text-[#5c5142] leading-relaxed">
+                {call.status === 'calling'
+                  ? 'We are trying to call you now.'
+                  : `We’ll give you a short call around ${new Date(call.scheduled_for).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.`}{' '}
+                Or answer four quick questions here and there’s no need for a call.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 pl-12">
+            <button onClick={() => onNavigate('well-being')}
+                    className="px-3 py-1.5 rounded-lg bg-[#9c6743] text-white text-xs font-semibold hover:bg-[#835636]">
+              Check in now
+            </button>
+            {call.can_reschedule && (call.options ?? []).map((o) => (
+              <button key={o.key} onClick={() => moveCall(o.key)}
+                      className="px-3 py-1.5 rounded-lg bg-white border border-[#e5dac4] text-[#5c5142] text-xs font-semibold hover:bg-[#efe7d6]">
+                Call me {o.hours <= 2 ? 'in 2 hours' : 'tomorrow'}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-[#8a7d68] pl-12">
+            {call.can_reschedule
+              ? `You can move it ${call.reschedules_left} more ${call.reschedules_left === 1 ? 'time' : 'times'}.`
+              : 'This call can’t be moved again - we just want to know you’re okay.'}
+          </p>
+          {callError && <p className="text-[11px] text-[#93000a] pl-12">{callError}</p>}
+        </section>
+      )}
 
       {/* 2. Ways to Reflect Section */}
       <section className="flex flex-col gap-2.5">
@@ -348,10 +428,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             <span className="text-xs text-[#5c5142] font-medium">{t.wellbeingSnapshot}</span>
             <h3 className="text-lg font-bold text-[#352e24]">{t.yourWellbeing}</h3>
           </div>
-          {/* Soft Green Status Badge */}
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#e7d3b5]/40 text-[#7a5a3f] text-xs font-semibold">
             <CheckCheck className="w-3.5 h-3.5" />
-            <span>{t.stableToday}</span>
+            <span>From your check-ins</span>
           </span>
         </div>
 
@@ -572,32 +651,56 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             </span>
             <div className="flex flex-col">
               <span className="text-sm font-bold text-white">
-                {user.counsellor ?? (isVictim ? 'Counsellor not assigned yet' : 'Support lines')}
+                {counsellorName ?? (isVictim ? 'Counsellor being assigned' : 'Support lines')}
               </span>
               <span className="text-xs text-white/80">
-                {user.counsellor ? 'Your trauma-informed counsellor' : 'Free helplines, open 24x7'}
+                {counsellorName
+                  ? support?.counsellor?.hours ? `Your counsellor · ${support.counsellor.hours}` : 'Your trauma-informed counsellor'
+                  : 'Free helplines, open 24x7'}
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              onClick={onOpenCall}
+              onClick={() => (isVictim ? onOpenSupport('counsellor') : onOpenCall())}
               className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-white text-[#9c6743] text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm hover:bg-[#efe7d6] active:scale-95 transition-all"
             >
               <Phone className="w-4 h-4" />
-              <span>{t.talkCounsellor}</span>
+              <span>{isVictim ? 'Ask for a call' : 'Helplines'}</span>
             </button>
-            <button
-              onClick={() => onNavigate('safe-chat')}
-              className="px-3.5 py-2 rounded-xl bg-white/20 text-white text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white/30 active:scale-95 transition-all"
-            >
-              <MessageSquare className="w-4 h-4" />
-              <span>{t.messageCounsellor}</span>
-            </button>
+            {isVictim && (
+              <button
+                onClick={() => onOpenSupport('counsellor')}
+                className="relative px-3.5 py-2 rounded-xl bg-white/20 text-white text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-white/30 active:scale-95 transition-all"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>{t.messageCounsellor}</span>
+                {unread > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-white text-[#ba1a1a] text-[10px] font-bold flex items-center justify-center">
+                    {unread}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </section>
+
+      {/* Something wrong with the case: one tap to tell the counsellor */}
+      {isVictim && (
+        <button onClick={() => onOpenSupport('problem')}
+                className="group text-left rounded-2xl bg-white p-4 shadow-xs border border-[#e5dac4]/60 flex items-center gap-3 hover:shadow-md transition-all">
+          <span className="w-10 h-10 rounded-full bg-[#efe7d6] text-[#9c6743] flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5" />
+          </span>
+          <span className="flex-1">
+            <span className="block text-sm font-semibold text-[#352e24]">Problem with police, court or your case?</span>
+            <span className="block text-xs text-[#5c5142]">Tell your counsellor - they’ll take the legal steps. See your rights too.</span>
+          </span>
+          <ArrowRight className="w-4 h-4 text-[#9c6743] group-hover:translate-x-1 transition-transform" />
+        </button>
+      )}
 
       {/* 6. Safe Guard Footnote */}
       <footer className="flex flex-col items-center justify-center text-center gap-1.5 pt-2 pb-6 text-[#5c5142]">

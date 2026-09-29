@@ -4,7 +4,7 @@
 // so nothing outlives the browser session on a shared phone. Nothing about
 // the account (name, answers, password) is kept in the browser.
 
-import { ApiError, Consent, Me, api, clearSession, getToken, setToken } from '../lib/api';
+import { ApiError, Consent, Gender, Me, UiStyle, api, clearSession, getToken, setToken } from '../lib/api';
 import type { LanguageCode } from '../types';
 
 export type { LanguageCode };
@@ -34,6 +34,10 @@ export interface SessionUser {
   consent: Partial<Consent>;
   hasPassword: boolean;
   onboarded: boolean;
+  gender: Gender | null;
+  // 'warm' is the more encouraging look (the default for women); 'calm' the plain one
+  uiStyle: UiStyle;
+  phone: string | null;
 }
 
 export interface SignUpInput {
@@ -41,6 +45,8 @@ export interface SignUpInput {
   username: string;
   password: string;
   consent: Consent;
+  gender: Gender | null;
+  phone: string;
 }
 
 export const MIN_PASSWORD_LENGTH = 8;       // matches the backend (monitoring/auth.py)
@@ -60,6 +66,9 @@ function toUser(me: Me): SessionUser {
     consent: me.consent ?? {},
     hasPassword: me.has_password,
     onboarded: me.role !== 'victim' || me.profile !== null,
+    gender: me.gender ?? null,
+    uiStyle: me.ui_style ?? 'calm',
+    phone: me.phone ?? null,
   };
 }
 
@@ -74,8 +83,14 @@ async function currentUser(): Promise<SessionUser> {
   return toUser(await api.me());
 }
 
-export async function signUp({ name, username, password, consent }: SignUpInput): Promise<SessionUser> {
+export async function signUp({ name, username, password, consent, gender, phone }: SignUpInput): Promise<SessionUser> {
   if (!name.trim()) throw new AuthError('Please share a name we can greet you by.');
+  if (!gender) throw new AuthError('Please choose how you identify - "Prefer not to say" is fine.');
+  const cleanPhone = phone.trim();
+  if (cleanPhone && !/^\+?[0-9 ()-]{6,20}$/.test(cleanPhone)) {
+    throw new AuthError('That phone number doesn’t look right. Digits only, with an optional + at the start.');
+  }
+  if (consent.ivrs_calls && !cleanPhone) throw new AuthError('Check-in calls need a phone number.');
   if (username.trim().length < 3) throw new AuthError('Please choose a username with at least 3 characters.');
   if (password.length < MIN_PASSWORD_LENGTH) {
     throw new AuthError(`Please use at least ${MIN_PASSWORD_LENGTH} characters for your password.`);
@@ -88,6 +103,8 @@ export async function signUp({ name, username, password, consent }: SignUpInput)
       consent,
       username: username.trim(),
       password,
+      gender,
+      phone: cleanPhone || null,
     });
     // Keep a session token, not the registration's access token: a session
     // expires, shows up under "Where I'm signed in", and signing out ends it.
@@ -178,5 +195,8 @@ export function guestUser(): SessionUser {
     consent: {},
     hasPassword: false,
     onboarded: true,
+    gender: null,
+    uiStyle: 'calm',
+    phone: null,
   };
 }

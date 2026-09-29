@@ -7,6 +7,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3000
+    },
+    {
+      "name": "frontend-e2e",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd frontend && BACKEND_URL=http://127.0.0.1:8001 npx vite --port 3001 --host 127.0.0.1 --strictPort"],
+      "port": 3001
     }
   ]
 }

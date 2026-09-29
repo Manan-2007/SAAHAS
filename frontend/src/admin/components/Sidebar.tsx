@@ -6,19 +6,26 @@ interface SidebarProps {
   onSelectTab: (tab: NavigationTab) => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
+  badges?: Partial<Record<NavigationTab, number>>;
+  live?: boolean;
 }
 
-const BRAND_LOGO_URL =
-  'https://lh3.googleusercontent.com/aida/AEtjO1VEyAdYi5Yksnru_1OPhZWlg32VyMC0WRPb4X8Naj0MQOI-8GTGIf1Mx6rXvVJWsTNdlrdTv96zLXRdSrcTP6VtrfmngLPaP3j2DhTlNYBF-xw1BYXZs0Q-uuKtD6UTqmrSM8Slh_orJ2lYlKMLzEPUoPI1J0L_5py49yNtv1tcmxxrnD0MjPETL0amsM-j7HUx7DnUF8JelwHSzUIcbDfU3NBsR-yIc9bGj_EiGAkrrfGdiSyqC9brAYA';
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onSelectTab,
   isOpenMobile,
   onCloseMobile,
+  badges = {},
+  live = false,
 }) => {
+  const badge = (id: NavigationTab) => (badges[id] ? String(badges[id]) : undefined);
   const navItems: { id: NavigationTab; label: string; icon: string; badge?: string }[] = [
     { id: 'overview', label: 'Overview', icon: 'grid_view' },
+    { id: 'live-feed', label: 'Live Feed', icon: 'sensors', badge: badge('live-feed') },
+    { id: 'case-issues', label: 'Case Problems', icon: 'gavel', badge: badge('case-issues') },
+    { id: 'inbox', label: 'Messages & Calls', icon: 'mail', badge: badge('inbox') },
+    { id: 'outreach', label: 'Check-in Calls', icon: 'phone_callback', badge: badge('outreach') },
     { id: 'priority-cases', label: 'Priority Cases', icon: 'emergency' },
     { id: 'forecast', label: 'This Week', icon: 'calendar_month' },
     { id: 'case-detail-signals', label: 'Case Detail & Signals', icon: 'neurology' },
@@ -47,11 +54,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Logo & Brand Header */}
           <div className="h-16 px-5 flex items-center justify-between gap-2 border-b border-[#efe7d6]">
             <div className="flex items-center gap-2.5">
-              <img
-                src={BRAND_LOGO_URL}
-                alt="SAHAAS Care & Counsel logo"
-                className="h-8 w-auto object-contain"
-              />
               <div className="flex flex-col">
                 <span className="font-['Plus_Jakarta_Sans'] text-lg text-[#9c6743] font-bold tracking-tight leading-tight">
                   SAHAAS
@@ -62,10 +64,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-[#efe7d6] px-2.5 py-0.5 rounded-full">
-              <span className="w-2 h-2 rounded-full bg-[#9c6743] animate-pulse"></span>
-              <span className="font-['Inter'] text-[11px] text-[#8a6a4a] font-semibold">
-                Secure
+            <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full ${live ? 'bg-[#e3f1e4]' : 'bg-[#efe7d6]'}`}
+                 title={live ? 'Connected: updates arrive instantly' : 'Reconnecting to live updates'}>
+              <span className={`w-2 h-2 rounded-full ${live ? 'bg-[#2e7d32] animate-pulse' : 'bg-[#9c6743]'}`}></span>
+              <span className={`font-['Inter'] text-[11px] font-semibold ${live ? 'text-[#1f5c2a]' : 'text-[#8a6a4a]'}`}>
+                {live ? 'Live' : 'Secure'}
               </span>
             </div>
           </div>

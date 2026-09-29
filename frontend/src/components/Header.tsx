@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Lock, Power, LogOut, Heart, Shield, UserPlus } from 'lucide-react';
 import { AppView, LanguageCode } from '../types';
-import { TRANSLATIONS } from '../data/mockData';
+import { TRANSLATIONS } from '../data/i18n';
 import { useAuth } from '../auth/AuthProvider';
 import { PrivacySettings } from './PrivacySettings';
 

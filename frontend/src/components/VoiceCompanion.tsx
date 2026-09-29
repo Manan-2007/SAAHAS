@@ -83,7 +83,8 @@ export const VoiceCompanion: React.FC<VoiceCompanionProps> = ({ onBack, onTalk, 
     refreshHealth();
     return () => {
       mountedRef.current = false;
-      sessionRef.current?.stop();
+      // Leaving mid-check-in still saves what was said: flush closes the last utterance
+      sessionRef.current?.stop({ flush: true });
       sessionRef.current = null;
       toneRef.current?.();
       toneRef.current = null;

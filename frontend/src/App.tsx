@@ -7,7 +7,8 @@ import { SafeChat } from './components/SafeChat';
 import { VoiceCompanion } from './components/VoiceCompanion';
 import { VoiceCall } from './components/VoiceCall';
 import { WellBeingTracker } from './components/WellBeingTracker';
-import { SupportLegalPrep } from './components/SupportLegalPrep';
+import { Support, SupportTab } from './components/Support';
+import { BreathingSpace, CalmBackdrop } from './components/Calm';
 // The counsellor dashboard is a large, separate surface — lazy-load it so the
 // survivor-facing app stays lean and never downloads the admin bundle.
 const AdminApp = lazy(() => import('./admin/AdminApp'));
@@ -24,14 +25,33 @@ export default function App() {
   const [language, setLanguage] = useState<LanguageCode>(user.language);
   const [isQuickExited, setIsQuickExited] = useState(false);
   const [isCallOpen, setIsCallOpen] = useState(false);
-  const [selectedMood, setSelectedMood] = useState<string>('calm');
+  const [selectedMood, setSelectedMood] = useState<string>('');
   const [metrics, setMetrics] = useState<WellBeingMetric[]>(STARTING_METRICS);
   const [wellbeingMessage, setWellbeingMessage] = useState<string | null>(null);
+  const [supportTab, setSupportTab] = useState<SupportTab>('counsellor');
+  // 'warm' (more encouraging) or 'calm' - chosen from gender at sign-up, changeable in Settings
+  const uiStyle = user.uiStyle;
+
+  const openSupport = useCallback((tab: SupportTab) => {
+    setSupportTab(tab);
+    setCurrentView('support-network');
+  }, []);
+
+  const navigate = useCallback((view: AppView) => {
+    if (view === 'legal-prep') setSupportTab('court');
+    else if (view === 'support-network') setSupportTab('counsellor');
+    setCurrentView(view);
+  }, []);
 
   const showWellbeing = useCallback((w: Wellbeing) => {
     setMetrics((m) => applyWellbeing(m, w));
     setWellbeingMessage(w.message);
   }, []);
+
+  // Every screen starts at the top, not wherever the last one was scrolled to.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [currentView, supportTab]);
 
   // The home rows come from the victim's own check-ins (trend words, never scores)
   useEffect(() => {
@@ -87,22 +107,25 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f1e8] text-[#352e24] flex flex-col font-sans selection:bg-[#e7d3b5] selection:text-[#7a5a3f]">
+    <div data-style={uiStyle}
+         className="relative min-h-screen bg-[#f5f1e8] text-[#352e24] flex flex-col font-sans selection:bg-[#e7d3b5] selection:text-[#7a5a3f]">
+      <CalmBackdrop style={uiStyle} />
       {/* Top Header */}
       <Header
         currentView={currentView}
         language={language}
         onLanguageChange={setLanguage}
         onQuickExit={handleQuickExit}
-        onNavigate={setCurrentView}
+        onNavigate={navigate}
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full pt-24 pb-24 min-h-screen overflow-x-hidden">
+      <main className="relative z-10 flex-1 w-full pt-24 pb-24 min-h-screen overflow-x-hidden">
         {currentView === 'home-dashboard' && (
           <HomeDashboard
             language={language}
-            onNavigate={setCurrentView}
+            onNavigate={navigate}
+            onOpenSupport={openSupport}
             onOpenCall={() => setIsCallOpen(true)}
             selectedMood={selectedMood}
             onMoodSelect={setSelectedMood}
@@ -115,6 +138,7 @@ export default function App() {
           <SafeChat
             onBack={() => setCurrentView('home-dashboard')}
             onOpenCall={() => setIsCallOpen(true)}
+            onOpenSupport={openSupport}
             onUpdateMetric={handleUpdateMetric}
           />
         )}
@@ -146,7 +170,10 @@ export default function App() {
         )}
 
         {(currentView === 'support-network' || currentView === 'legal-prep') && (
-          <SupportLegalPrep
+          <Support
+            key={supportTab}
+            initialTab={supportTab}
+            language={language}
             onBack={() => setCurrentView('home-dashboard')}
             onOpenCall={() => setIsCallOpen(true)}
           />
@@ -157,13 +184,20 @@ export default function App() {
       <BottomNav
         currentView={currentView}
         language={language}
-        onNavigate={setCurrentView}
+        onNavigate={navigate}
       />
+
+      {/* A breathing space, one tap away on every screen */}
+      <BreathingSpace style={uiStyle} />
 
       {/* Private Voice Call Modal */}
       <CallModal
         isOpen={isCallOpen}
         onClose={() => setIsCallOpen(false)}
+        onAskCallback={() => {
+          setIsCallOpen(false);
+          openSupport('counsellor');
+        }}
       />
     </div>
   );

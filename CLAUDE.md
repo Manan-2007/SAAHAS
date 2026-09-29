@@ -45,7 +45,7 @@ train_all.sh             download data + train the distress model (--with-chat a
 ```bash
 ./start.sh                                   # backend :8000 + frontend :3000
 cd backend && ./venv/bin/uvicorn main:app --port 8000     # backend only (~3 min to load models)
-cd backend && ./venv/bin/python manage.py seed-demo       # demo counsellor + victims, prints tokens
+cd backend && ./venv/bin/python manage.py create-counsellor "Name" --username x   # real counsellor (no demo data exists)
 cd backend && ./venv/bin/python -m pytest -q tests        # must pass before committing backend work
 ```
 
@@ -95,6 +95,19 @@ cd backend && ./venv/bin/python -m pytest -q tests        # must pass before com
   implementations. If `trust_remote_code` is unavoidable, pin the revision.
 - Safari: create the `AudioContext` inside the tap handler, or it captures silence.
 
+- **Chat backend is switchable.** `CHAT_BACKEND=azure` in `backend/.env` uses Azure
+  OpenAI gpt-4o (`azure_chat.py`) and the local model isn't loaded; without it, the
+  local Qwen model. With Azure on, messages leave the machine - don't claim
+  on-device in that mode. Never commit `.env`.
+- **No demo data.** Never re-add seeded or mock data to real screens; the
+  frontend has no mock file any more. `manage.py purge-demo` cleans old seeds.
+- **Counsellors see summaries and per-message readings, never the words**,
+  unless the person chose `store_messages`. Insight turns live in memory only.
+- **Legal steps come from `monitoring/legal_actions.json` with a source URL per
+  provision.** Check the text before adding one, as with the relief schedule.
+- **The IVRS call never says the person's name, the case or "counsellor"** -
+  phones are shared. Reschedules are capped (2, within 72 h) on purpose.
+
 ## Decisions already made (don't redo without new evidence)
 
 - **Chat model: Qwen3-4B-Instruct.**
@@ -136,9 +149,11 @@ cd backend && ./venv/bin/python -m pytest -q tests        # must pass before com
 
 ## Known gaps and open work
 
-- Threats from other people ("they threatened my family") aren't flagged by the model
-  or the keywords. (A counsellor can now log the case-side of this as a
-  `bail_hearing`/`adjournment` event, but the chat model still misses it.)
+- Threats from other people are still missed by the distress *model*, but the
+  case-problem detector (`monitoring/case_issues.py`) now flags them: a
+  `threat_reported` alert, a safety card for the person, and legal steps for the
+  counsellor. Its patterns are a net, not a judge - review them with native
+  speakers, like the crisis keywords.
 - The Hindi strings for the case calendar and entitlements
   (`monitoring/service.py`, `VICTIM_EVENT_LABELS` / `ENTITLEMENT_LABELS`) are
   drafts and need a native reviewer; Punjabi falls back to English.
@@ -167,8 +182,10 @@ cd backend && ./venv/bin/python -m pytest -q tests        # must pass before com
   `lib/converseApi.ts`). It hasn't been tried on Safari or on a phone yet, and
   barge-in on laptop speakers still depends on the browser's echo cancellation.
   The other open boxes in `backend/backend.md` are small.
-- Not built: messaging a counsellor from the app, reassigning cases, SMS/IVRS outreach,
-  NHAA 14566 / Integrated Portal integration, and a knowledge base for legal questions.
+- Not built: reassigning cases, SMS, NHAA 14566 / Integrated Portal integration,
+  and a knowledge base for legal questions. IVRS is built but dials only once a
+  carrier is configured (`SAHAAS_IVRS_PROVIDER=twilio`); the LLM speaking on the
+  phone call (bridging the carrier's media stream to `/ws/converse`) is not built.
   Where the UI offers these, it says they aren't available rather than faking them.
 - Frontend rule: no mock data on real screens. Anything the backend doesn't measure
   shows "—" (see `frontend/src/admin/data/live.ts`).

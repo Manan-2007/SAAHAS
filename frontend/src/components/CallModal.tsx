@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthProvider';
 interface CallModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onAskCallback?: () => void;
 }
 
 // Real phone lines, one tap each. This used to simulate a call with the
@@ -16,7 +17,7 @@ const LINES = [
   { number: '14566', label: 'Helpline Against Atrocities', hint: 'Toll-free, for SC/ST atrocity cases' },
 ];
 
-export const CallModal: React.FC<CallModalProps> = ({ isOpen, onClose }) => {
+export const CallModal: React.FC<CallModalProps> = ({ isOpen, onClose, onAskCallback }) => {
   const { user } = useAuth();
 
   useEffect(() => {
@@ -75,11 +76,14 @@ export const CallModal: React.FC<CallModalProps> = ({ isOpen, onClose }) => {
           ))}
         </div>
 
-        {user.counsellor && (
-          <p className="text-xs text-[#efe7d6] leading-relaxed bg-white/10 rounded-2xl p-3">
-            {user.counsellor} is your counsellor and can see when things are harder for you. If you have their
-            number, you can call them too.
-          </p>
+        {user.role === 'victim' && onAskCallback && (
+          <button
+            onClick={onAskCallback}
+            className="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-white/15 hover:bg-white/25 text-sm font-semibold"
+          >
+            <HeartHandshake className="w-4 h-4" />
+            Ask {user.counsellor ?? 'my counsellor'} to call me back
+          </button>
         )}
       </div>
     </div>

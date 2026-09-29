@@ -159,6 +159,116 @@ CREATE TABLE IF NOT EXISTS entitlements (
     created_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ent_user_status ON entitlements(user_id, status);
+-- One row per message or spoken turn: what the distress model made of it, never
+-- the words. This is the per-message feed the counsellor watches live; the
+-- Distress Score is still computed from observations.
+CREATE TABLE IF NOT EXISTS readings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL,
+    channel TEXT NOT NULL,         -- chat | voice_call | voice_checkin | voice_note | message | ivrs
+    score REAL NOT NULL,           -- 0-100, the distress model's expected level
+    level INTEGER NOT NULL,        -- 0 none | 1 low | 2 moderate | 3 high
+    crisis INTEGER NOT NULL DEFAULT 0,
+    issues TEXT NOT NULL DEFAULT ''   -- case-issue categories spotted in this turn
+);
+CREATE INDEX IF NOT EXISTS readings_user_time ON readings(user_id, created_at);
+-- Problems with the justice process the person has run into: police refusing
+-- an FIR, threats, no notice of a hearing, relief that never came. Detected in
+-- what they say, reported by them directly, or logged by the counsellor, and
+-- tracked until something has been done about it.
+CREATE TABLE IF NOT EXISTS case_issues (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    severity TEXT NOT NULL,        -- high | medium
+    source TEXT NOT NULL,          -- detected | victim_report | counsellor | insight
+    summary_enc TEXT NOT NULL,     -- a paraphrase, never a quote
+    evidence_enc TEXT,             -- the words themselves, only with store_messages consent
+    status TEXT NOT NULL DEFAULT 'open',   -- open | in_progress | action_taken | resolved | dismissed
+    occurrences INTEGER NOT NULL DEFAULT 1,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL,
+    last_seen_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS issues_user_status ON case_issues(user_id, status);
+CREATE TABLE IF NOT EXISTS issue_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    issue_id INTEGER NOT NULL REFERENCES case_issues(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL,
+    by_id TEXT,
+    action TEXT NOT NULL,          -- a step from legal_actions.json, or 'note' / 'status'
+    note_enc TEXT
+);
+CREATE INDEX IF NOT EXISTS actions_issue ON issue_actions(issue_id, created_at);
+-- What the assistant tells the counsellor about a conversation: emotions,
+-- concerns and case problems, in its own words. Written with the
+-- share_insights consent; the conversation itself is not kept for this.
+CREATE TABLE IF NOT EXISTS insights (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL,
+    channel TEXT NOT NULL,         -- chat | voice_call | voice_checkin | mixed
+    period_start REAL NOT NULL,
+    period_end REAL NOT NULL,
+    turns INTEGER NOT NULL,
+    peak_level INTEGER,
+    mean_score REAL,
+    data_enc TEXT NOT NULL,        -- {emotions, summary, concerns, case_problems, risk_notes, follow_up}
+    generator TEXT NOT NULL        -- the model, or 'rules' when it was unavailable
+);
+CREATE INDEX IF NOT EXISTS insights_user_time ON insights(user_id, created_at);
+-- "Please call me" / "I want to talk" requests from the person to their counsellor.
+CREATE TABLE IF NOT EXISTS contact_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL,
+    kind TEXT NOT NULL,            -- callback | talk_soon | ivrs_callback
+    preferred_time TEXT,           -- asap | morning | afternoon | evening
+    note_enc TEXT,
+    status TEXT NOT NULL DEFAULT 'open',   -- open | acknowledged | done
+    handled_by TEXT,
+    handled_at REAL,
+    response_enc TEXT
+);
+CREATE INDEX IF NOT EXISTS contact_user_status ON contact_requests(user_id, status);
+-- Secure messages between a person and their counsellor. Sent on purpose to a
+-- human, so kept (encrypted) regardless of the chat-storage consent.
+CREATE TABLE IF NOT EXISTS counsellor_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,   -- the victim in the thread
+    created_at REAL NOT NULL,
+    sender TEXT NOT NULL,          -- victim | counsellor
+    sender_id TEXT,
+    text_enc TEXT NOT NULL,
+    read_at REAL
+);
+CREATE INDEX IF NOT EXISTS cmsg_user_time ON counsellor_messages(user_id, created_at);
+-- Missed check-in outreach: the IVRS call queue and its reschedule budget.
+CREATE TABLE IF NOT EXISTS outreach_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reason TEXT NOT NULL,          -- missed_checkin
+    missed_since REAL NOT NULL,    -- when the check-in was due
+    scheduled_for REAL NOT NULL,   -- next call attempt
+    deadline REAL NOT NULL,        -- rescheduling can never push past this
+    status TEXT NOT NULL DEFAULT 'scheduled',
+        -- scheduled | calling | completed | escalated | cancelled
+    attempts INTEGER NOT NULL DEFAULT 0,
+    reschedules INTEGER NOT NULL DEFAULT 0,
+    provider_ref TEXT,
+    outcome_enc TEXT,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS outreach_status_time ON outreach_calls(status, scheduled_for);
+-- Counsellor contact details a victim may see (a work line, office hours).
+CREATE TABLE IF NOT EXISTS counsellor_profiles (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    phone_enc TEXT,
+    hours_enc TEXT,
+    updated_at REAL NOT NULL
+);
 """
 
 # Columns added after the first release. SQLite has no "ADD COLUMN IF NOT
@@ -167,6 +277,10 @@ MIGRATIONS = [
     # s.15A: notice to the victim before a bail/parole hearing is mandatory
     # (Hariram Bhambhi v. Satyanarayan, 2021). NULL means "nobody recorded it".
     ("case_events", "notice_given", "INTEGER"),
+    # Asked at sign-up; shapes the app's tone (encrypted like other personal data).
+    ("users", "gender_enc", "TEXT"),
+    # 'warm' | 'calm' - the person's own choice of app style, overriding the default
+    ("users", "ui_style", "TEXT"),
 ]
 
 
@@ -203,3 +317,8 @@ def now():
 
 def iso(ts):
     return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(timespec="seconds") if ts else None
+
+
+def parse_iso(value):
+    """The inverse of iso(), for sorting views; 0 for a missing value."""
+    return datetime.fromisoformat(value).timestamp() if value else 0.0

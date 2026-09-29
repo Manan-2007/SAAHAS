@@ -5,8 +5,12 @@ falls back to its scripted replies.
 """
 
 import importlib.util
+import itertools
+import queue
 import re
-from concurrent.futures import ThreadPoolExecutor
+import threading
+import time
+from concurrent.futures import Future
 from pathlib import Path
 
 import yaml
@@ -189,6 +193,34 @@ class ChatModel:
             self.translator.remember(result["reply"], english)
         return result
 
+    def complete(self, messages, max_tokens=256):
+        """Raw completion with the caller's own system prompt - no persona, no
+        safety wrapping - for internal notes, never for replies to a person.
+        Hindi turns are read in English, like replies are, and the sampling is
+        cooler so the JSON comes back parseable."""
+        from mlx_lm import generate
+        from mlx_lm.sample_utils import make_sampler
+        if self.translator.loaded("hi"):
+            messages = [m if m["role"] == "system" else {**m, "content": self._lines_to_english(m["content"])}
+                        for m in messages]
+        prompt = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False,
+                                                    enable_thinking=False)
+        return generate(self.model, self.tokenizer, prompt=prompt, max_tokens=max_tokens,
+                        sampler=make_sampler(temp=0.2, top_p=0.9))
+
+    def _lines_to_english(self, text):
+        """Translates Hindi line by line, keeping a "Speaker [tag]: " prefix as it is."""
+        out = []
+        for line in text.split("\n"):
+            head, sep, body = line.partition(": ")
+            if sep and detect_language(body) == "hi":
+                out.append(f"{head}: {self.translator.to_english(body)}")
+            elif not sep and detect_language(line) == "hi":
+                out.append(self.translator.to_english(line))
+            else:
+                out.append(line)
+        return "\n".join(out)
+
     def stream(self, messages, on_text, should_stop, at_risk=False, voice_context=None, spoken=None,
                max_tokens=None, reply_language=None):
         """Like reply(), but calls on_text(piece) as tokens arrive and stops
@@ -221,18 +253,67 @@ class ChatModel:
         return self._result(text, crisis)
 
 
+FOREGROUND, BACKGROUND = 0, 10
+
+
+class _PriorityWorker:
+    """One thread, a priority queue in front of it. MLX needs the single thread;
+    the priorities make sure a person waiting for a reply is always served
+    before background work (conversation insights) that nobody is waiting on."""
+
+    def __init__(self, name):
+        self._queue = queue.PriorityQueue()
+        self._order = itertools.count()
+        self._thread = threading.Thread(target=self._run, name=name, daemon=True)
+        self._thread.start()
+
+    def submit(self, fn, *args, priority=FOREGROUND):
+        future = Future()
+        self._queue.put((priority, next(self._order), future, fn, args))
+        return future
+
+    def pending(self, priority=FOREGROUND):
+        return sum(1 for item in list(self._queue.queue) if item[0] <= priority)
+
+    def _run(self):
+        while True:
+            _, _, future, fn, args = self._queue.get()
+            if not future.set_running_or_notify_cancel():
+                continue
+            try:
+                future.set_result(fn(*args))
+            except BaseException as exc:          # delivered to whoever waits on it
+                future.set_exception(exc)
+
+
 class ChatEngine:
     """Runs all MLX work on one dedicated thread - MLX GPU streams belong to
     the thread that created them, so loading and generating must share one."""
 
     def __init__(self):
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="chat-mlx")
+        self._executor = _PriorityWorker("chat-mlx")
         self._model = None
+        self._last_foreground = 0.0
         self._loading = self._executor.submit(self._load_model)
 
     def _load_model(self):
         self._model = ChatModel()
         self._model.translator.ready("hi")     # load the Hindi translators now, not on the first Hindi message
+        self._warm_up()
+
+    def _warm_up(self):
+        """Burn one throwaway generation so the first real message is not slow.
+
+        Loading the weights is not enough: Metal compiles its compute kernels on
+        the first forward pass, which cost ~50s on a cold server while the person
+        sat watching the typing dots. Doing it here moves that onto startup,
+        where nobody is waiting. Failure is not fatal - it is only a warm-up."""
+        try:
+            start = time.time()
+            self._model.reply([{"role": "user", "content": "hi"}])
+            print(f"[chat] kernels warm after {time.time() - start:.1f}s")
+        except Exception as exc:
+            print(f"[chat] warm-up skipped: {exc}")
 
     def _ready_model(self):
         if self._model is None:
@@ -247,11 +328,25 @@ class ChatEngine:
         return self._ready_model().stream(messages, on_text, should_stop, **kwargs)
 
     def submit(self, messages, tone=None, at_risk=False):
+        self._last_foreground = time.time()
         return self._executor.submit(self._reply, messages, tone, at_risk)
 
     def submit_stream(self, messages, on_text, should_stop, **kwargs):
         """kwargs: at_risk, voice_context, spoken, max_tokens, reply_language (see ChatModel.stream)."""
+        self._last_foreground = time.time()
         return self._executor.submit(self._stream, messages, on_text, should_stop, kwargs)
+
+    def _complete(self, messages, max_tokens):
+        return self._ready_model().complete(messages, max_tokens)
+
+    def complete_background(self, messages, max_tokens=256):
+        """A plain completion (the conversation-insight note) at background
+        priority: any reply someone is waiting for goes first."""
+        return self._executor.submit(self._complete, messages, max_tokens, priority=BACKGROUND)
+
+    def busy(self):
+        """Someone is being answered, or was a moment ago."""
+        return self._executor.pending(FOREGROUND) > 0 or time.time() - self._last_foreground < 5
 
     def translation_ready(self, language):
         """Whether replies in `language` go through translation (never blocks)."""
@@ -271,6 +366,18 @@ class ChatEngine:
 
 
 def load_chat_engine():
+    # CHAT_BACKEND=azure: replies come from an Azure OpenAI deployment and the
+    # local model is never loaded (azure_chat.py). Default: the local MLX model.
+    import os
+    if os.environ.get("CHAT_BACKEND", "local").lower() == "azure":
+        from azure_chat import AzureChatEngine
+        try:
+            engine = AzureChatEngine()
+        except KeyError as exc:
+            print(f"[chat] CHAT_BACKEND=azure but {exc} is not set; /chat disabled")
+            return None
+        print(f"[chat] using {engine.model_name} (local chat model not loaded)")
+        return engine
     # find_spec, not import: mlx must first be imported on the engine thread
     if importlib.util.find_spec("mlx_lm") is None:
         print("[chat] mlx-lm not installed (Apple Silicon only); /chat disabled")

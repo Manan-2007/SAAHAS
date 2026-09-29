@@ -1,5 +1,19 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+def _load_env_file(path):
+    """KEY=VALUE lines from backend/.env (git-ignored). Real environment variables win."""
+    if not os.path.isfile(path):
+        return
+    with open(path , encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key , _ , value = line.partition("=")
+            os.environ.setdefault(key.strip() , value.strip().strip('"').strip("'"))
+
+_load_env_file(os.path.join(os.path.dirname(os.path.abspath(__file__)) , ".env"))
 import asyncio
 import json
 import time
@@ -23,7 +37,9 @@ from speaker_session import SpeakerSession
 from chat_engine import load_chat_engine , CRISIS_RE
 from distress_engine import DistressEngine
 from monitoring import (api as monitoring_api , auth as monitoring_auth , db as monitoring_db ,
-                        service as monitoring , storage as monitoring_storage)
+                        events as monitoring_events , insights as monitoring_insights ,
+                        outreach as monitoring_outreach , service as monitoring , storage as monitoring_storage ,
+                        support as monitoring_support , case_issues)
 from tempfile import NamedTemporaryFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -118,6 +134,45 @@ RELIABLE_VOICED_SECONDS = 3.0   # emotion2vec+ hallucinates below ~3s of speech
 MIN_RECORDED_VOICED_S = 2.0     # shorter voice check-ins aren't saved to the timeline
 KEEP_AUDIO_MAX_S = 180.0        # cap on the audio held in memory for a stored check-in
 RESCORE_INTERVAL_S = 3600       # engagement keeps changing while a victim is quiet
+INSIGHT_TICK_S = 15             # how often quiet conversations are looked for
+OUTREACH_TICK_S = 60            # missed check-ins -> calls
+
+def generate_note(messages , max_tokens):
+    """The insight note, written by the chat model at background priority.
+    None when the model isn't there; insights then fall back to rules."""
+    if chat_engine is None or not chat_engine.status().get("ready"):
+        return None
+    return chat_engine.complete_background(messages , max_tokens).result(timeout=120)
+
+def flush_insight(user_id , channel=None):
+    try:
+        monitoring_insights.flush(user_id , channel , generate_note)
+    except Exception as e:
+        print(f"[insights] could not summarise: {e}")
+
+async def insight_loop():
+    while True:
+        await asyncio.sleep(INSIGHT_TICK_S)
+        # Never compete with someone waiting for a reply
+        if chat_engine is not None and chat_engine.busy():
+            continue
+        try:
+            done = await run_in_threadpool(monitoring_insights.flush_idle , generate_note)
+            if done:
+                print(f"[insights] summarised {done} conversation(s)")
+        except Exception as e:
+            print(f"[insights] pass failed: {e}")
+
+async def outreach_loop():
+    while True:
+        await asyncio.sleep(OUTREACH_TICK_S)
+        try:
+            queued = await run_in_threadpool(monitoring_outreach.schedule_missed)
+            placed = await run_in_threadpool(monitoring_outreach.dial_due)
+            if queued or placed:
+                print(f"[outreach] queued {len(queued)} call(s), placed {len(placed)}")
+        except Exception as e:
+            print(f"[outreach] pass failed: {e}")
 
 async def rescore_loop():
     while True:
@@ -136,9 +191,14 @@ async def rescore_loop():
 
 @asynccontextmanager
 async def lifespan(app):
-    task = asyncio.create_task(rescore_loop())
+    monitoring_events.bind(asyncio.get_running_loop())
+    tasks = [asyncio.create_task(loop()) for loop in (rescore_loop , insight_loop , outreach_loop)]
     yield
-    task.cancel()
+    for task in tasks:
+        task.cancel()
+    # Whatever was mid-conversation still reaches the counsellor
+    for user_id in list(monitoring_insights.buffer._turns):
+        await run_in_threadpool(flush_insight , user_id)
 
 app = FastAPI(lifespan=lifespan)
 
@@ -289,9 +349,12 @@ def record_voice(user , finals , audio=None , sample_rate=None , raw=None , kind
     text = summary["transcript"]
     distress = distress_engine.score(text) if text else None
     crisis = bool(text and (CRISIS_RE.search(text) or (distress and distress["high_risk"])))
-    result = monitoring.record_voice_session(user , summary , distress , crisis)
+    result = monitoring.record_voice_session(user , summary , distress , crisis , channel=kind)
     if result is not None:
         store_recording(user , summary , audio , sample_rate , raw , kind)
+    if kind in ("voice_checkin" , "voice_note"):
+        # A check-in is a whole conversation on its own: tell the counsellor now
+        flush_insight(user["id"] , kind)
     return result
 
 @app.websocket("/ws/predict")
@@ -505,8 +568,13 @@ async def chat(req : ChatRequest , user = Depends(monitoring_auth.optional_user)
     # the chat model itself is unavailable
     recorded = False
     is_victim = user is not None and user["role"] == "victim"
+    # A threat from someone else is not a self-harm crisis, but the person
+    # should still see where to go if they are in danger now (checked for
+    # everyone, signed in or not - the words are matched, nothing is stored).
+    safety = bool(set(case_issues.detect(text)) & set(case_issues.SAFETY))
     if is_victim:
-        await run_in_threadpool(monitoring.record_chat , user , text , distress_result ,
+        # score, per-message reading, case problems, insight buffer - all live to the counsellor
+        await run_in_threadpool(monitoring.process_message , user , text , "chat" , distress_result ,
                                 at_risk or bool(CRISIS_RE.search(text)))
         await run_in_threadpool(monitoring.remember_message , user , "user" , text , "chat")
         recorded = True
@@ -521,7 +589,38 @@ async def chat(req : ChatRequest , user = Depends(monitoring_auth.optional_user)
     # and reads as a monologue when it is loaded back.
     if is_victim:
         await run_in_threadpool(monitoring.remember_message , user , "assistant" , result["reply"] , "chat")
-    return {**result , "distress" : distress_result , "model" : chat_engine.model_name , "recorded" : recorded}
+        monitoring_insights.note_turn(user , "assistant" , result["reply"] , "chat")
+    return {**result , "distress" : distress_result , "model" : chat_engine.model_name , "recorded" : recorded ,
+            "safety" : safety}
+
+
+class VictimMessage(BaseModel):
+    text : str = Field(min_length=1 , max_length=4000)
+
+@app.post("/me/messages")
+async def message_counsellor(req : VictimMessage , user = Depends(monitoring_auth.victim)):
+    """A message to the person's human counsellor. It goes through the same
+    distress and case-problem pass as chat, so a hard message is flagged live,
+    and the crisis banner still shows when it needs to."""
+    text = req.text.strip()
+    distress_result = await run_in_threadpool(distress_engine.score , text)
+    crisis = bool(CRISIS_RE.search(text) or (distress_result and distress_result["high_risk"]))
+    message = await run_in_threadpool(monitoring_support.send_from_victim , user , text)
+    await run_in_threadpool(monitoring.process_message , user , text , "message" , distress_result , crisis ,
+                            None , False)
+    return {"message" : message , "crisis" : crisis ,
+            "crisis_message" : monitoring.crisis_message() if crisis else None ,
+            "safety" : bool(set(case_issues.detect(text)) & set(case_issues.SAFETY))}
+
+@app.post("/counsellor/victims/{victim_id}/insights/flush")
+async def summarise_now(victim_id : str , user = Depends(monitoring_auth.counsellor)):
+    """Write the insight for whatever is buffered for this client right now."""
+    if await run_in_threadpool(monitoring_insights.for_victim , user , victim_id , 1) is None:
+        raise HTTPException(status_code=404 , detail="No such client assigned to you")
+    if not monitoring_insights.buffer.size(victim_id):
+        return {"summarised" : False}
+    await run_in_threadpool(flush_insight , victim_id)
+    return {"summarised" : True}
 
 # Live one-on-one voice conversation (voice_agent/): Whisper hears the words,
 # the emotion models hear the voice, the chat model answers, Kokoro speaks.
@@ -530,11 +629,28 @@ from voice_agent.engines import load_voice_agent
 from voice_agent.session import ConversationSession
 
 voice_agent = load_voice_agent()
+
+def voice_turn(user , text , distress , crisis):
+    return monitoring.process_message(user , text , "voice_call" , distress , crisis)
+
+def voice_remember(user , role , text , channel="voice"):
+    if role == "assistant":
+        monitoring_insights.note_turn(user , "assistant" , text , "voice_call")
+    return monitoring.remember_message(user , role , text , channel)
+
+def voice_call_ended(user , finals):
+    """The call's voice check-in, then the insight for the whole call."""
+    try:
+        if finals:
+            record_voice(user , finals , kind="voice_call")
+    finally:
+        flush_insight(user["id"] , "voice_call")
+
 voice_deps = SimpleNamespace(
     analyze=analyze_and_predict , speech_segments=speech_segments , chat=chat_engine ,
     distress=distress_engine , crisis_re=CRISIS_RE , crisis_message=monitoring.crisis_message ,
-    record_chat=monitoring.record_chat , record_voice=record_voice ,
-    conversation=monitoring.conversation , remember=monitoring.remember_message ,
+    record_chat=voice_turn , record_voice=voice_call_ended ,
+    conversation=monitoring.conversation , remember=voice_remember ,
     user_for_token=monitoring_auth.user_for_token , emotions=EMOTIONS , pick_headline=pick_headline ,
     SpeakerSession=SpeakerSession)
 

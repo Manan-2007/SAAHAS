@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-from . import auth, crypto, db, questionnaires, scoring, storage
+from . import auth, case_issues, crypto, db, events, insights, outreach, questionnaires, scoring, storage, support
 
 DAY = scoring.DAY
 NEGATIVE_EMOTIONS = ("sad", "fearful", "angry", "disgust")
@@ -28,6 +28,9 @@ ENTITLEMENT_STAGES = ("fir", "chargesheet", "conviction", "trial_end",
 ENTITLEMENT_STATUS = ("due", "received", "not_received", "unknown")
 SIGNAL_METRICS = ("text_distress", "voice_distress", "voice_arousal", "voice_valence")
 LEVEL_RANK = {"crisis": 0, "high": 1, "watch": 2}
+GENDERS = ("woman", "man", "nonbinary", "prefer_not")
+UI_STYLES = ("warm", "calm")
+MOODS = ("calm", "okay", "tired", "anxious", "low", "reflective")
 
 FALLBACK_CRISIS_MESSAGE = (
     "If you're thinking about harming yourself or you're in danger right now, please reach out immediately: "
@@ -74,28 +77,41 @@ _today = scoring.today_for
 # ---------------------------------------------------------------- accounts
 
 def _insert_user(conn, role, name, language="en", phone=None, case_ref=None, consent=None,
-                 counsellor_id=None, created_at=None):
+                 counsellor_id=None, created_at=None, gender=None):
     token = auth.new_token()
     user_id = db.new_id()
     conn.execute(
         "INSERT INTO users (id, role, name_enc, phone_enc, case_ref_enc, language, counsellor_id, consent, "
-        "token_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "token_hash, created_at, gender_enc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (user_id, role, crypto.enc(name), crypto.enc(phone), crypto.enc(case_ref), language, counsellor_id,
-         json.dumps(consent or {}), auth.hash_token(token), created_at or db.now()))
+         json.dumps(consent or {}), auth.hash_token(token), created_at or db.now(), crypto.enc(gender)))
     return user_id, token
 
 
-def create_counsellor(name, username=None, password=None):
+def default_style(gender):
+    """The app's tone when the person hasn't picked one: warmer and more
+    encouraging for women, the plain calm style otherwise. Either can be
+    switched in Settings."""
+    return "warm" if gender == "woman" else "calm"
+
+
+def create_counsellor(name, username=None, password=None, phone=None, hours=None):
+    """New counsellors take over anyone who signed up while nobody was there to
+    be assigned - otherwise those people would be watched by no one."""
     with db.connect() as conn:
         user_id, token = _insert_user(conn, "counsellor", name)
         if username and password:
             username = auth.set_credentials(conn, user_id, username, password)
+        adopted = conn.execute("UPDATE users SET counsellor_id = ? WHERE role = 'victim' AND counsellor_id IS NULL",
+                               (user_id,)).rowcount
+    if phone or hours:
+        support.set_counsellor_contact({"id": user_id}, phone, hours)
     return {"user_id": user_id, "token": token, "role": "counsellor", "name": name,
-            "username": username if password else None}
+            "username": username if password else None, "adopted": adopted}
 
 
 def register_victim(name, language="en", phone=None, case_ref=None, consent=None, created_at=None,
-                    username=None, password=None):
+                    username=None, password=None, gender=None):
     """Assigns the counsellor with the fewest victims.
 
     username + password are optional: without them the account is reachable
@@ -108,7 +124,7 @@ def register_victim(name, language="en", phone=None, case_ref=None, consent=None
             "LEFT JOIN users v ON v.counsellor_id = c.id AND v.role = 'victim' "
             "WHERE c.role = 'counsellor' GROUP BY c.id ORDER BY COUNT(v.id), c.created_at LIMIT 1").fetchone()
         user_id, token = _insert_user(conn, "victim", name, language, phone, case_ref, consent,
-                                      counsellor["id"] if counsellor else None, created_at)
+                                      counsellor["id"] if counsellor else None, created_at, gender)
         if username and password:
             username = auth.set_credentials(conn, user_id, username, password)
     return {"user_id": user_id, "token": token, "role": "victim",
@@ -131,13 +147,35 @@ def profile(user):
         counsellor = _name_of(conn, user["counsellor_id"])
         credentials = auth.credentials_of(conn, user["id"])
         onboarding = _profile_of(conn, user["id"])
+    gender = crypto.dec(user.get("gender_enc"))
     return {"user_id": user["id"], "role": user["role"], "name": crypto.dec(user["name_enc"]),
             "language": user["language"], "consent": user["consent"], "counsellor": counsellor,
             "created_at": iso(user["created_at"]),
             "username": credentials["username"] if credentials else None,
             "has_password": credentials is not None,
             "signed_in_with": "session" if user.get("session_id") else "access_token",
-            "profile": onboarding}
+            "profile": onboarding,
+            "gender": gender,
+            "ui_style": user.get("ui_style") or default_style(gender),
+            "phone": crypto.dec(user.get("phone_enc")) if user["role"] == "victim" else None}
+
+
+def update_settings(user, gender=None, ui_style=None, phone=None, clear_phone=False):
+    """Gender, app style and phone number, from the settings screen."""
+    if gender is not None and gender not in GENDERS:
+        raise ValueError(f"gender must be one of {', '.join(GENDERS)}")
+    if ui_style is not None and ui_style not in UI_STYLES:
+        raise ValueError(f"ui_style must be one of {', '.join(UI_STYLES)}")
+    with db.connect() as conn:
+        if gender is not None:
+            conn.execute("UPDATE users SET gender_enc = ? WHERE id = ?", (crypto.enc(gender), user["id"]))
+        if ui_style is not None:
+            conn.execute("UPDATE users SET ui_style = ? WHERE id = ?", (ui_style, user["id"]))
+        if phone is not None or clear_phone:
+            conn.execute("UPDATE users SET phone_enc = ? WHERE id = ?",
+                         (None if clear_phone else crypto.enc(phone.strip()), user["id"]))
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
+    return profile({**auth._as_user(row), "session_id": user.get("session_id")})
 
 
 def save_profile(user, answers, display_name=None, language=None, now=None):
@@ -298,6 +336,7 @@ def submit_questionnaire(user, instrument, answers, channel="app", now=None):
     now = now or db.now()
     with db.connect() as conn:
         result = _insert_questionnaire(conn, user["id"], instrument, answers, channel, now)
+        outreach.cancel_for_checkin(conn, user["id"], now)
     recompute(user["id"], now)
     crisis = "self_harm_thoughts" in result["flags"]
     return {"saved": True, "instrument": instrument, "crisis": crisis,
@@ -317,6 +356,57 @@ def record_chat(user, text, distress=None, crisis=False, now=None):
         if crisis:
             _insert_observation(conn, user["id"], now, "chat", "crisis", 1)
     return recompute(user["id"], now)
+
+
+def process_message(user, text, channel="chat", distress=None, crisis=False, now=None, for_insight=True):
+    """Everything one message from a person sets in motion, in one place, so
+    chat, a spoken turn and a message to the counsellor are treated alike:
+
+      1. case problems in the words (police, courts, threats, relief) -> issues
+      2. the distress observation -> Distress Score -> alerts
+      3. a per-message reading for the counsellor's live feed (no words)
+      4. the turn is held for the next conversation insight (memory only)
+
+    Every step publishes to the counsellor's live stream."""
+    now = now or db.now()
+    found = case_issues.detect(text)
+    if found:
+        case_issues.record_many(user, found, "detected", evidence=text, now=now)
+    result = record_chat(user, text, distress, crisis, now)
+    reading = support.record_reading(user, channel, distress, crisis, found, now)
+    if for_insight:
+        insights.note_turn(user, "user", text, channel, reading, now)
+    return {"reading": reading, "issues": found, "score": result}
+
+
+def record_mood(user, mood, now=None):
+    """A one-tap mood from the home screen. It counts as contact (the person
+    showed up) and appears in the counsellor's feed, but is not scored."""
+    if mood not in MOODS:
+        raise ValueError(f"mood must be one of {', '.join(MOODS)}")
+    now = now or db.now()
+    with db.connect() as conn:
+        _insert_observation(conn, user["id"], now, "app", "self_mood", MOODS.index(mood), crypto.enc(mood))
+        counsellor = conn.execute("SELECT counsellor_id FROM users WHERE id = ?", (user["id"],)).fetchone()
+    events.publish(counsellor["counsellor_id"] if counsellor else None, "mood", victim_id=user["id"], mood=mood)
+    return {"saved": True, "mood": mood}
+
+
+def progress(user, now=None):
+    """Gentle, count-of-good-things numbers for the encouraging home card:
+    days they showed up, check-ins done. Nothing about how they felt."""
+    now = now or db.now()
+    with db.connect() as conn:
+        times = [r[0] for r in conn.execute(
+            "SELECT created_at FROM observations WHERE user_id = ? AND created_at >= ? "
+            "UNION ALL SELECT created_at FROM questionnaires WHERE user_id = ? AND created_at >= ?",
+            (user["id"], now - 7 * DAY, user["id"], now - 7 * DAY)).fetchall()]
+        checkins = conn.execute("SELECT COUNT(*) FROM questionnaires WHERE user_id = ? AND created_at >= ?",
+                                (user["id"], now - 14 * DAY)).fetchone()[0]
+        chats = conn.execute("SELECT COUNT(*) FROM insights WHERE user_id = ? AND created_at >= ?",
+                             (user["id"], now - 7 * DAY)).fetchone()[0]
+    days = {datetime.fromtimestamp(t).date() for t in times}
+    return {"days_active_7d": len(days), "checkins_14d": checkins, "conversations_7d": chats}
 
 
 # ---------------------------------------------------------------- conversation
@@ -381,12 +471,23 @@ def voice_distress(summary):
     return round(100 * min(max(value, 0.0), 1.0), 1)
 
 
-def record_voice_session(user, summary, distress=None, crisis=False, now=None):
+def record_voice_session(user, summary, distress=None, crisis=False, now=None, channel="voice_checkin"):
     """summary: {probabilities (0-100 per emotion), valence, arousal, voiced_seconds, emotion, transcript}.
-    Skipped when the victim turned voice analysis off."""
+    Skipped when the victim turned voice analysis off.
+
+    channel: voice_checkin / voice_note get their own reading, case-problem pass
+    and insight here; a voice_call already did that turn by turn."""
     if not user["consent"].get("voice_analysis", True):
         return None
     now = now or db.now()
+    transcript = (summary.get("transcript") or "").strip()
+    if channel != "voice_call":
+        found = case_issues.detect(transcript) if transcript else []
+        if found:
+            case_issues.record_many(user, found, "detected", evidence=transcript, now=now)
+        reading = support.record_reading(user, channel, distress, crisis, found, now)
+        if transcript:
+            insights.note_turn(user, "user", transcript, channel, reading, now)
     detail = crypto.enc_json({
         "emotion": summary.get("emotion"),
         "voiced_seconds": summary.get("voiced_seconds"),
@@ -428,6 +529,12 @@ def recompute(user_id, now=None):
         trend = scoring.trend(conn, user_id, now)
         upcoming = _upcoming_events(conn, user_id, now, 7)
         new_alerts = scoring.evaluate_alerts(conn, user_id, result, trend, upcoming, now)
+        owner = conn.execute("SELECT counsellor_id FROM users WHERE id = ?", (user_id,)).fetchone()
+    counsellor_id = owner["counsellor_id"] if owner else None
+    events.publish(counsellor_id, "score", victim_id=user_id, score=result["score"], tier=result["tier"],
+                   crisis=result["crisis"], trend=trend["direction"])
+    for alert in new_alerts:
+        events.publish(counsellor_id, "alert", victim_id=user_id, **alert)
     return {**result, "trend": trend, "upcoming_events": upcoming, "new_alerts": new_alerts}
 
 
@@ -546,6 +653,15 @@ ENTITLEMENT_LABELS = {
                     "hi": "चार्जशीट के समय मिलने वाली सहायता राशि"},
     "trial_end":   {"en": "Support money due at the end of the case",
                     "hi": "मामला समाप्त होने पर मिलने वाली सहायता राशि"},
+    # Added with the Annexure-I stages. Worded for the victim: the gazette says
+    # "on conviction" and "after the post-mortem report", which are not sentences
+    # to put in front of the person they happened to.
+    "conviction":  {"en": "Support money due once the case is decided",
+                    "hi": "मामले का फैसला होने पर मिलने वाली सहायता राशि"},
+    "medical_report": {"en": "Support money due after the medical report",
+                       "hi": "मेडिकल रिपोर्ट के बाद मिलने वाली सहायता राशि"},
+    "post_mortem": {"en": "Support money your family is entitled to",
+                    "hi": "आपके परिवार को मिलने वाली सहायता राशि"},
     "tame":        {"en": "Travel and daily expenses for going to the court or police station",
                     "hi": "अदालत या थाने जाने का यात्रा और दैनिक खर्च"},
     "other":       {"en": "Support you are entitled to", "hi": "आपको मिलने वाली सहायता"},
@@ -799,8 +915,23 @@ def list_victims(counsellor, now=None):
                                             (v["id"],)).fetchone()[0],
                 "last_contact_at": iso(_last_contact(conn, v["id"])),
                 "next_event": upcoming[0] if upcoming else None,
+                "gender": crypto.dec(v["gender_enc"]),
+                # The per-message picture, so a hard message shows before the score catches up.
+                "latest_reading": support.latest_reading(conn, v["id"]),
+                "peak_24h": support.recent_peak(conn, v["id"]),
+                "open_issues": conn.execute(
+                    f"SELECT COUNT(*) FROM case_issues WHERE user_id = ? AND status IN "
+                    f"({','.join('?' * len(case_issues.ACTIVE))})", (v["id"], *case_issues.ACTIVE)).fetchone()[0],
+                "unread_messages": conn.execute(
+                    "SELECT COUNT(*) FROM counsellor_messages WHERE user_id = ? AND sender = 'victim' "
+                    "AND read_at IS NULL", (v["id"],)).fetchone()[0],
+                "open_requests": conn.execute(
+                    "SELECT COUNT(*) FROM contact_requests WHERE user_id = ? AND status != 'done'",
+                    (v["id"],)).fetchone()[0],
             })
-    out.sort(key=lambda x: (not x["crisis"], -(x["score"] if x["score"] is not None else -1)))
+    # Crisis first, then anyone whose last day of messages hit high, then the score.
+    out.sort(key=lambda x: (not x["crisis"], ((x["peak_24h"] or {}).get("level") or 0) < 3,
+                            -(x["score"] if x["score"] is not None else -1)))
     return out
 
 
@@ -830,6 +961,11 @@ def victim_detail(counsellor, victim_id, now=None):
                 "answers": crypto.dec_json(q["answers_enc"]), "channel": q["channel"], "at": iso(q["created_at"]),
             } for q in qs],
             "alerts": [_alert_view(conn, a) for a in alert_rows],
+            "gender": crypto.dec(v["gender_enc"]),
+            "latest_reading": support.latest_reading(conn, victim_id),
+            "peak_24h": support.recent_peak(conn, victim_id),
+            "latest_insight": insights.latest_for(conn, victim_id),
+            "profile": _profile_of(conn, victim_id),
         }
         latest = detail["latest"]
         detail["forecast"] = scoring.forecast(conn, victim_id, latest["score"], now) if latest else None
@@ -919,3 +1055,29 @@ def update_alert(counsellor, alert_id, status, note=None):
                      "note_enc = COALESCE(?, note_enc) WHERE id = ?",
                      (status, counsellor["id"], db.now(), crypto.enc(note), alert_id))
         return _alert_view(conn, conn.execute("SELECT * FROM alerts WHERE id = ?", (alert_id,)).fetchone())
+
+
+# ---------------------------------------------------------------- housekeeping
+
+def purge_demo():
+    """Removes what `seed-demo` used to create: the "Demo Counsellor" (never a
+    real sign-in) and victims whose case reference starts DEMO- or whose name
+    is marked (synthetic). Real accounts are untouched; anyone orphaned is
+    adopted by the next counsellor created."""
+    with db.connect() as conn:
+        victims, counsellors = [], []
+        for r in conn.execute("SELECT id, role, name_enc, case_ref_enc FROM users").fetchall():
+            name = crypto.dec(r["name_enc"]) or ""
+            ref = crypto.dec(r["case_ref_enc"]) or ""
+            if r["role"] == "victim" and (ref.upper().startswith("DEMO-") or "(synthetic)" in name.lower()):
+                victims.append(r["id"])
+            elif r["role"] == "counsellor" and name == "Demo Counsellor" and not conn.execute(
+                    "SELECT 1 FROM credentials WHERE user_id = ?", (r["id"],)).fetchone():
+                counsellors.append(r["id"])
+    recordings = sum(storage.delete_all_for_user(v) for v in victims)
+    with db.connect() as conn:
+        for uid in victims + counsellors:
+            conn.execute("DELETE FROM users WHERE id = ?", (uid,))
+        orphaned = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'victim' AND counsellor_id IS NULL").fetchone()[0]
+    return {"victims": len(victims), "counsellors": len(counsellors), "recordings": recordings,
+            "unassigned_victims": orphaned}

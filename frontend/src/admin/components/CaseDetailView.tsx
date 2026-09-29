@@ -5,6 +5,10 @@ import {
   ScoreComponent, Timeline, VictimDetail, api, fetchAudioUrl,
 } from '../../lib/api';
 import { REASON_ICONS, REASON_TITLES, timeAgo } from '../data/live';
+import { InsightCard, InsightsPanel, ReadingsPanel } from './CaseLivePanels';
+import { CaseIssuesView } from './CaseIssuesView';
+import { MessageThread } from './InboxView';
+import { useLiveEvents } from '../liveBus';
 
 interface CaseDetailViewProps {
   caseData: CaseData;
@@ -15,10 +19,14 @@ interface CaseDetailViewProps {
   onChanged?: () => void;
 }
 
-type Tab = 'Signals' | 'Timeline' | 'Entitlements' | 'Alerts' | 'Recordings' | 'Consent';
+type Tab = 'Signals' | 'Insights' | 'Readings' | 'Issues' | 'Messages' | 'Timeline' | 'Entitlements' | 'Alerts' | 'Recordings' | 'Consent';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'Signals', label: 'Score & Signals', icon: 'monitoring' },
+  { id: 'Insights', label: 'Conversation insights', icon: 'psychology' },
+  { id: 'Readings', label: 'Per-message', icon: 'forum' },
+  { id: 'Issues', label: 'Case problems', icon: 'gavel' },
+  { id: 'Messages', label: 'Messages', icon: 'mail' },
   { id: 'Timeline', label: 'Timeline', icon: 'timeline' },
   { id: 'Entitlements', label: 'Relief', icon: 'payments' },
   { id: 'Alerts', label: 'Alerts', icon: 'notifications' },
@@ -64,7 +72,11 @@ const CONSENTS: { key: keyof VictimDetail['consent']; label: string }[] = [
   { key: 'voice_analysis', label: 'Voice analysis' },
   { key: 'store_messages', label: 'Keep chat messages' },
   { key: 'store_recordings', label: 'Keep voice recordings' },
+  { key: 'share_insights', label: 'Share conversation summaries' },
+  { key: 'ivrs_calls', label: 'Missed check-in calls' },
 ];
+
+const GENDER_LABEL: Record<string, string> = { woman: 'Woman', man: 'Man', nonbinary: 'Non-binary', prefer_not: 'Not stated' };
 
 const LEVEL_DOT: Record<Alert['level'], string> = {
   crisis: 'bg-[#ba1a1a] ring-[#ffdad6]',
@@ -172,6 +184,9 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
     setPlaying(null);
     load();
   }, [load]);
+
+  // The score, alerts and summary update the moment something happens.
+  useLiveEvents((e) => { if (e.victim_id === caseData.id) load(); }, ['score', 'alert', 'insight', 'issue']);
 
   useEffect(() => {
     if (activeTab !== 'Recordings' || !detail?.consent.store_recordings || recordings) return;
@@ -323,6 +338,7 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
               <p className="font-['Plus_Jakarta_Sans'] text-xs text-[#837562] mt-1">
                 Client since {caseData.registeredDate} • Counsellor: {caseData.assignedCounsellor}
                 {detail && ` • Language: ${detail.language.toUpperCase()} • Last contact ${timeAgo(detail.last_contact_at)}`}
+                {detail?.gender && ` • ${GENDER_LABEL[detail.gender] ?? detail.gender}`}
               </p>
             </div>
           </div>
@@ -462,6 +478,33 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
                     : 'No check-ins yet.'}
                 </p>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'Signals' && detail.latest_insight && (
+            <div className={`${CARD} space-y-2`}>
+              <div className="flex items-center justify-between">
+                <h3 className="font-['Plus_Jakarta_Sans'] text-base font-bold text-[#352e24]">Latest conversation</h3>
+                <button onClick={() => setActiveTab('Insights')} className="text-xs font-semibold text-[#9c6743] hover:underline">All insights</button>
+              </div>
+              <InsightCard insight={detail.latest_insight} />
+            </div>
+          )}
+
+          {activeTab === 'Insights' && (
+            <InsightsPanel victimId={caseData.id} name={caseData.name} shares={detail.consent.share_insights !== false} />
+          )}
+
+          {activeTab === 'Readings' && <ReadingsPanel victimId={caseData.id} />}
+
+          {activeTab === 'Issues' && (
+            <CaseIssuesView victimId={caseData.id} clients={[{ id: caseData.id, name: caseData.name }]} onOpenCase={() => {}} />
+          )}
+
+          {activeTab === 'Messages' && (
+            <div className={`${CARD} space-y-3`}>
+              <h3 className="font-['Plus_Jakarta_Sans'] text-base font-bold text-[#352e24]">Messages with {caseData.name}</h3>
+              <MessageThread victimId={caseData.id} victimName={caseData.name} compact />
             </div>
           )}
 

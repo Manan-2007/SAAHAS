@@ -1,5 +1,11 @@
+import type { DistressLabel, Gender, Insight, Reading } from '../lib/api';
+
 export type NavigationTab =
   | 'overview'
+  | 'live-feed'
+  | 'case-issues'
+  | 'inbox'
+  | 'outreach'
   | 'priority-cases'
   | 'forecast'
   | 'case-detail-signals'
@@ -88,6 +94,14 @@ export interface CaseData {
   // Case-aware forecast (backend.md §5a): a predicted peak when a hearing is near.
   forecast: { peak_score: number; peak_on: string; driver: string } | null;
   currentStep: number; // 1 to 5
+  // Live monitoring (backend.md §6)
+  gender: Gender | null;
+  latestReading: Reading | null;
+  peak24h: DistressLabel | null;   // hardest message in the last 24 h
+  openIssues: number;
+  unreadMessages: number;
+  openRequests: number;
+  latestInsight: Insight | null;
 }
 
 export interface NotificationItem {

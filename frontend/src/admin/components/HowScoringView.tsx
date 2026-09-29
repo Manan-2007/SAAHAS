@@ -14,7 +14,7 @@ const SIGNALS: { icon: string; label: string; weight: number; window: string; te
   { icon: 'volume_off', label: 'Withdrawal', weight: 13, window: 'ongoing',
     text: 'Going quiet: days since last contact and overdue check-ins. Silence is the strongest early signal, not the weakest.' },
   { icon: 'calendar_month', label: 'Case pressure', weight: 12, window: 'the calendar',
-    text: 'The justice system’s calendar: how close the next hearing is, repeated adjournments, and relief the person says never arrived.' },
+    text: 'The justice system’s calendar: how close the next hearing is, repeated adjournments, relief the person says never arrived, and open serious case problems such as a threat or a refused FIR.' },
 ];
 
 const BANDS: { label: string; range: string; color: string; bg: string }[] = [

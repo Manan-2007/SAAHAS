@@ -240,6 +240,33 @@ def keep(example, d):
     return not (URL_RE.search(reply) or CONTACT_RE.search(reply) or BOILERPLATE_RE.search(reply))
 
 
+def balance_questions(examples, target_pct, rng):
+    """Cap how many replies end in a question.
+
+    The previous set ran at 85%, because every tone example in the prompt the
+    teacher was given ended in one. A model trained on that interrogates: every
+    reply reflects and then probes, which reads as an interview rather than a
+    conversation, and it was the single thing that made the app feel immature.
+    Real conversation sits nearer 45%. Dropping whole examples is blunt, but it
+    is honest - it changes the mix rather than rewriting anyone's words."""
+    if not target_pct:
+        return examples
+    asks = [e for e in examples if e[-1]["content"].rstrip().endswith("?")]
+    rest = [e for e in examples if not e[-1]["content"].rstrip().endswith("?")]
+    before = 100 * len(asks) / max(len(examples), 1)
+    # keep at most target% of the total, where the total shrinks as we drop
+    allowed = int(len(rest) * target_pct / max(100 - target_pct, 1))
+    if len(asks) > allowed:
+        rng.shuffle(asks)
+        asks = asks[:allowed]
+    out = asks + rest
+    rng.shuffle(out)
+    after = 100 * len(asks) / max(len(out), 1)
+    print(f"\nReplies ending in a question: {before:.0f}% -> {after:.0f}% "
+          f"(target {target_pct}%, {len(examples) - len(out)} examples dropped)")
+    return out
+
+
 def run(cfg=None):
     cfg = cfg or load_config()
     d = cfg["data"]
@@ -293,6 +320,7 @@ def run(cfg=None):
         examples += capped
         print(f"  {source:45s} {len(capped):6d} kept of {len(items):6d}  ({skipped[source]} filtered/duplicate)")
     rng.shuffle(examples)
+    examples = balance_questions(examples, d.get("max_question_ending_pct", 45), rng)
     if d["max_examples"]:
         examples = examples[: d["max_examples"]]
 

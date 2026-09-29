@@ -1,3 +1,79 @@
+## Chat through Azure OpenAI gpt-4o (2026-09-26)
+
+- `CHAT_BACKEND=azure` (in the git-ignored `backend/.env`) routes chat, the voice
+  call's replies and conversation insights to Azure OpenAI gpt-4o with a short
+  system prompt (`chat_training/system_prompt_azure.txt`); the local Qwen model is
+  not loaded. Remove the line to go back to the local model.
+- ⚠ Privacy: with this on, messages are sent to Azure. The "everything runs
+  on-device" claim in the deck and landing page is not true while it is on.
+- Safety is unchanged in kind: the crisis check runs locally on the original
+  words before sending, the "points to help" guarantee is enforced in code, and
+  when Azure's content filter blocks a self-harm message (it does, measured) the
+  person gets a fixed safety reply instead of an error.
+- Measured replies: 1.1-2.7 s. Tests: 143 passing.
+
+## Live, production-ready monitoring: no demo data, every message to the counsellor (2026-09-19)
+
+**Demo data is gone.** `seed-demo` is removed from `manage.py`; `purge-demo`
+deleted the Demo Counsellor and the four DEMO-/synthetic victims from the live
+database (backup in `backend/data/backups/`). The two real accounts were kept and
+are adopted by the next counsellor created. The frontend's `mockData.ts` and the
+fake Support page (a made-up advocate, fake vault files, a fake hearing, a dead
+KIRAN helpline number) are gone.
+
+- **Every message reaches the counsellor live.** One pipeline for chat, voice
+  calls, check-ins, voice notes and messages: problem detection, score, alerts,
+  and a per-message reading (never the words). Pushed over SSE; measured ~20 ms
+  from send to the counsellor's screen. A high-risk message moves the person up
+  the caseload at once.
+- **Conversation insights**: the chat model writes a short note (emotions,
+  worries, case problems, next step) when a conversation goes quiet, a call
+  ends or a check-in finishes. Background priority on the MLX thread, so replies
+  are never delayed (chat still 2.2-2.8 s). Turns are held in memory only.
+  Tested end to end on chat, voice call, voice note and voice check-in.
+- **Case problems with legal steps**: 12 categories detected in English, Hindi
+  and Hinglish; each maps to steps with the provision and a source (PoA Act
+  s.4, s.14(3), s.15A, s.18A; Rules r.4(5), r.11, r.12(4); BNSS s.173(4),
+  s.175(3); WPS 2018). Threats from other people are now flagged, with a safety
+  card for the person. The model's own labels are overridden when its
+  description says otherwise (it had called bus fare "no lawyer").
+- **Reaching a human**: call-back requests, secure two-way messages, the
+  counsellor's contact card, verified helplines. The chat's "counsellor" tab and
+  the home "Message" button now reach the real counsellor.
+- **Missed check-in calls (IVRS)**: keypad PHQ-4, max 2 reschedules within 72 h,
+  3 tries, then an escalation alert. Console provider by default, Twilio ready.
+- **Gender at sign-up**; warm, encouraging style by default for women, the
+  existing calm style for everyone else; switchable. Calming Breathe tool and
+  ambient light on every screen.
+- Tests: 143 passing (27 new in `tests/test_live.py`).
+
+## SIH deck rebuilt around figures, with sourced numbers (2026-09-18)
+
+The deck argued the case in prose. It now argues it in charts, and every number
+on it is either measured here or traceable to a published source.
+
+- **`deck_build/charts.py`** builds the five figures. The signal weights and the
+  forecast curve are imported from `monitoring/scoring.py`, and the relief
+  splits are read out of `monitoring/relief_schedule.json`, so a change in the
+  code changes the slides rather than silently contradicting them. The palette
+  passes a colour-vision-deficiency and contrast check; brown and crimson never
+  share a chart, because that is the one pair that fails separation.
+- **External figures** come from the latest edition, NCRB *Crime in India 2024*
+  (released 4 May 2026), Table 7A.6, all-India row: 55,698 cases against SCs in
+  2024; 3,39,853 pending at year end; **95.2% pendency**; 5,757 convictions and
+  10,679 acquittals out of 16,973 completed trials, so **33.9% convicted and
+  62.9% acquitted**. 2019-23 come from NCDHR's tabulation of the same table, and
+  the two agree where they meet - NCRB's 2024 opening balance, 3,11,986, is
+  exactly the 2023 year-end figure. Treatment gap 84.5% is still NMHS 2015-16;
+  NMHS-2 is in the field and reports around October 2026.
+- **48 offences, 9 distinct payment schedules** - computed from the gazette
+  JSON, not asserted. A flat 25/50/25 is wrong for 18 of the 48.
+- **Chat latency measured, not inherited**: 2.3 s warm and 2.7 s cold on this
+  machine. The old deck said 2.1 s warm, which nothing in the repo supported.
+- Model claims stay at the level of results (macro-F1 0.91, 94% of high-risk
+  messages caught). The training-data provenance is deliberately left off the
+  slides for now.
+
 ## Case-aware distress: the calendar as a stressor (2026-09-11)
 
 The Distress Score used to read only what a person said and how they sounded.

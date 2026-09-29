@@ -3,7 +3,6 @@
 
 import type { WellBeingMetric } from '../types';
 import type { Trend, Wellbeing } from './api';
-import { INITIAL_WELLBEING_METRICS } from '../data/mockData';
 
 const WAITING = 'Check in to see how this is going';
 
@@ -29,11 +28,11 @@ const DESCRIPTIONS: Record<WellBeingMetric['category'], Record<Trend, string>> =
 };
 
 // Before the first check-in there's nothing to report: steady rows, no invented history
-export const STARTING_METRICS: WellBeingMetric[] = INITIAL_WELLBEING_METRICS.map((m) => ({
-  ...m,
-  trend: 'Stable',
-  description: WAITING,
-}));
+export const STARTING_METRICS: WellBeingMetric[] = [
+  { id: 'stress', name: 'Stress', description: WAITING, trend: 'Stable', icon: 'trending_down', category: 'stress' },
+  { id: 'energy', name: 'Energy', description: WAITING, trend: 'Stable', icon: 'trending_flat', category: 'energy' },
+  { id: 'fatigue', name: 'Fatigue', description: WAITING, trend: 'Stable', icon: 'bedtime', category: 'fatigue' },
+];
 
 export function applyWellbeing(metrics: WellBeingMetric[], w: Wellbeing): WellBeingMetric[] {
   return metrics.map((m) => {

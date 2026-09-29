@@ -1,0 +1,148 @@
+{
+  "about": "Problems a victim can run into with the justice process, and the steps and legal basis a counsellor can act on. Counsellor-facing guidance, not legal advice: confirm with the Special Public Prosecutor or legal aid before acting.",
+  "checked": "2026-09-18",
+  "caveat": "Statutes are cited from the texts listed in `sources`. BNSS 2023 replaced the CrPC from 1 July 2024 (s.173 BNSS = old s.154 CrPC, s.175 BNSS = old s.156). Hindi victim labels are drafts that need a native reviewer.",
+  "sources": {
+    "poa_s4": "https://indiankanoon.org/doc/146712902/",
+    "poa_s15a": "https://indiankanoon.org/doc/20559273/",
+    "poa_s14": "https://lawgist.in/scheduled-castes-and-the-scheduled-tribes-prevention-of-atrocities-act/14",
+    "poa_s18a": "https://lawgist.in/scheduled-castes-and-the-scheduled-tribes-prevention-of-atrocities-act/18A",
+    "poa_rules": "https://www.cvmc.in/wp-content/uploads/2023/09/SCST-POA-Rules-1995-English-2018.pdf",
+    "annexure_1": "https://poa.apcfss.in/documents/2016_Amendment_to_POA_Rules_1995_norms_for_relief.pdf",
+    "bnss_173_175": "https://drishtijudiciary.com/current-affairs/section-173-4-section-175-3-of-bnss",
+    "hariram_bhambhi": "https://www.livelaw.in/top-stories/supreme-court-mandatory-requirement-15a-sc-st-act-otice-to-victim-under-section-15a-in-court-proceedings-against-accused-is-mandatory-supreme-court-184630",
+    "witness_protection": "https://nyaaya.org/nyaaya-weekly/did-you-know-that-india-has-a-witness-protection-scheme/",
+    "nhaa": "https://www.pib.gov.in/Pressreleaseshare.aspx?PRID=1780741",
+    "nalsa": "https://nalsa.gov.in/faqs/"
+  },
+  "categories": {
+    "fir_refused": {
+      "title": "Police refused or delayed the FIR",
+      "severity": "high",
+      "victim_label": {"en": "The police would not register my complaint (FIR)", "hi": "पुलिस ने मेरी शिकायत (FIR) दर्ज नहीं की"},
+      "steps": [
+        {"id": "document", "text": "Write down the date, police station, and the name or rank of the officer, and what was said."},
+        {"id": "sp_complaint", "text": "Send the complaint in writing, by post, to the Superintendent of Police. The SP must investigate or direct an investigation.", "basis": "BNSS 2023 s.173(4)", "source": "bnss_173_175"},
+        {"id": "magistrate", "text": "If the SP does not act, apply to the Magistrate with a copy of the SP complaint and an affidavit.", "basis": "BNSS 2023 s.175(3)", "source": "bnss_173_175"},
+        {"id": "no_enquiry", "text": "Tell the police in writing that no preliminary enquiry is needed before an FIR under the Act.", "basis": "SC/ST (PoA) Act s.18A(1)(a)", "source": "poa_s18a"},
+        {"id": "neglect_of_duty", "text": "Wilfully not registering the FIR is a punishable neglect of duty (6 months to 1 year) for a public servant who is not SC/ST; the Special Court takes cognizance.", "basis": "SC/ST (PoA) Act s.4(1), s.4(2)(b), s.4(3)", "source": "poa_s4"},
+        {"id": "nhaa", "text": "Log the refusal with the National Helpline Against Atrocities, 14566.", "basis": "NHAA, MoSJE", "source": "nhaa"}
+      ]
+    },
+    "fir_copy": {
+      "title": "No copy of the FIR given",
+      "severity": "medium",
+      "victim_label": {"en": "I was not given a copy of my FIR", "hi": "मुझे FIR की कॉपी नहीं मिली"},
+      "steps": [
+        {"id": "request_copy", "text": "Ask the police station for the copy in writing; it has to be given to the informant forthwith, free.", "basis": "SC/ST (PoA) Act s.4(2)(c)", "source": "poa_s4"},
+        {"id": "sp_complaint", "text": "If refused, write to the Superintendent of Police and note it as neglect of duty.", "basis": "SC/ST (PoA) Act s.4(1), s.4(3)", "source": "poa_s4"}
+      ]
+    },
+    "investigation_delay": {
+      "title": "Investigation or charge sheet delayed",
+      "severity": "medium",
+      "victim_label": {"en": "Nothing is happening with the investigation", "hi": "जाँच में कुछ नहीं हो रहा"},
+      "steps": [
+        {"id": "check_timeline", "text": "Check how long it has been since the FIR: the charge sheet is due in the Special Court within 60 days, and a delay has to be explained in writing.", "basis": "SC/ST (PoA) Act s.4(2)(e)", "source": "poa_s4"},
+        {"id": "sp_complaint", "text": "Write to the Superintendent of Police asking for the status and the reason for delay.", "basis": "SC/ST (PoA) Act s.4(2)(e)", "source": "poa_s4"},
+        {"id": "special_court", "text": "Bring the dereliction to the Special Court, which takes cognizance and can direct penal proceedings.", "basis": "SC/ST (PoA) Act s.4(3)", "source": "poa_s4"}
+      ]
+    },
+    "threat": {
+      "title": "Threats or intimidation",
+      "severity": "high",
+      "victim_label": {"en": "Someone threatened me or my family", "hi": "किसी ने मुझे या मेरे परिवार को धमकी दी"},
+      "steps": [
+        {"id": "safety_now", "text": "Check safety first. If there is danger right now, call 112."},
+        {"id": "state_protection", "text": "The State has a duty to protect victims, their dependents and witnesses from intimidation, coercion, inducement, violence or threats. Ask the SP and the Special Court for protection.", "basis": "SC/ST (PoA) Act s.15A(1)", "source": "poa_s15a"},
+        {"id": "witness_protection", "text": "Apply under the Witness Protection Scheme, 2018: category A if the threat is to life, B to safety, reputation or property, C for harassment or intimidation.", "basis": "Witness Protection Scheme 2018; Mahender Chawla v. Union of India (2018)", "source": "witness_protection"},
+        {"id": "new_complaint", "text": "A fresh threat is a fresh incident: help register a new complaint and add it to the case record."}
+      ]
+    },
+    "pressure_to_compromise": {
+      "title": "Pressure to compromise or withdraw",
+      "severity": "high",
+      "victim_label": {"en": "People are pressuring me to settle or take back the case", "hi": "मुझ पर समझौता करने या केस वापस लेने का दबाव है"},
+      "steps": [
+        {"id": "state_protection", "text": "Coercion and inducement to withdraw are what s.15A(1) protection covers. Ask the SP and the Special Court for protection.", "basis": "SC/ST (PoA) Act s.15A(1)", "source": "poa_s15a"},
+        {"id": "inform_spp", "text": "Inform the Special Public Prosecutor so the pressure is on the court record."},
+        {"id": "witness_protection", "text": "If it continues, apply under the Witness Protection Scheme, 2018.", "basis": "Witness Protection Scheme 2018", "source": "witness_protection"}
+      ]
+    },
+    "no_hearing_notice": {
+      "title": "Not told about a court date or bail hearing",
+      "severity": "high",
+      "victim_label": {"en": "I was not told about a court date", "hi": "मुझे अदालत की तारीख के बारे में नहीं बताया गया"},
+      "steps": [
+        {"id": "notice_right", "text": "The victim has a right to reasonable, accurate and timely notice of every court proceeding, including bail; the Special Public Prosecutor or the State must inform them.", "basis": "SC/ST (PoA) Act s.15A(3)", "source": "poa_s15a"},
+        {"id": "right_to_be_heard", "text": "They are entitled to be heard at any bail, discharge, release, parole, conviction or sentence proceeding.", "basis": "SC/ST (PoA) Act s.15A(5)", "source": "poa_s15a"},
+        {"id": "mandatory", "text": "The Supreme Court has held this notice mandatory; an order passed without it can be challenged.", "basis": "Hariram Bhambhi v. Satyanarayan (2021)", "source": "hariram_bhambhi"},
+        {"id": "record_date", "text": "Add the hearing in SAHAAS with the notice box unticked so the s.15A watchdog tracks it, and write to the Special Public Prosecutor."}
+      ]
+    },
+    "relief_not_received": {
+      "title": "Relief money not received",
+      "severity": "medium",
+      "victim_label": {"en": "The support money I am owed has not come", "hi": "मुझे मिलने वाली सहायता राशि नहीं आई"},
+      "steps": [
+        {"id": "check_stage", "text": "Check which stage is due from Annexure-I (the split differs by offence) and add it in the Relief tab.", "basis": "SC/ST (PoA) Rules r.12(4), Annexure-I (G.S.R. 424(E), 2016)", "source": "annexure_1"},
+        {"id": "dm_office", "text": "Follow up with the District Magistrate / District Social Welfare Officer who sanctions the payment."}
+      ]
+    },
+    "tame_not_paid": {
+      "title": "Travel and maintenance not paid",
+      "severity": "medium",
+      "victim_label": {"en": "I paid for travel to court or police myself", "hi": "अदालत या थाने जाने का किराया मुझे खुद देना पड़ा"},
+      "steps": [
+        {"id": "claim_tame", "text": "Victims, dependents and witnesses are paid travel and maintenance for going to investigation and trial; women, minors, people over 60 and people with 40%+ disability are entitled to an attendant, who is paid too.", "basis": "SC/ST (PoA) Rules r.11", "source": "poa_rules"},
+        {"id": "add_entitlement", "text": "Add a TAME entitlement in the Relief tab so it is tracked until paid."}
+      ]
+    },
+    "hearing_delays": {
+      "title": "Repeated adjournments",
+      "severity": "medium",
+      "victim_label": {"en": "My court dates keep getting pushed", "hi": "मेरी अदालत की तारीख बार-बार बढ़ रही है"},
+      "steps": [
+        {"id": "two_months", "text": "The trial should, as far as possible, finish within two months of the charge sheet.", "basis": "SC/ST (PoA) Act s.14(3)", "source": "poa_s14"},
+        {"id": "inform_spp", "text": "Ask the Special Public Prosecutor to press for the case to be heard without further adjournment."},
+        {"id": "log_adjournments", "text": "Log each adjournment as a case date so the adjournment alert and the distress forecast see them."}
+      ]
+    },
+    "no_lawyer": {
+      "title": "No lawyer, or the prosecutor is not engaging",
+      "severity": "medium",
+      "victim_label": {"en": "I don't have a lawyer, or the lawyer isn't helping", "hi": "मेरे पास वकील नहीं है, या वकील मदद नहीं कर रहे"},
+      "steps": [
+        {"id": "senior_advocate", "text": "The District Magistrate may engage an eminent senior advocate, including one the victim chooses, to conduct the case.", "basis": "SC/ST (PoA) Rules r.4(5)", "source": "poa_rules"},
+        {"id": "right_to_assistance", "text": "The victim has a right to help from NGOs, social workers or advocates.", "basis": "SC/ST (PoA) Act s.15A(12)", "source": "poa_s15a"},
+        {"id": "nalsa", "text": "Free legal aid: NALSA helpline 15100, or the District Legal Services Authority.", "basis": "Legal Services Authorities Act, 1987", "source": "nalsa"}
+      ]
+    },
+    "boycott_harassment": {
+      "title": "Ongoing harassment or social boycott",
+      "severity": "high",
+      "victim_label": {"en": "I am still being harassed or kept out (boycott)", "hi": "मुझे अब भी परेशान किया जा रहा है या बहिष्कार हो रहा है"},
+      "steps": [
+        {"id": "new_offence", "text": "Imposing or threatening a social or economic boycott is itself an offence; help register a fresh complaint.", "basis": "SC/ST (PoA) Act s.3(1)(zc)", "source": "annexure_1"},
+        {"id": "state_protection", "text": "Ask for protection against continued intimidation.", "basis": "SC/ST (PoA) Act s.15A(1)", "source": "poa_s15a"}
+      ]
+    },
+    "disrespect": {
+      "title": "Treated with disrespect by officials",
+      "severity": "medium",
+      "victim_label": {"en": "Officials treated me with disrespect", "hi": "अधिकारियों ने मेरे साथ बुरा व्यवहार किया"},
+      "steps": [
+        {"id": "dignity", "text": "A victim must be treated with fairness, respect and dignity, with regard to age, gender, education or poverty.", "basis": "SC/ST (PoA) Act s.15A(2)", "source": "poa_s15a"},
+        {"id": "complaint", "text": "Help write a complaint to the officer's superior (SP for police, the District Magistrate otherwise)."}
+      ]
+    },
+    "other": {
+      "title": "Another problem with the case",
+      "severity": "medium",
+      "victim_label": {"en": "Something else about my case", "hi": "मेरे मामले से जुड़ी कोई और बात"},
+      "steps": [
+        {"id": "call_back", "text": "Call to understand the problem, then re-file it under the right category."}
+      ]
+    }
+  }
+}

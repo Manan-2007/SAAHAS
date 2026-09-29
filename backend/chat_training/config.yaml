@@ -4,7 +4,7 @@
 # Base model to fine-tune (MLX format, Apple Silicon). Qwen3-4B trains
 # comfortably on a 24 GB Mac. For a stronger (slower) companion, try
 # mlx-community/Qwen3-14B-4bit - it needs ~18 GB free while training.
-base_model: mlx-community/Qwen3-8B-4bit
+base_model: mlx-community/Qwen3-4B-Instruct-2507-4bit
 
 # Trained LoRA adapter, relative to this folder. The backend loads it
 # automatically and hot-reloads it when a new training run finishes.
@@ -14,7 +14,16 @@ data:
   # Short system line baked into training examples (the full
   # system_prompt.txt is ~350 tokens and would make every step ~3x slower).
   # Leave empty to train with the full prompt.
-  training_system_prompt: You are SAHAAS. You talk like a warm, ordinary person - not a counsellor.
+  # Train on the SAME system prompt the model is served with. A short stand-in
+  # made each example cheaper, but the adapter then learned a mapping conditioned
+  # on a prompt it never sees in production, so at serving time it was running
+  # out of distribution and the long prompt drove the behaviour instead.
+  # Train on the SAME system prompt the model is served with. A short stand-in
+  # made each example cheaper, but the adapter then learned a mapping keyed to a
+  # prompt it never sees in production, so at serving time it ran out of
+  # distribution and the long prompt drove the behaviour instead. Empty = use
+  # system_prompt.txt, the same file chat_engine loads.
+  training_system_prompt: ''
   valid_fraction: 0.05
   max_context_turns: 8     # conversation turns kept before each reply
   min_reply_chars: 20      # drop "ok"/"I see" but keep short natural replies:
@@ -24,6 +33,9 @@ data:
   max_turn_chars: 2000
   drop_personal_claims: true   # drop replies where the supporter describes their own life
                                # ("my wife...", "when I was a kid") - SAHAAS must not pretend to have one
+  # Share of replies allowed to end in a question. 85% is what the teacher
+  # produced and it reads as an interview; real conversation is nearer 45%.
+  max_question_ending_pct: 45
   max_per_source: 8000     # stops one huge dataset drowning out the others
   source_caps:             # per-dataset overrides (folder name under datasets/)
     Estwld__empathetic_dialogues_llm: 800    # casual chit-chat: some adds warmth, too much makes replies small-talky

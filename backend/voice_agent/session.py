@@ -103,7 +103,7 @@ class ConversationSession:
             self.cancel.set()
             if self.agent_task is not None:
                 self.agent_task.cancel()
-            if self.user is not None and self.turn_analyses:
+            if self.user is not None:
                 try:
                     await run_in_threadpool(self.deps.record_voice, self.user, self.turn_analyses)
                 except Exception as exc:

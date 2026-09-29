@@ -133,7 +133,15 @@ export interface Consent {
   voice_analysis: boolean;
   store_messages: boolean;
   store_recordings: boolean;
+  // The assistant may tell the counsellor how conversations went - a summary, never the words.
+  share_insights: boolean;
+  // Phone me if I miss a check-in (needs a phone number).
+  ivrs_calls: boolean;
 }
+
+export type Gender = 'woman' | 'man' | 'nonbinary' | 'prefer_not';
+// 'warm': more encouraging, softer colours (the default for women); 'calm': the plain calm style.
+export type UiStyle = 'warm' | 'calm';
 
 export interface OnboardingAnswers {
   coping: string | null;
@@ -156,6 +164,9 @@ export interface Me {
   has_password: boolean;
   signed_in_with: 'session' | 'access_token';
   profile: OnboardingAnswers | null;
+  gender: Gender | null;
+  ui_style: UiStyle;
+  phone: string | null;
 }
 
 export interface RegisterBody {
@@ -164,6 +175,8 @@ export interface RegisterBody {
   consent: Consent;
   username?: string;
   password?: string;
+  gender?: Gender;
+  phone?: string | null;
 }
 
 export interface AuthResult {
@@ -269,6 +282,12 @@ export interface CaseloadRow {
   open_alerts: number;
   last_contact_at: string | null;
   next_event: CaseEvent | null;
+  gender?: Gender | null;
+  latest_reading?: Reading | null;
+  peak_24h?: { level: number | null; label: DistressLabel | null; count: number };
+  open_issues?: number;
+  unread_messages?: number;
+  open_requests?: number;
 }
 
 export type ScoreComponent = 'questionnaires' | 'text' | 'voice' | 'engagement' | 'case_pressure';
@@ -310,7 +329,9 @@ export type AlertLevel = 'crisis' | 'high' | 'watch';
 export type AlertReason =
   | 'crisis_signal' | 'high_distress' | 'rising_distress' | 'gone_quiet' | 'upcoming_event'
   // case-aware distress (backend.md §5e)
-  | 'hearing_soon' | 'bail_no_notice' | 'entitlement_unpaid' | 'adjournment_streak';
+  | 'hearing_soon' | 'bail_no_notice' | 'entitlement_unpaid' | 'adjournment_streak'
+  // live monitoring (backend.md §6)
+  | 'threat_reported' | 'case_issue' | 'repeated_distress' | 'outreach_escalated';
 
 export interface Alert {
   id: number;
@@ -353,6 +374,11 @@ export interface VictimDetail {
   forecast?: Forecast | null;
   // relief entitlements with amounts (counsellor only, backend.md §5b)
   entitlements?: Entitlement[];
+  gender?: Gender | null;
+  latest_reading?: Reading | null;
+  peak_24h?: { level: number | null; label: DistressLabel | null; count: number };
+  latest_insight?: Insight | null;
+  profile?: OnboardingAnswers | null;
 }
 
 export interface Timeline {
@@ -445,6 +471,160 @@ export interface ForecastRow {
   driver: string;
 }
 
+// --- Live monitoring (backend.md §6) ---
+
+export type DistressLabel = 'none' | 'low' | 'moderate' | 'high';
+export type ReadingChannel = 'chat' | 'voice_call' | 'voice_checkin' | 'voice_note' | 'message' | 'ivrs';
+
+/** One message's distress reading. Never the words. */
+export interface Reading {
+  id: number;
+  victim_id: string;
+  victim_name?: string;
+  at: string;
+  channel: ReadingChannel;
+  score: number;
+  level: 0 | 1 | 2 | 3;
+  label: DistressLabel;
+  crisis: boolean;
+  issues: string[];
+}
+
+/** What the assistant tells the counsellor about a conversation. */
+export interface Insight {
+  id: number;
+  at: string;
+  channel: string;
+  period_start: string;
+  period_end: string;
+  turns: number;
+  peak_level: 'calm' | 'low' | 'moderate' | 'high' | null;
+  mean_score: number | null;
+  generator: 'model' | 'rules';
+  emotions: string[];
+  summary: string;
+  concerns: string[];
+  case_problems: { category: string; description: string }[];
+  risk_notes: string;
+  follow_up: string;
+}
+
+export type IssueStatus = 'open' | 'in_progress' | 'action_taken' | 'resolved' | 'dismissed';
+
+export interface LegalStep {
+  id: string;
+  text: string;
+  basis?: string;
+  source?: string;
+}
+
+export interface CaseIssue {
+  id: number;
+  category: string;
+  severity: 'high' | 'medium';
+  status: IssueStatus;
+  source: 'detected' | 'insight' | 'victim_report' | 'counsellor';
+  occurrences: number;
+  created_at: string;
+  updated_at: string;
+  last_seen_at: string;
+  // counsellor view
+  victim_id?: string;
+  victim_name?: string;
+  title?: string;
+  summary?: string;
+  evidence?: string | null;
+  steps?: LegalStep[];
+  actions?: { id: number; at: string; action: string; note: string | null; by: string | null }[];
+  // victim view
+  label?: string;
+}
+
+export interface LegalActions {
+  about: string;
+  checked: string;
+  caveat: string;
+  sources: Record<string, string>;
+  categories: Record<string, { title: string; severity: 'high' | 'medium'; steps: LegalStep[] }>;
+}
+
+export interface ContactRequestView {
+  id: number;
+  kind: 'callback' | 'talk_soon' | 'ivrs_callback';
+  preferred_time: 'asap' | 'morning' | 'afternoon' | 'evening' | null;
+  status: 'open' | 'acknowledged' | 'done';
+  at: string;
+  handled_at: string | null;
+  response: string | null;
+  victim_id?: string;
+  victim_name?: string;
+  note?: string | null;
+  handled_by?: string | null;
+}
+
+export interface CounsellorMessage {
+  id: number;
+  at: string;
+  sender: 'victim' | 'counsellor';
+  text: string;
+  read_at: string | null;
+}
+
+export interface InboxRow {
+  victim_id: string;
+  victim_name: string;
+  last_at: string;
+  unread: number;
+  last: { sender: 'victim' | 'counsellor'; text: string };
+}
+
+export interface Helpline {
+  number: string;
+  name: string;
+  hours: string;
+  what: string;
+}
+
+export interface SupportInfo {
+  counsellor: { name: string | null; phone: string | null; hours: string | null } | null;
+  unread_messages: number;
+  requests: ContactRequestView[];
+  helplines: Helpline[];
+}
+
+export interface CheckinCall {
+  id: number;
+  status: 'scheduled' | 'calling' | 'completed' | 'escalated' | 'cancelled';
+  reason: string;
+  missed_since: string;
+  scheduled_for: string;
+  deadline: string;
+  attempts: number;
+  reschedules: number;
+  reschedules_left: number;
+  updated_at: string;
+  can_reschedule?: boolean;
+  options?: { key: '1' | '2'; hours: number }[];
+  victim_id?: string;
+  victim_name?: string;
+  outcome?: string | null;
+}
+
+export interface IvrsStep {
+  say: string[];
+  gather: number | null;
+  hangup: boolean;
+  language: string;
+}
+
+export interface Progress {
+  days_active_7d: number;
+  checkins_14d: number;
+  conversations_7d: number;
+}
+
+export type Mood = 'calm' | 'okay' | 'tired' | 'anxious' | 'low' | 'reflective';
+
 // ---------------------------------------------------------------- endpoints
 
 const json = (method: string, body?: unknown, extra: Partial<RequestOptions> = {}): RequestOptions =>
@@ -492,6 +672,24 @@ export const api = {
   forgetConversation: () => apiFetch<{ deleted: number }>('/me/conversation', json('DELETE')),
   recordings: () => apiFetch<Recording[]>('/me/recordings'),
   deleteRecording: (id: string) => apiFetch<{ deleted: boolean }>(`/me/recordings/${id}`, json('DELETE')),
+  updateSettings: (body: { gender?: Gender; ui_style?: UiStyle; phone?: string; clear_phone?: boolean }) =>
+    apiFetch<Me>('/me/settings', json('PATCH', body)),
+  mood: (mood: Mood) => apiFetch<{ saved: boolean }>('/me/mood', json('POST', { mood })),
+  progress: () => apiFetch<Progress>('/me/progress'),
+  support: () => apiFetch<SupportInfo>('/me/support'),
+  requestContact: (body: { kind?: 'callback' | 'talk_soon'; preferred_time: ContactRequestView['preferred_time']; note?: string | null }) =>
+    apiFetch<ContactRequestView>('/me/contact-requests', json('POST', body)),
+  messages: () => apiFetch<CounsellorMessage[]>('/me/messages'),
+  sendMessage: (text: string) =>
+    apiFetch<{ message: CounsellorMessage; crisis: boolean; crisis_message: string | null; safety: boolean }>(
+      '/me/messages', json('POST', { text })),
+  issueCategories: () => apiFetch<{ category: string; label: string; severity: string }[]>('/me/issues/categories'),
+  myIssues: () => apiFetch<CaseIssue[]>('/me/issues'),
+  reportIssue: (category: string, note: string | null) =>
+    apiFetch<CaseIssue>('/me/issues', json('POST', { category, note })),
+  checkinCall: () => apiFetch<{ call: CheckinCall | null; enabled: boolean; max_reschedules: number }>('/me/checkin-call'),
+  rescheduleCheckinCall: (option: '1' | '2') =>
+    apiFetch<{ call: CheckinCall }>('/me/checkin-call/reschedule', json('POST', { option })),
 
   // counsellor dashboard
   caseload: () => apiFetch<CaseloadRow[]>('/counsellor/victims'),
@@ -528,4 +726,33 @@ export const api = {
   addReliefFromSchedule: (victimId: string, section: string) =>
     apiFetch<{ section: string; offence: string; total: number; entitlements: Entitlement[] }>(
       `/counsellor/victims/${victimId}/relief`, json('POST', { section })),
+
+  // Live monitoring (backend.md §6)
+  feed: (limit = 100) => apiFetch<Reading[]>(`/counsellor/feed?limit=${limit}`),
+  victimReadings: (victimId: string, limit = 100) =>
+    apiFetch<Reading[]>(`/counsellor/victims/${victimId}/readings?limit=${limit}`),
+  victimInsights: (victimId: string) => apiFetch<Insight[]>(`/counsellor/victims/${victimId}/insights`),
+  summariseNow: (victimId: string) =>
+    apiFetch<{ summarised: boolean }>(`/counsellor/victims/${victimId}/insights/flush`, json('POST')),
+  legalActions: () => apiFetch<LegalActions>('/counsellor/legal-actions'),
+  issues: (status: 'active' | 'all' | IssueStatus = 'active', victimId?: string) =>
+    apiFetch<CaseIssue[]>(`/counsellor/issues?status=${status}${victimId ? `&victim_id=${victimId}` : ''}`),
+  logIssue: (victimId: string, category: string, note: string | null) =>
+    apiFetch<CaseIssue>(`/counsellor/victims/${victimId}/issues`, json('POST', { category, note })),
+  updateIssue: (id: number, body: { status?: IssueStatus; action?: string; note?: string | null }) =>
+    apiFetch<CaseIssue>(`/counsellor/issues/${id}`, json('PATCH', body)),
+  contactRequests: (status: 'open' | 'acknowledged' | 'done' | 'all' = 'open') =>
+    apiFetch<ContactRequestView[]>(`/counsellor/contact-requests?status=${status}`),
+  handleContactRequest: (id: number, status: 'acknowledged' | 'done', response?: string | null) =>
+    apiFetch<ContactRequestView>(`/counsellor/contact-requests/${id}`, json('POST', { status, response: response ?? null })),
+  inbox: () => apiFetch<InboxRow[]>('/counsellor/messages'),
+  thread: (victimId: string) => apiFetch<CounsellorMessage[]>(`/counsellor/victims/${victimId}/messages`),
+  reply: (victimId: string, text: string) =>
+    apiFetch<CounsellorMessage>(`/counsellor/victims/${victimId}/messages`, json('POST', { text })),
+  outreach: (status: 'active' | 'all' = 'active') => apiFetch<CheckinCall[]>(`/counsellor/outreach?status=${status}`),
+  simulateCall: (callId: number, event: string, digits?: string) =>
+    apiFetch<IvrsStep>('/ivrs/simulate', json('POST', { call_id: callId, event, digits: digits ?? null })),
+  myContactCard: () => apiFetch<{ name: string; phone: string | null; hours: string | null }>('/counsellor/me/contact'),
+  setMyContactCard: (phone: string | null, hours: string | null) =>
+    apiFetch<{ name: string; phone: string | null; hours: string | null }>('/counsellor/me/contact', json('PUT', { phone, hours })),
 };

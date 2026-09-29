@@ -1,7 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CaseData, NavigationTab, NotificationItem } from './types';
-import { loadCaseload } from './data/live';
+import { REASON_TITLES, loadCaseload, loadOneCase, timeAgo } from './data/live';
 import { ApiError, api } from '../lib/api';
+import { LiveEvent, openLiveStream } from '../lib/liveStream';
+import { emitLive } from './liveBus';
+import { LiveFeedView } from './components/LiveFeedView';
+import { CaseIssuesView } from './components/CaseIssuesView';
+import { InboxView } from './components/InboxView';
+import { OutreachView } from './components/OutreachView';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { OverviewView } from './components/OverviewView';
@@ -24,7 +30,18 @@ interface AdminAppProps {
   onSignOut: () => void;
 }
 
-const REFRESH_MS = 60_000;     // new alerts appear without a reload
+// Live updates arrive over the stream; this slower poll is only a safety net
+// for anything that happens while the connection is down.
+const REFRESH_MS = 120_000;
+
+const TOAST_FOR: Record<string, (e: LiveEvent, name: string) => string | null> = {
+  alert: (e, n) => (e.level === 'crisis' ? `Crisis signal: ${n}` : `New alert for ${n}`),
+  issue: (e, n) => (e.created ? `${n}: ${String(e.category ?? 'case problem').replace(/_/g, ' ')}${e.reported ? ' (reported by them)' : ''}` : null),
+  message: (e, n) => (e.own ? null : `New message from ${n}`),
+  contact_request: (e, n) => (e.handled ? null : `${n} asked for a call back`),
+  insight: (_e, n) => `New conversation summary for ${n}`,
+  outreach: (e, n) => (e.status === 'escalated' ? `${n} missed a check-in and can't be reached` : null),
+};
 
 const errorText = (err: unknown) =>
   err instanceof ApiError ? err.message : "Can't reach the SAHAAS backend. Check that it's running.";
@@ -51,6 +68,12 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [live, setLive] = useState(false);
+  const [feedUnseen, setFeedUnseen] = useState(0);
+  const [escalatedCalls, setEscalatedCalls] = useState(0);
+  const casesRef = useRef<CaseData[]>([]);
+  casesRef.current = cases;
+  const pending = useRef<Map<string, number>>(new Map());
 
   const refresh = useCallback(async () => {
     try {
@@ -75,6 +98,78 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
     const timer = setInterval(refresh, REFRESH_MS);
     return () => clearInterval(timer);
   }, [refresh]);
+
+  const loadOutreachCount = useCallback(() => {
+    api.outreach('active').then((calls) => setEscalatedCalls(calls.filter((c) => c.status === 'escalated').length)).catch(() => {});
+  }, []);
+  useEffect(loadOutreachCount, [loadOutreachCount]);
+
+  // One client changed: refresh just that client, a moment later so a burst of
+  // events (reading, score, alert, issue for one message) is one fetch.
+  const refreshCase = useCallback((victimId: string) => {
+    const timers = pending.current;
+    window.clearTimeout(timers.get(victimId));
+    timers.set(victimId, window.setTimeout(async () => {
+      timers.delete(victimId);
+      const cohort = casesRef.current[0]?.cohortImprovementPct ?? '—';
+      try {
+        const updated = await loadOneCase(counsellorName, victimId, cohort);
+        if (!updated) return refresh();           // a new client: take the full list
+        setCases((prev) => {
+          const exists = prev.some((c) => c.id === victimId);
+          return exists ? prev.map((c) => (c.id === victimId ? updated : c)) : [...prev, updated];
+        });
+        const alerts = await api.alerts('open');
+        setNotifications((prev) => {
+          const read = new Set(prev.filter((n) => !n.unread).map((n) => n.id));
+          return alerts.map((a) => ({
+            id: `alert-${a.id}`, caseId: a.user_id, caseName: a.victim_name, title: REASON_TITLES[a.reason] ?? 'Alert',
+            description: a.message, time: timeAgo(a.at), severity: a.level === 'watch' ? 'medium' as const : 'high' as const,
+            unread: !read.has(`alert-${a.id}`),
+          }));
+        });
+      } catch {
+        /* the next event or the safety-net poll will catch up */
+      }
+    }, 350));
+  }, [counsellorName, refresh]);
+
+  // The live stream: every reading, score, alert, case problem, summary,
+  // message and call-back request for this caseload, as it happens.
+  useEffect(() => openLiveStream('/counsellor/stream', {
+    onStatus: (up) => {
+      setLive(up);
+      if (up) refresh();          // catch up on anything missed while disconnected
+    },
+    onEvent: (e) => {
+      emitLive(e);
+      if (e.type === 'reading' && typeof e.level === 'number' && e.level >= 2) setFeedUnseen((n) => n + 1);
+      if (e.type === 'outreach') loadOutreachCount();
+      if (e.victim_id) refreshCase(e.victim_id);
+      const name = casesRef.current.find((c) => c.id === e.victim_id)?.name ?? 'A client';
+      const text = TOAST_FOR[e.type]?.(e, name);
+      if (text) {
+        setToastMessage(text);
+        window.setTimeout(() => setToastMessage((t) => (t === text ? null : t)), 5000);
+      }
+    },
+  }), [refresh, refreshCase, loadOutreachCount]);
+
+  useEffect(() => {
+    if (activeTab === 'live-feed') setFeedUnseen(0);
+  }, [activeTab]);
+
+  const openCase = (id: string) => {
+    setSelectedCaseId(id);
+    setActiveTab('case-detail-signals');
+  };
+
+  const badges = {
+    'live-feed': feedUnseen,
+    'case-issues': cases.reduce((n, c) => n + c.openIssues, 0),
+    inbox: cases.reduce((n, c) => n + c.unreadMessages + c.openRequests, 0),
+    outreach: escalatedCalls,
+  };
 
   const activeCase = cases.find((c) => c.id === selectedCaseId) || cases[0];
   const unreadNotificationsCount = notifications.filter((n) => n.unread).length;
@@ -192,6 +287,8 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
         onSelectTab={(tab) => setActiveTab(tab)}
         isOpenMobile={mobileSidebarOpen}
         onCloseMobile={() => setMobileSidebarOpen(false)}
+        badges={badges}
+        live={live}
       />
 
       {/* Main Content Area */}
@@ -208,7 +305,15 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
 
         {/* Dynamic Page Container (pt-20 clears the fixed 4rem header + breathing room) */}
         <main className="flex-1 pt-20 sm:pt-24 px-4 pb-4 sm:px-6 sm:pb-6 lg:px-8 lg:pb-8 max-w-7xl w-full mx-auto">
-          {activeTab === 'system-settings' ? (
+          {activeTab === 'live-feed' ? (
+            <LiveFeedView onOpenCase={openCase} connected={live} />
+          ) : activeTab === 'case-issues' ? (
+            <CaseIssuesView onOpenCase={openCase} clients={cases.map((c) => ({ id: c.id, name: c.name }))} />
+          ) : activeTab === 'inbox' ? (
+            <InboxView onOpenCase={openCase} />
+          ) : activeTab === 'outreach' ? (
+            <OutreachView onOpenCase={openCase} />
+          ) : activeTab === 'system-settings' ? (
             <SystemSettingsView />
           ) : activeTab === 'how-scoring' ? (
             <HowScoringView />
@@ -284,8 +389,9 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
 
       {/* Floating Action Feedback Toast */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#9c6743] text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2.5 animate-fadeIn max-w-sm">
-          <span className="material-symbols-outlined text-[20px]">check_circle</span>
+        <div className="fixed bottom-6 right-6 z-50 bg-[#9c6743] text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2.5 animate-fadeIn max-w-sm"
+             role="status" aria-live="polite">
+          <span className="material-symbols-outlined text-[20px]">notifications_active</span>
           <span className="font-['Inter'] text-xs font-semibold">{toastMessage}</span>
         </div>
       )}

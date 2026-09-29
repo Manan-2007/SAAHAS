@@ -18,6 +18,10 @@ export const REASON_TITLES: Record<AlertReason, string> = {
   bail_no_notice: 'Bail Hearing · No s.15A Notice',
   entitlement_unpaid: 'Relief Overdue',
   adjournment_streak: 'Repeated Adjournments',
+  threat_reported: 'Threat / Pressure Reported',
+  case_issue: 'Case Problem Reported',
+  repeated_distress: 'Repeated Distress in Messages',
+  outreach_escalated: 'Missed Check-in · Unreachable',
 };
 
 // Material Symbols per reason. bail_no_notice gets a distinct legal icon — it is
@@ -32,6 +36,10 @@ export const REASON_ICONS: Record<AlertReason, string> = {
   bail_no_notice: 'balance',
   entitlement_unpaid: 'payments',
   adjournment_streak: 'event_repeat',
+  threat_reported: 'shield_person',
+  case_issue: 'gavel',
+  repeated_distress: 'forum',
+  outreach_escalated: 'phone_missed',
 };
 
 const LEVEL_RANK: Record<Alert['level'], number> = { crisis: 0, high: 1, watch: 2 };
@@ -128,8 +136,10 @@ function statusOf(row: CaseloadRow, top: Alert | undefined): Pick<CaseData, 'sta
 }
 
 function escalationRisk(row: CaseloadRow): CaseData['escalationRisk'] {
-  if (row.crisis || row.tier === 'high') return 'HIGH';
-  if (row.tier === 'elevated') return 'MODERATE';
+  // A high-risk message shows here at once, before the 7-day score catches up.
+  const peak = row.peak_24h?.level ?? 0;
+  if (row.crisis || row.tier === 'high' || peak >= 3) return 'HIGH';
+  if (row.tier === 'elevated' || peak === 2) return 'MODERATE';
   if (row.tier === 'watch') return 'LOW';
   return 'STABLE';
 }
@@ -172,6 +182,23 @@ function interventions(alerts: Alert[], events: CaseEvent[], counsellor: string)
          priority: 'Routine', status: 'Optional', completed: false }];
 }
 
+// The one line a case card leads with: the most urgent live thing first.
+function highlight(row: CaseloadRow, soon: CaseEvent | null): Pick<CaseData, 'keyHighlight' | 'keyHighlightIcon' | 'keyHighlightColor'> {
+  const peak = row.peak_24h?.level ?? 0;
+  if (peak >= 3) return { keyHighlight: 'High-distress message in the last 24 h', keyHighlightIcon: 'priority_high', keyHighlightColor: 'error' };
+  if (row.open_requests) return { keyHighlight: 'Asked you to call back', keyHighlightIcon: 'phone_callback', keyHighlightColor: 'error' };
+  if (row.open_issues) {
+    return { keyHighlight: `${row.open_issues} case problem${row.open_issues > 1 ? 's' : ''} to act on`, keyHighlightIcon: 'gavel', keyHighlightColor: 'amber' };
+  }
+  if (row.unread_messages) {
+    return { keyHighlight: `${row.unread_messages} unread message${row.unread_messages > 1 ? 's' : ''}`, keyHighlightIcon: 'mail', keyHighlightColor: 'amber' };
+  }
+  if (soon) return { keyHighlight: eventText(soon), keyHighlightIcon: soon.kind === 'hearing' ? 'gavel' : 'event', keyHighlightColor: soon.days_until <= 3 ? 'error' : 'secondary' };
+  if (peak === 2) return { keyHighlight: 'Moderate distress in recent messages', keyHighlightIcon: 'forum', keyHighlightColor: 'amber' };
+  if (row.open_alerts) return { keyHighlight: `${row.open_alerts} open alert${row.open_alerts > 1 ? 's' : ''}`, keyHighlightIcon: 'notifications', keyHighlightColor: 'amber' };
+  return { keyHighlight: trendText(row), keyHighlightIcon: 'monitoring', keyHighlightColor: 'secondary' };
+}
+
 function toCase(row: CaseloadRow, detail: VictimDetail, timeline: Timeline, counsellor: string, cohort: string): CaseData {
   const alerts = [...detail.alerts].sort((a, b) => LEVEL_RANK[a.level] - LEVEL_RANK[b.level]);
   const top = alerts.find((a) => a.status === 'open');
@@ -193,9 +220,7 @@ function toCase(row: CaseloadRow, detail: VictimDetail, timeline: Timeline, coun
     assignedCounsellor: counsellor,
     ...statusOf(row, top),
     timeAgo: timeAgo(row.last_contact_at),
-    keyHighlight: soon ? eventText(soon) : row.open_alerts ? `${row.open_alerts} open alert${row.open_alerts > 1 ? 's' : ''}` : trendText(row),
-    keyHighlightIcon: soon ? (soon.kind === 'hearing' ? 'gavel' : 'event') : row.open_alerts ? 'notifications' : 'monitoring',
-    keyHighlightColor: soon && soon.days_until <= 3 ? 'error' : row.open_alerts ? 'amber' : 'secondary',
+    ...highlight(row, soon),
     subHighlight: row.score == null ? 'No score yet' : `Score ${Math.round(row.score)}/100 · ${trendText(row)}`,
 
     wellbeingIndex: rounded(row.score),
@@ -246,6 +271,13 @@ function toCase(row: CaseloadRow, detail: VictimDetail, timeline: Timeline, coun
     trendPoints: timeline.scores.map((s) => s.score),
     forecast: detail.forecast ?? null,
     currentStep: recoveryStep(row, alerts),
+    gender: row.gender ?? null,
+    latestReading: row.latest_reading ?? null,
+    peak24h: row.peak_24h?.label ?? null,
+    openIssues: row.open_issues ?? 0,
+    unreadMessages: row.unread_messages ?? 0,
+    openRequests: row.open_requests ?? 0,
+    latestInsight: detail.latest_insight ?? null,
   };
 }
 
@@ -265,6 +297,15 @@ function toNotification(a: Alert): NotificationItem {
 export interface LiveCaseload {
   cases: CaseData[];
   notifications: NotificationItem[];
+}
+
+/** One client refreshed after a live event, instead of the whole caseload. */
+export async function loadOneCase(counsellor: string, victimId: string, cohort: string): Promise<CaseData | null> {
+  const rows = await api.caseload();
+  const row = rows.find((r) => r.user_id === victimId);
+  if (!row) return null;
+  const [detail, timeline] = await Promise.all([api.victim(victimId), api.timeline(victimId, 30)]);
+  return toCase(row, detail, timeline, counsellor, cohort);
 }
 
 export async function loadCaseload(counsellor: string): Promise<LiveCaseload> {

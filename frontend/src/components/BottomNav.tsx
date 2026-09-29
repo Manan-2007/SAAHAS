@@ -1,7 +1,7 @@
 import React from 'react';
 import { Home, MessageSquare, Mic, Heart, Handshake } from 'lucide-react';
 import { AppView, LanguageCode } from '../types';
-import { TRANSLATIONS } from '../data/mockData';
+import { TRANSLATIONS } from '../data/i18n';
 
 interface BottomNavProps {
   currentView: AppView;

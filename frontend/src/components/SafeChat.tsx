@@ -14,6 +14,8 @@ import {
   X,
 } from 'lucide-react';
 import { ChatMessage } from '../types';
+import { SafetyCard } from './SafetyCard';
+import type { SupportTab } from './Support';
 import { useAuth } from '../auth/AuthProvider';
 import {
   ChatTurn,
@@ -122,10 +124,11 @@ type VoiceStage = 'idle' | 'connecting' | 'recording' | 'processing';
 interface SafeChatProps {
   onBack: () => void;
   onOpenCall: () => void;
+  onOpenSupport?: (tab: SupportTab) => void;
   onUpdateMetric?: (metricId: string, trend: Trend, description?: string) => void;
 }
 
-export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdateMetric }) => {
+export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onOpenSupport, onUpdateMetric }) => {
   const { user } = useAuth();
   const firstName = user.name.trim().split(' ')[0] || user.name;
   const counsellorName = user.counsellor ?? 'your counsellor';
@@ -139,6 +142,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
   const [voiceStage, setVoiceStage] = useState<VoiceStage>('idle');
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [crisisMessage, setCrisisMessage] = useState<string | null>(null);
+  const [safety, setSafety] = useState(false);
   const [savedToJourney, setSavedToJourney] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef(messages);
@@ -220,6 +224,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
       const res = await chatReply(toChatTurns(messagesRef.current), tone);
       reply = res.reply;
       if (res.crisis) setCrisisMessage(res.crisis_message || DEFAULT_CRISIS_MESSAGE);
+      if (res.safety) setSafety(true);
       if (res.recorded) setSavedToJourney(true);
     } catch {
       reply = fallback();
@@ -375,7 +380,7 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
               SAHAAS AI
             </button>
             <button
-              onClick={() => setActivePartner('counsellor')}
+              onClick={() => (onOpenSupport && user.role === 'victim' ? onOpenSupport('counsellor') : setActivePartner('counsellor'))}
               className={`px-3 py-1.5 rounded-lg transition-all ${
                 activePartner === 'counsellor'
                   ? 'bg-white text-[#9c6743] shadow-2xs'
@@ -404,7 +409,8 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
           <button
             onClick={onOpenCall}
             className="p-2 rounded-lg bg-[#9c6743] text-white hover:bg-[#b3654a] transition-colors shadow-2xs"
-            title="Direct Voice Call with Counsellor"
+            title="Call someone now - free helplines"
+            aria-label="Call someone now - free helplines"
           >
             <Phone className="w-4 h-4" />
           </button>
@@ -426,9 +432,8 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
         <span>
           {user.role === 'guest'
             ? 'Private · nothing is saved without an account'
-            : user.consent.store_messages
-            ? 'Private · your messages are kept encrypted'
-            : 'Private · only how you felt is saved, not your words'}
+            : `Private · ${user.consent.store_messages ? 'your messages are kept encrypted' : 'your words are not saved'}${
+                user.consent.share_insights !== false ? ` · ${user.counsellor ?? 'your counsellor'} gets a short summary` : ''}`}
         </span>
       </div>
 
@@ -502,6 +507,9 @@ export const SafeChat: React.FC<SafeChatProps> = ({ onBack, onOpenCall, onUpdate
 
         <div ref={chatBottomRef} />
       </div>
+
+      {/* Threats or pressure: protection, not the self-harm banner */}
+      {safety && <div className="mt-2"><SafetyCard counsellor={user.counsellor} onDismiss={() => setSafety(false)} /></div>}
 
       {/* Immediate-safety banner */}
       {crisisMessage && (

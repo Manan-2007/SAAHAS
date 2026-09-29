@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, User, Eye, EyeOff, ArrowRight, ShieldCheck, Loader2, Heart, AtSign, KeyRound, Check } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, ArrowRight, ShieldCheck, Loader2, Heart, AtSign, KeyRound, Check, Phone } from 'lucide-react';
 import {
   AuthError,
   MIN_PASSWORD_LENGTH,
@@ -9,7 +9,7 @@ import {
   signInWithToken,
   signUp,
 } from './authStore';
-import { Consent, clearSession } from '../lib/api';
+import { Consent, Gender, clearSession } from '../lib/api';
 
 interface AuthScreenProps {
   onAuthenticated: (user: SessionUser) => void;
@@ -39,6 +39,23 @@ const CONSENT_OPTIONS: { key: keyof Consent; label: string; hint: string; requir
     label: 'Keep recordings of my voice check-ins',
     hint: 'Off unless you choose it. Only you and your counsellor can play them.',
   },
+  {
+    key: 'share_insights',
+    label: 'Let SAHAAS tell my counsellor how I’m doing',
+    hint: 'A short summary of feelings and problems after a conversation - never your exact words.',
+  },
+  {
+    key: 'ivrs_calls',
+    label: 'Call me if I miss a check-in',
+    hint: 'A short automated call. You can move it, a couple of times. Needs a phone number.',
+  },
+];
+
+const GENDERS: { id: Gender; label: string }[] = [
+  { id: 'woman', label: 'Woman' },
+  { id: 'man', label: 'Man' },
+  { id: 'nonbinary', label: 'Non-binary / other' },
+  { id: 'prefer_not', label: 'Prefer not to say' },
 ];
 
 const DEFAULT_CONSENT: Consent = {
@@ -46,6 +63,8 @@ const DEFAULT_CONSENT: Consent = {
   voice_analysis: true,
   store_messages: false,
   store_recordings: false,
+  share_insights: true,
+  ivrs_calls: false,
 };
 
 const INPUT_CLASS =
@@ -59,6 +78,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
   const [password, setPassword] = useState('');
   const [token, setTokenInput] = useState('');
   const [consent, setConsent] = useState<Consent>(DEFAULT_CONSENT);
+  const [gender, setGender] = useState<Gender | null>(null);
+  const [phone, setPhone] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -72,7 +93,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
     setBusy(true);
     try {
       const user = isSignup
-        ? await signUp({ name, username, password, consent })
+        ? await signUp({ name, username, password, consent, gender, phone })
         : useToken
         ? await signInWithToken(token)
         : await signIn(username, password);
@@ -178,6 +199,31 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
               </label>
             )}
 
+            {isSignup && (
+              <fieldset className="flex flex-col gap-1.5">
+                <legend className="text-xs font-semibold text-[#5c5142] mb-1.5">How do you identify?</legend>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {GENDERS.map((g) => (
+                    <button
+                      key={g.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={gender === g.id}
+                      onClick={() => setGender(g.id)}
+                      className={`py-2 px-2 rounded-xl border text-xs font-semibold transition-all ${
+                        gender === g.id ? 'border-[#9c6743] bg-[#efe7d6] text-[#7a5a3f]' : 'border-[#e5dac4] bg-white text-[#352e24] hover:bg-[#f5f1e8]'
+                      }`}
+                    >
+                      {g.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[11px] text-[#8a7d68] leading-snug">
+                  Kept private and encrypted. It sets how SAHAAS looks and speaks to you - you can change it later.
+                </span>
+              </fieldset>
+            )}
+
             {useToken ? (
               <label className="flex flex-col gap-1.5">
                 <span className="text-xs font-semibold text-[#5c5142]">Access token</span>
@@ -238,18 +284,41 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
             )}
 
             {isSignup && (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-semibold text-[#5c5142]">Phone number <span className="font-normal text-[#8a7d68]">(optional)</span></span>
+                <div className="relative">
+                  <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#8a7d68]" />
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      if (!e.target.value.trim()) setConsent((c) => ({ ...c, ivrs_calls: false }));
+                    }}
+                    placeholder="Only if it’s safe for us to call"
+                    autoComplete="tel"
+                    maxLength={20}
+                    className={INPUT_CLASS}
+                  />
+                </div>
+              </label>
+            )}
+
+            {isSignup && (
               <fieldset className="flex flex-col gap-2 pt-1">
                 <legend className="text-xs font-semibold text-[#5c5142] mb-1.5">What SAHAAS may keep</legend>
                 {CONSENT_OPTIONS.map((o) => {
                   const on = consent[o.key];
+                  const blocked = o.key === 'ivrs_calls' && !phone.trim();
                   return (
                     <button
                       key={o.key}
                       type="button"
                       role="checkbox"
                       aria-checked={on}
+                      aria-disabled={blocked}
                       aria-label={`${o.label}${o.required ? ' (required)' : ''}`}
-                      onClick={() => setConsent((c) => ({ ...c, [o.key]: !c[o.key] }))}
+                      onClick={() => !blocked && setConsent((c) => ({ ...c, [o.key]: !c[o.key] }))}
                       className={`w-full p-2.5 rounded-xl border text-left flex items-start gap-2.5 transition-all ${
                         on ? 'border-[#9c6743] bg-[#efe7d6]/70' : 'border-[#e5dac4] bg-white hover:bg-[#f5f1e8]'
                       }`}
@@ -291,7 +360,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated }) => {
 
             <button
               type="submit"
-              disabled={busy || (isSignup && !consent.data_storage)}
+              disabled={busy || (isSignup && (!consent.data_storage || !gender))}
               className="mt-1 w-full py-3 rounded-2xl bg-[#9c6743] text-white font-semibold text-sm shadow-md hover:bg-[#835636] active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:pointer-events-none"
             >
               {busy ? (

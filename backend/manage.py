@@ -1,11 +1,12 @@
 """Admin commands for the monitoring backend.
 
   ./venv/bin/python manage.py create-counsellor "Dr. Ananya Sharma"
-  ./venv/bin/python manage.py create-counsellor "Dr. Ananya Sharma" --username ananya
+  ./venv/bin/python manage.py create-counsellor "Dr. Ananya Sharma" --username ananya --phone 9876500000 --hours "Mon-Sat 10am-6pm"
   ./venv/bin/python manage.py set-password --user-id <id>   # reset a lost password
   ./venv/bin/python manage.py sign-out --user-id <id>       # revoke every session
   ./venv/bin/python manage.py storage-status   # which recordings bucket is configured
-  ./venv/bin/python manage.py seed-demo        # demo counsellor + 4 synthetic victims, 30 days of history
+  ./venv/bin/python manage.py purge-demo       # delete leftover seed-demo data (backs up the database first)
+  ./venv/bin/python manage.py list-counsellors
   ./venv/bin/python manage.py recompute-all    # rescore every victim now
 
 Tokens are printed once - they are stored only as hashes. Passwords are
@@ -15,9 +16,10 @@ history and the process list.
 
 import argparse
 import getpass
-import random
+import shutil
+import time
 
-from monitoring import auth, db, service, storage
+from monitoring import auth, crypto, db, service, storage
 
 DAY = service.DAY
 
@@ -55,74 +57,28 @@ def set_password(user_id=None, username=None):
     print(f"Password set for {name}. {revoked} active session(s) signed out.")
 
 
-def spread(total, n, top):
-    base, extra = divmod(total, n)
-    return [min(base + (1 if i < extra else 0), top) for i in range(n)]
+def backup_db():
+    """A copy of the database before anything is deleted, so it can be undone."""
+    target = db.DATA_DIR / "backups"
+    target.mkdir(parents=True, exist_ok=True)
+    path = target / f"sahaas-{time.strftime('%Y%m%d-%H%M%S')}.db"
+    with db.connect() as conn:
+        conn.execute("PRAGMA wal_checkpoint(FULL)")
+    shutil.copy2(db.DB_PATH, path)
+    return path
 
 
-def phq9(total, self_harm=0):
-    return spread(total - self_harm, 8, 3) + [self_harm]
-
-
-def seed_demo():
-    """Synthetic, clearly-labelled demo data so the counsellor dashboard can be built and shown."""
-    rng = random.Random(7)
-    now = db.now()
-    counsellor = service.create_counsellor("Demo Counsellor")
-    stories = [
-        # name, phq9 by days-ago, gad7 by days-ago, pc-ptsd-5, chat distress (start, end), events, self-harm
-        ("Demo - Asha (synthetic)", {28: 17, 14: 11, 1: 6}, {28: 14, 14: 9, 1: 5}, {14: 4, 1: 2}, (65, 20), [], 0),
-        ("Demo - Meena (synthetic)", {28: 7, 14: 10, 1: 16}, {28: 6, 14: 9, 1: 15}, {14: 3}, (25, 72),
-         [(2, "hearing", "District sessions court hearing"), (20, "compensation", "Second compensation instalment")], 0),
-        ("Demo - Ravi (synthetic)", {28: 12}, {28: 10}, {28: 3}, (45, 50), [(9, "hearing", "Witness statement")], 0),
-        ("Demo - Kiran (synthetic)", {16: 13, 2: 19}, {16: 11, 2: 16}, {2: 5}, (50, 88), [], 1),
-    ]
-    tokens = []
-    for name, phq, gad, ptsd, (chat_start, chat_end), events, self_harm in stories:
-        victim = service.register_victim(name, "hi" if "Meena" in name else "en", case_ref=f"DEMO-{rng.randint(1000, 9999)}",
-                                         consent={"data_storage": True, "voice_analysis": True, "store_messages": False},
-                                         created_at=now - 32 * DAY)
-        user = auth.user_for_token(victim["token"])
-        last_active_day = 13 if "Ravi" in name else 0
-        with db.connect() as conn:
-            for day, total in phq.items():
-                service._insert_questionnaire(conn, user["id"], "phq9",
-                                              phq9(total, self_harm if day == min(phq) else 0), "app", now - day * DAY)
-            for day, total in gad.items():
-                service._insert_questionnaire(conn, user["id"], "gad7", spread(total, 7, 3), "app", now - day * DAY)
-            for day, total in ptsd.items():
-                service._insert_questionnaire(conn, user["id"], "pcptsd5", [1] * total + [0] * (5 - total), "app",
-                                              now - day * DAY)
-            for day in range(30, last_active_day - 1, -1):
-                if rng.random() < 0.55:
-                    frac = (30 - day) / 30
-                    score = chat_start + (chat_end - chat_start) * frac + rng.uniform(-8, 8)
-                    service._insert_observation(conn, user["id"], now - day * DAY + rng.uniform(0, 3600 * 12),
-                                                "chat", "text_distress", max(0, min(100, score)))
-                if day % 4 == 0:
-                    frac = (30 - day) / 30
-                    sad = 20 + 50 * frac if chat_end > chat_start else 60 - 45 * frac
-                    service._insert_observation(conn, user["id"], now - day * DAY, "voice", "voice_distress",
-                                                sad + rng.uniform(-5, 5))
-                    service._insert_observation(conn, user["id"], now - day * DAY, "voice", "voice_arousal",
-                                                rng.uniform(0.25, 0.55))
-            if self_harm:
-                service._insert_observation(conn, user["id"], now - 1 * DAY, "chat", "crisis", 1)
-        for day in range(30, -1, -1):
-            service.recompute(user["id"], now - day * DAY + 3600 * 20)
-        for offset, kind, title in events:
-            service.add_event(counsellor | {"id": counsellor["user_id"]}, user["id"], kind,
-                              service._today(now + offset * DAY).isoformat(), title)
-        with db.connect() as conn:      # alerts from weeks ago were handled already
-            conn.execute("UPDATE alerts SET status = 'resolved', handled_by = ?, handled_at = ? "
-                         "WHERE user_id = ? AND created_at < ?", (counsellor["user_id"], now, user["id"], now - 5 * DAY))
-        tokens.append((name, victim["token"]))
-
-    print("Seeded synthetic demo data.\n")
-    print(f"Counsellor token (Demo Counsellor):\n  {counsellor['token']}\n")
-    print("Victim tokens:")
-    for name, token in tokens:
-        print(f"  {name}: {token}")
+def list_counsellors():
+    with db.connect() as conn:
+        rows = conn.execute("SELECT c.id, c.name_enc, (SELECT COUNT(*) FROM users v WHERE v.counsellor_id = c.id) AS n, "
+                            "(SELECT 1 FROM credentials WHERE user_id = c.id) AS pw FROM users c "
+                            "WHERE c.role = 'counsellor'").fetchall()
+        unassigned = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'victim' AND counsellor_id IS NULL").fetchone()[0]
+    for r in rows:
+        print(f"  {crypto.dec(r['name_enc'])}  id={r['id']}  clients={r['n']}  password={'yes' if r['pw'] else 'no'}")
+    if not rows:
+        print("  (no counsellors yet)")
+    print(f"Unassigned victims: {unassigned}")
 
 
 def main():
@@ -131,21 +87,26 @@ def main():
     c = sub.add_parser("create-counsellor")
     c.add_argument("name")
     c.add_argument("--username", help="also set up password sign-in for this counsellor")
+    c.add_argument("--phone", help="a work number victims can see and call")
+    c.add_argument("--hours", help='when they can be reached, e.g. "Mon-Sat 10am-6pm"')
     pw = sub.add_parser("set-password", help="reset a password without knowing the old one")
     pw.add_argument("--user-id")
     pw.add_argument("--username")
     so = sub.add_parser("sign-out", help="revoke every session token on an account")
     so.add_argument("--user-id", required=True)
     sub.add_parser("storage-status")
-    sub.add_parser("seed-demo")
+    sub.add_parser("purge-demo", help="delete leftover seed-demo accounts (database backed up first)")
+    sub.add_parser("list-counsellors")
     sub.add_parser("recompute-all")
     args = ap.parse_args()
 
     db.init()
     if args.command == "create-counsellor":
         password = ask_password(f"Password for {args.username}: ") if args.username else None
-        result = service.create_counsellor(args.name, args.username, password)
+        result = service.create_counsellor(args.name, args.username, password, args.phone, args.hours)
         print(f"Counsellor {args.name} created. Token (shown once):\n  {result['token']}")
+        if result["adopted"]:
+            print(f"Took over {result['adopted']} victim(s) who had no counsellor.")
         if result["username"]:
             print(f"Sign in with username {result['username']!r} at POST /auth/login.")
     elif args.command == "set-password":
@@ -157,8 +118,16 @@ def main():
             print(f"Revoked {auth.revoke_all_sessions(conn, args.user_id)} session(s).")
     elif args.command == "storage-status":
         print(f"Recordings bucket: {storage.status()}")
-    elif args.command == "seed-demo":
-        seed_demo()
+    elif args.command == "purge-demo":
+        print(f"Backed up the database to {backup_db()}")
+        result = service.purge_demo()
+        print(f"Removed {result['victims']} demo victim(s), {result['counsellors']} demo counsellor(s) and "
+              f"{result['recordings']} recording(s).")
+        if result["unassigned_victims"]:
+            print(f"{result['unassigned_victims']} real victim(s) now have no counsellor - "
+                  "create one with create-counsellor and they are assigned automatically.")
+    elif args.command == "list-counsellors":
+        list_counsellors()
     elif args.command == "recompute-all":
         print(f"Rescored {service.recompute_all()} victims.")
 

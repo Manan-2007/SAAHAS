@@ -76,7 +76,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         <div className="flex items-center gap-2.5 self-end md:self-auto">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white text-[#9c6743] font-['Inter'] text-xs font-semibold shadow-xs border border-[#e5dac4]">
             <span className="w-2 h-2 rounded-full bg-[#9c6743] animate-ping"></span>
-            Refreshes every minute
+            Updates live, as it happens
           </span>
           <button
             id="btn-sync-baselines"

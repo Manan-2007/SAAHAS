@@ -153,7 +153,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
             {[
               { stat: 'Years', label: 'a trial can run, with distress spiking around every court date' },
               { stat: '0', label: 'continuous well-being monitoring in the current system' },
-              { stat: 'Any phone', label: 'is enough — voice & SMS reach victims with no smartphone' },
+              { stat: 'Any phone', label: 'is enough — a missed check-in becomes an automated keypad call' },
             ].map((s) => (
               <div key={s.stat} className="rounded-2xl bg-[#f5f1e8] border border-[#e5dac4] p-5">
                 <div className="text-2xl font-bold text-[#9c6743]">{s.stat}</div>

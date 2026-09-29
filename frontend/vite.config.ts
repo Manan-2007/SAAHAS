@@ -18,6 +18,7 @@ export default defineConfig(({mode}) => {
     '^/me(/|$|\\?)': {target: backend, changeOrigin: true},   // not a plain '/me': it would catch /metadata.json
     '/questionnaires': {target: backend, changeOrigin: true},
     '/counsellor': {target: backend, changeOrigin: true},
+    '/ivrs': {target: backend, changeOrigin: true},
   };
 
   return {

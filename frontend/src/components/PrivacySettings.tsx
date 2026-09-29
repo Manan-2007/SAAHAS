@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { X, Shield, Smartphone, Trash2, LogOut, Play, KeyRound, Loader2, Mic, Check } from 'lucide-react';
 import { useAuth } from '../auth/AuthProvider';
 import { MIN_PASSWORD_LENGTH } from '../auth/authStore';
-import { ApiError, Consent, Recording, SessionInfo, api, fetchAudioUrl } from '../lib/api';
+import { ApiError, Consent, Gender, Recording, SessionInfo, UiStyle, api, fetchAudioUrl } from '../lib/api';
 
 type OptionalConsent = Exclude<keyof Consent, 'data_storage'>;
 
@@ -22,7 +22,33 @@ const TOGGLES: { key: OptionalConsent; label: string; hint: string }[] = [
     label: 'Keep recordings of my voice check-ins',
     hint: 'Only you and your counsellor can play them.',
   },
+  {
+    key: 'share_insights',
+    label: 'Let SAHAAS tell my counsellor how I’m doing',
+    hint: 'After a conversation, a short summary of feelings and problems goes to your counsellor - never your exact words.',
+  },
+  {
+    key: 'ivrs_calls',
+    label: 'Call me if I miss a check-in',
+    hint: 'A short automated call between 9am and 8pm. You can move it twice. Needs your phone number below.',
+  },
 ];
+
+const GENDERS: { id: Gender; label: string }[] = [
+  { id: 'woman', label: 'Woman' },
+  { id: 'man', label: 'Man' },
+  { id: 'nonbinary', label: 'Non-binary / other' },
+  { id: 'prefer_not', label: 'Prefer not to say' },
+];
+
+const STYLES: { id: UiStyle; label: string; hint: string }[] = [
+  { id: 'warm', label: 'Warm & encouraging', hint: 'Softer colours, daily encouragement' },
+  { id: 'calm', label: 'Simple & calm', hint: 'Quiet and plain' },
+];
+
+// share_insights is on unless switched off, including for older accounts.
+const isOn = (consent: Partial<Consent>, key: OptionalConsent) =>
+  key === 'share_insights' ? consent.share_insights !== false : !!consent[key];
 
 // "Chrome on Android phone" is enough to recognise a device; the raw user agent isn't
 function deviceName(ua: string | null): string {
@@ -79,8 +105,30 @@ export const PrivacySettings: React.FC<{ onClose: () => void }> = ({ onClose }) 
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const [phone, setPhone] = useState(user.phone ?? '');
+  const [savingMe, setSavingMe] = useState(false);
+
+  const saveSettings = async (body: { gender?: Gender; ui_style?: UiStyle; phone?: string; clear_phone?: boolean }) => {
+    setError(null);
+    setSavingMe(true);
+    try {
+      const me = await api.updateSettings(body);
+      updateUser({ ...user, gender: me.gender, uiStyle: me.ui_style, phone: me.phone,
+                   consent: me.consent ?? user.consent });
+      if (me.consent) setConsent(me.consent);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setSavingMe(false);
+    }
+  };
+
   const toggle = async (key: OptionalConsent) => {
-    const next = !consent[key];
+    if (key === 'ivrs_calls' && !user.phone && !consent.ivrs_calls) {
+      setError('Add your phone number below first, so we have somewhere to call.');
+      return;
+    }
+    const next = !isOn(consent, key);
     setError(null);
     setConsent((c) => ({ ...c, [key]: next }));
     try {
@@ -199,11 +247,60 @@ export const PrivacySettings: React.FC<{ onClose: () => void }> = ({ onClose }) 
           </p>
         )}
 
+        {/* You and how the app looks */}
+        {user.role === 'victim' && (
+          <section className={SECTION}>
+            <h3 className={HEADING}>You &amp; the app</h3>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-[#5c5142]">How do you identify?</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {GENDERS.map((g) => (
+                  <button key={g.id} disabled={savingMe} onClick={() => saveSettings({ gender: g.id })}
+                          className={`py-1.5 rounded-xl border text-xs font-semibold ${
+                            user.gender === g.id ? 'border-[#9c6743] bg-[#efe7d6] text-[#7a5a3f]' : 'border-[#e5dac4] bg-white text-[#352e24]'
+                          }`}>
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-[#5c5142]">How SAHAAS looks</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {STYLES.map((st) => (
+                  <button key={st.id} disabled={savingMe} onClick={() => saveSettings({ ui_style: st.id })}
+                          className={`p-2 rounded-xl border text-left ${
+                            user.uiStyle === st.id ? 'border-[#9c6743] bg-[#efe7d6]' : 'border-[#e5dac4] bg-white'
+                          }`}>
+                    <span className="block text-xs font-semibold text-[#352e24]">{st.label}</span>
+                    <span className="block text-[10px] text-[#8a7d68]">{st.hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-[#5c5142]">Phone number <span className="font-normal text-[#8a7d68]">(for check-in calls)</span></span>
+              <div className="flex gap-2">
+                <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20}
+                       placeholder="Only if it’s safe for us to call"
+                       className="flex-1 px-3 py-2 rounded-xl bg-[#f5f1e8] border border-[#e5dac4] text-sm outline-none focus:border-[#9c6743]" />
+                <button disabled={savingMe || !phone.trim() || phone.trim() === (user.phone ?? '')}
+                        onClick={() => saveSettings({ phone: phone.trim() })}
+                        className="px-3 rounded-xl bg-[#9c6743] text-white text-xs font-semibold disabled:opacity-50">Save</button>
+                {user.phone && (
+                  <button disabled={savingMe} onClick={() => { setPhone(''); saveSettings({ clear_phone: true }); }}
+                          className="px-3 rounded-xl bg-white border border-[#e5dac4] text-xs font-semibold">Remove</button>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* What SAHAAS keeps */}
         <section className={SECTION}>
           <h3 className={HEADING}>What SAHAAS keeps</h3>
           {TOGGLES.map((t) => {
-            const on = !!consent[t.key];
+            const on = isOn(consent, t.key);
             return (
               <button
                 key={t.key}

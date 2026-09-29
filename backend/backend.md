@@ -6,7 +6,8 @@ is updated with every backend change; see **Update log** at the bottom for what'
 **Run the backend while you work:**
 ```bash
 cd backend && ./start.sh                        # http://127.0.0.1:8000 (models take ~3 min to load)
-./venv/bin/python manage.py seed-demo           # demo counsellor + 4 demo victims, prints their tokens
+./venv/bin/python manage.py create-counsellor "Dr. Name" --username name --phone 0120-555-0101 --hours "Mon-Sat 10-6"
+./venv/bin/python manage.py list-counsellors
 ```
 Interactive API docs: http://127.0.0.1:8000/docs
 
@@ -66,7 +67,7 @@ the voice call screen (3b).
       `PUT /me/credentials` with `{"username", "password"}`. Once the account
       has a password, replacing it needs `"current_password"` too (401 without
       it), and other devices are signed out. (The app's sign-up always sets a
-      password; token sign-in covers `seed-demo` accounts.)
+      password; token sign-in covers accounts made by `manage.py`.)
 - [x] **Onboarding answers:** `PUT /me/profile` with `{"display_name", "language",
       "coping", "low_time", "channel", "baseline_mood" (1-5), "comfort"}`, all
       optional → `{"profile", "name", "language"}`. Stored encrypted; also updates
@@ -144,7 +145,7 @@ dashboard, and anything the backend doesn't measure shows "—".
 - [x] **Login:** the same `POST /auth/login` screen as victims - counsellors
       created with `manage.py create-counsellor "Name" --username ananya` sign
       in with a username and password, and `role: "counsellor"` in the response
-      is what routes them here. Pasting a token still works for `seed-demo`.
+      is what routes them here. Pasting the token `create-counsellor` prints also works.
 - [x] **Caseload list:** `GET /counsellor/victims`, already sorted most urgent
       first. Per row: `name`, `case_ref`, `score` (0–100), `tier`, `crisis`,
       `trend.direction` + `trend.change_7d`, `open_alerts`, `last_contact_at`, `next_event`.
@@ -385,6 +386,105 @@ Add these to the alert queue in section 3. Same shape as the existing ones.
 | `entitlement_unpaid` | `high` | A relief stage is overdue and the victim said it never arrived |
 | `adjournment_streak` | `watch` | 3 or more adjournments in 90 days |
 
+## 6. Live monitoring, case problems, reaching the counsellor, check-in calls
+
+Everything below is **built and wired in the frontend**. There is no demo data
+any more: `seed-demo` is gone, `manage.py purge-demo` removes what it left
+behind (the database is backed up to `data/backups/` first).
+
+### 6a. Every message, live, to the counsellor
+- Every chat message, spoken turn in a voice call, voice check-in, voice note
+  and message to the counsellor goes through one pipeline
+  (`service.process_message`): case-problem detection -> distress observation ->
+  Distress Score -> alerts -> a per-message **reading** (score, level, channel,
+  crisis, problem categories - **never the words**).
+- `GET /counsellor/stream` - server-sent events (`reading`, `score`, `alert`,
+  `issue`, `insight`, `message`, `contact_request`, `outreach`, `mood`). Send the
+  `Authorization` header, so read it with `fetch`, not `EventSource`
+  (`frontend/src/lib/liveStream.ts`). Measured: the counsellor gets the event
+  ~20 ms after the message is sent. `GET /me/stream` does the same for the victim
+  (counsellor replies, request updates).
+- `GET /counsellor/feed?limit=` - readings across the caseload; `GET
+  /counsellor/victims/{id}/readings`.
+- Caseload rows and the client page gain `gender`, `latest_reading`, `peak_24h`
+  `{level, label, count}`, `open_issues`, `unread_messages`, `open_requests`
+  (and `latest_insight` on the client page). A level-3 message in the last 24 h
+  moves the person up the caseload before the 7-day score catches up.
+- New alert `repeated_distress` (watch): two moderate/high messages in 24 h.
+
+### 6b. Conversation insights (what the assistant tells the counsellor)
+- After a conversation goes quiet (90 s), a voice call ends, or a voice
+  check-in finishes, the chat model writes a note: `{emotions, summary,
+  concerns, case_problems, risk_notes, follow_up}`. It runs at **background
+  priority** on the MLX thread (a reply someone is waiting for always goes
+  first) and never while someone is being answered.
+- Privacy: turns are held **in memory only** until summarised, then dropped.
+  Needs consent `share_insights` (default on, shown at sign-up and in Settings).
+  The model gets the client's gender so it doesn't misgender them. If the model
+  is down, a rule-based note is stored instead (`generator: "rules"`).
+- `GET /counsellor/victims/{id}/insights`; `POST .../insights/flush` summarises now.
+
+### 6c. Case problems and legal action
+- Detected in English, Hindi and Hinglish (`monitoring/case_issues.py`):
+  `fir_refused`, `fir_copy`, `investigation_delay`, `threat`,
+  `pressure_to_compromise`, `no_hearing_notice`, `relief_not_received`,
+  `tame_not_paid`, `hearing_delays`, `no_lawyer`, `boycott_harassment`,
+  `disrespect`, `other`. Also from the insight, from the victim ("Report a
+  problem"), or logged by the counsellor.
+- Each category carries **legal steps with the provision and a source URL**
+  (`monitoring/legal_actions.json`: SC/ST (PoA) Act s.4, s.14(3), s.15A, s.18A;
+  Rules r.4(5), r.11, r.12(4); BNSS s.173(4), s.175(3); Witness Protection Scheme
+  2018; Hariram Bhambhi 2021). Checked 2026-09-18. Counsellor guidance, not legal advice.
+- `GET /counsellor/issues?status=active|all|...&victim_id=`,
+  `PATCH /counsellor/issues/{id}` `{status, action, note}` (every step is logged),
+  `POST /counsellor/victims/{id}/issues`, `GET /counsellor/legal-actions`.
+- Victim: `GET /me/issues/categories` (plain-language labels),
+  `POST /me/issues` `{category, note}`, `GET /me/issues` (plain status only).
+- High-severity problems raise `threat_reported` (threat, pressure, boycott) or
+  `case_issue` alerts, and add to `case_pressure` (20 points each, cap 40).
+- `/chat` and `POST /me/messages` return `safety: true` when a message mentions
+  threats or pressure: show the protection card (112, NHAA 14566). This closes
+  the old gap where threats from other people were flagged nowhere.
+
+### 6d. Reaching the counsellor
+- `GET /me/support` -> `{counsellor: {name, phone, hours}, unread_messages,
+  requests, helplines}`. Helplines are 112, 14566, 181, 14416, 15100 (KIRAN is
+  gone - merged into Tele-MANAS).
+- `POST /me/contact-requests` `{kind, preferred_time, note}`; counsellor:
+  `GET /counsellor/contact-requests`, `POST /counsellor/contact-requests/{id}`
+  `{status: acknowledged|done, response}` (the victim sees the response).
+- Secure messages: `GET /me/messages`, `POST /me/messages` (served by `main.py`:
+  it runs the distress/crisis/problem pass too), `GET /counsellor/messages`
+  (inbox), `GET|POST /counsellor/victims/{id}/messages`. Encrypted at rest.
+- `GET|PUT /counsellor/me/contact` `{phone, hours}` - the card victims see.
+
+### 6e. Missed check-in calls (IVRS)
+- `monitoring/outreach.py`. A check-in is missed 24 h after it falls due (first
+  one: 3 days after sign-up). People with consent `ivrs_calls` and a phone get
+  an automated call, 09:00-20:00: 1 = PHQ-4 by keypad (saved with
+  `channel: ivrs`), 2 = another time, 3 = call me back.
+- **Reschedule limit:** 2 moves, never past 72 h after the missed check-in;
+  the app's reschedule (`POST /me/checkin-call/reschedule`) spends the same
+  budget. No answer: retry after 60 min, 3 tries. Then `outreach_escalated`
+  (high) for the counsellor. Checking in in the app cancels the call.
+- The call never says the person's name, the case, or "counsellor" (shared phones).
+- Providers: `console` (default: logs, dials nothing) and `twilio`
+  (`SAHAAS_IVRS_PROVIDER=twilio`, `TWILIO_*`, `SAHAAS_PUBLIC_URL`). Webhooks:
+  `/ivrs/twilio/voice`, `/ivrs/twilio/status`, carrier-neutral `/ivrs/webhook`
+  (JSON steps), all checked with `key` (`SAHAAS_IVRS_SECRET`). Counsellors can
+  walk a call through with `POST /ivrs/simulate`.
+- Counsellor: `GET /counsellor/outreach`. Victim: `GET /me/checkin-call`.
+
+### 6f. Gender and app style
+- Sign-up asks gender (`woman | man | nonbinary | prefer_not`), stored encrypted.
+  `ui_style` defaults to `warm` for women (rose palette, daily encouragement,
+  gentle wins from `GET /me/progress`), `calm` for everyone else (unchanged
+  look). `PATCH /me/settings` `{gender, ui_style, phone, clear_phone}`.
+- Calming elements for everyone: slow ambient light, a Breathe button on every
+  screen (4-4-6 breathing, 5-4-3-2-1 grounding), reduced-motion respected.
+- `POST /me/mood` `{mood}` - the home mood chips are saved (count as contact,
+  shown in the feed, not scored).
+
 ## 4. Remove or reword
 
 - [x] "Zero Cloud Traces", "Ephemeral Audio · Never saved", "No interaction
@@ -479,6 +579,28 @@ Add these to the alert queue in section 3. Same shape as the existing ones.
 ---
 
 ## Update log (what changed for the frontend)
+
+**2026-09-26 (chat via Azure OpenAI)**
+- `CHAT_BACKEND=azure` in `backend/.env` sends chat, voice-call replies and
+  conversation insights to an Azure OpenAI deployment (gpt-4o) instead of the
+  local Qwen model, which is then never loaded (`backend/azure_chat.py`, prompt in
+  `chat_training/system_prompt_azure.txt`). Same endpoints and fields; `model` in
+  the `/chat` response says `Azure OpenAI gpt-4o`. ⚠ Messages now leave the machine.
+  The crisis check still runs locally first, and the safety pointer is still added
+  by code. Azure's content filter refuses some self-harm messages; those get a
+  fixed safety reply instead of an error.
+
+**2026-09-19 (live monitoring - section 6)**
+- New section 6: per-message readings and a live SSE stream for counsellors,
+  conversation insights, case problems with legal steps, call-back requests and
+  secure messages, missed check-in calls (IVRS) with a reschedule limit, gender
+  and app style, the Breathe tool. All wired in the frontend.
+- `seed-demo` removed; `purge-demo` and `list-counsellors` added;
+  `create-counsellor` takes `--phone`/`--hours` and adopts unassigned victims.
+- New consents `share_insights` (default on) and `ivrs_calls` (needs `phone`).
+- `/chat` returns `safety`; `/me` returns `gender`, `ui_style`, `phone`.
+- New alert reasons: `threat_reported`, `case_issue`, `repeated_distress`,
+  `outreach_escalated`.
 
 **2026-09-11 (case-aware distress - section 5)**
 - New **section 5**: the Distress Score now has a fifth component,

@@ -7,7 +7,8 @@ plus trend and alert rules.
   voice           negative affect in voice check-ins (last 7 days)
   engagement      going quiet: days since last contact, overdue questionnaires
   case_pressure   the justice system's calendar: how close the next hearing is,
-                  repeated adjournments, and relief the person says never arrived
+                  repeated adjournments, relief the person says never arrived,
+                  and open serious case problems (threats, a refused FIR)
 
 Missing signals are left out and the weights renormalized; `confidence` is
 the share of weight that was available. Any crisis signal in the last 72 h
@@ -51,6 +52,8 @@ ADJOURNMENT_CAP = 40
 ENTITLEMENT_POINTS = 40       # relief the person says never arrived
 ENTITLEMENT_OVERDUE_DAYS = 30
 NOTICE_WINDOW_DAYS = 7        # s.15A: notice must come before the hearing
+ISSUE_POINTS = 20             # each open high-severity case problem (a threat, a refused FIR...)
+ISSUE_CAP = 40
 
 # questionnaire total -> 0-100 severity points, anchored on clinical bands
 ANCHORS = {
@@ -256,6 +259,16 @@ def case_pressure(conn, user_id, now):
     if unpaid:
         points += ENTITLEMENT_POINTS
         detail["unpaid_entitlements"] = {"count": unpaid, "points": ENTITLEMENT_POINTS}
+
+    # A threat, a refused FIR, pressure to withdraw: the process itself pressing
+    # on the person until someone deals with it (monitoring.case_issues).
+    issues = conn.execute(
+        "SELECT COUNT(*) FROM case_issues WHERE user_id = ? AND severity = 'high' "
+        "AND status IN ('open', 'in_progress', 'action_taken')", (user_id,)).fetchone()[0]
+    if issues:
+        got = min(issues * ISSUE_POINTS, ISSUE_CAP)
+        points += got
+        detail["open_issues"] = {"count": issues, "points": got}
 
     if not detail:
         return None, None

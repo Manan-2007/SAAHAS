@@ -13,10 +13,11 @@ session token from /auth/login. See monitoring.auth for the difference.
 import datetime as dt
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Query, Request, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from . import auth, questionnaires, service, storage
+from . import auth, case_issues, events, insights, outreach, questionnaires, service, storage, support
 
 router = APIRouter(tags=["monitoring"])
 Language = Literal["en", "hi", "pa"]
@@ -28,6 +29,10 @@ class Consent(BaseModel):
     store_messages: bool = False
     store_recordings: bool = Field(default=False,
                                    description="Keep the audio of voice check-ins in the storage bucket")
+    share_insights: bool = Field(default=True,
+                                 description="Let the assistant tell the counsellor how conversations went "
+                                             "(emotions, worries, case problems) - a summary, not the words")
+    ivrs_calls: bool = Field(default=False, description="Phone me if I miss a check-in (needs a phone number)")
 
 
 class RegisterRequest(BaseModel):
@@ -41,6 +46,7 @@ class RegisterRequest(BaseModel):
     username: str | None = Field(default=None, min_length=3, max_length=60)
     password: str | None = Field(default=None, min_length=auth.MIN_PASSWORD_LENGTH,
                                  max_length=auth.MAX_PASSWORD_LENGTH)
+    gender: Literal[service.GENDERS] | None = None
 
 
 class LoginRequest(BaseModel):
@@ -79,6 +85,60 @@ class ConsentUpdate(BaseModel):
     voice_analysis: bool | None = None
     store_messages: bool | None = None
     store_recordings: bool | None = None
+    share_insights: bool | None = None
+    ivrs_calls: bool | None = None
+
+
+class SettingsUpdate(BaseModel):
+    gender: Literal[service.GENDERS] | None = None
+    ui_style: Literal[service.UI_STYLES] | None = None
+    phone: str | None = Field(default=None, min_length=6, max_length=20, pattern=r"^\+?[0-9 ()-]{6,20}$")
+    clear_phone: bool = False
+
+
+class MoodRequest(BaseModel):
+    mood: Literal[service.MOODS]
+
+
+class ContactRequest(BaseModel):
+    kind: Literal["callback", "talk_soon"] = "callback"
+    preferred_time: Literal[support.PREFERRED_TIMES] = "asap"
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class IssueReport(BaseModel):
+    category: str = Field(min_length=1, max_length=40)
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class IssueUpdate(BaseModel):
+    status: Literal[case_issues.STATUSES] | None = None
+    action: str | None = Field(default=None, max_length=60)
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class RequestUpdate(BaseModel):
+    status: Literal["acknowledged", "done"]
+    response: str | None = Field(default=None, max_length=1000)
+
+
+class CounsellorMessage(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+
+
+class CounsellorContact(BaseModel):
+    phone: str | None = Field(default=None, max_length=20)
+    hours: str | None = Field(default=None, max_length=120)
+
+
+class RescheduleRequest(BaseModel):
+    option: Literal["1", "2"]
+
+
+class IvrsEvent(BaseModel):
+    call_id: int
+    event: Literal["answered", "digits", "no_answer", "busy", "failed", "completed"]
+    digits: str | None = Field(default=None, max_length=4)
 
 
 class AnswersRequest(BaseModel):
@@ -169,8 +229,11 @@ def register(req: RegisterRequest):
     if bool(req.username) != bool(req.password):
         raise HTTPException(status_code=422,
                             detail="Send a username and a password together, or neither")
+    if req.consent.ivrs_calls and not req.phone:
+        raise HTTPException(status_code=422, detail="Check-in calls need a phone number")
     return _or_auth_error(service.register_victim, req.name, req.language, req.phone, req.case_ref,
-                          req.consent.model_dump(), username=req.username, password=req.password)
+                          req.consent.model_dump(), username=req.username, password=req.password,
+                          gender=req.gender)
 
 
 @router.post("/auth/login")
@@ -227,7 +290,32 @@ def save_profile(req: ProfileRequest, user=Depends(auth.victim)):
 
 @router.patch("/me/consent")
 def update_consent(req: ConsentUpdate, user=Depends(auth.victim)):
+    if req.ivrs_calls and not user.get("phone_enc"):
+        raise HTTPException(status_code=422, detail="Add a phone number first to get check-in calls")
+    if req.share_insights is False:
+        insights.buffer.forget(user["id"])
     return {"consent": service.update_consent(user, req.model_dump())}
+
+
+@router.patch("/me/settings")
+def update_settings(req: SettingsUpdate, user=Depends(auth.victim)):
+    try:
+        result = service.update_settings(user, req.gender, req.ui_style, req.phone, req.clear_phone)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if req.clear_phone and user["consent"].get("ivrs_calls"):
+        result["consent"] = service.update_consent(user, {"ivrs_calls": False})
+    return result
+
+
+@router.get("/me/progress")
+def my_progress(user=Depends(auth.victim)):
+    return service.progress(user)
+
+
+@router.post("/me/mood")
+def record_mood(req: MoodRequest, user=Depends(auth.victim)):
+    return service.record_mood(user, req.mood)
 
 
 @router.delete("/me")
@@ -398,3 +486,220 @@ def acknowledge_alert(alert_id: int, user=Depends(auth.counsellor)):
 @router.post("/counsellor/alerts/{alert_id}/resolve")
 def resolve_alert(alert_id: int, req: ResolveRequest, user=Depends(auth.counsellor)):
     return _or_404(service.update_alert, user, alert_id, "resolved", req.note)
+
+
+# ---------------------------------------------------------------- live streams
+
+def _stream(request, key):
+    return StreamingResponse(events.sse(key, request.is_disconnected), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
+@router.get("/counsellor/stream")
+async def counsellor_stream(request: Request, user=Depends(auth.counsellor)):
+    """Server-sent events for this counsellor's caseload: reading, score, alert,
+    issue, insight, message, contact_request, outreach, mood."""
+    return _stream(request, user["id"])
+
+
+@router.get("/me/stream")
+async def my_stream(request: Request, user=Depends(auth.victim)):
+    """Server-sent events for the person: counsellor replies and request updates."""
+    return _stream(request, user["id"])
+
+
+# ---------------------------------------------------------------- support (victim side)
+
+@router.get("/me/support")
+def my_support(user=Depends(auth.victim)):
+    return support.victim_support(user)
+
+
+@router.post("/me/contact-requests")
+def ask_for_contact(req: ContactRequest, user=Depends(auth.victim)):
+    return support.request_contact(user, req.kind, req.preferred_time, req.note)
+
+
+@router.get("/me/messages")
+def my_messages(user=Depends(auth.victim)):
+    return support.thread_for_victim(user)
+
+
+@router.get("/me/issues/categories")
+def issue_categories(user=Depends(auth.victim)):
+    return case_issues.categories_for_victim(user["language"] or "en")
+
+
+@router.get("/me/issues")
+def my_issues(user=Depends(auth.victim)):
+    return case_issues.victim_issues(user)
+
+
+@router.post("/me/issues")
+def report_issue(req: IssueReport, user=Depends(auth.victim)):
+    try:
+        return case_issues.victim_report(user, req.category, req.note)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@router.get("/me/checkin-call")
+def my_checkin_call(user=Depends(auth.victim)):
+    return {"call": outreach.victim_call(user), "enabled": bool(user["consent"].get("ivrs_calls")),
+            "max_reschedules": outreach.MAX_RESCHEDULES}
+
+
+@router.post("/me/checkin-call/reschedule")
+def reschedule_checkin_call(req: RescheduleRequest, user=Depends(auth.victim)):
+    try:
+        return {"call": outreach.reschedule_from_app(user, req.option)}
+    except outreach.RescheduleRefused as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+# ---------------------------------------------------------------- support (counsellor side)
+
+@router.get("/counsellor/feed")
+def reading_feed(limit: int = Query(100, ge=1, le=500), user=Depends(auth.counsellor)):
+    """Every message's distress reading across the caseload, newest first. No words."""
+    return support.feed(user, limit)
+
+
+@router.get("/counsellor/victims/{victim_id}/readings")
+def victim_readings(victim_id: str, limit: int = Query(100, ge=1, le=500), user=Depends(auth.counsellor)):
+    try:
+        return support.readings_for(user, victim_id, limit)
+    except support.NotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/counsellor/victims/{victim_id}/insights")
+def victim_insights(victim_id: str, limit: int = Query(20, ge=1, le=100), user=Depends(auth.counsellor)):
+    found = insights.for_victim(user, victim_id, limit)
+    if found is None:
+        raise HTTPException(status_code=404, detail="No such client assigned to you")
+    return found
+
+
+@router.get("/counsellor/legal-actions")
+def legal_actions(user=Depends(auth.counsellor)):
+    return case_issues.legal_actions()
+
+
+@router.get("/counsellor/issues")
+def issues(status: str = Query("active"), victim_id: str | None = None, user=Depends(auth.counsellor)):
+    return case_issues.counsellor_issues(user, status, victim_id)
+
+
+@router.post("/counsellor/victims/{victim_id}/issues")
+def log_issue(victim_id: str, req: IssueReport, user=Depends(auth.counsellor)):
+    if req.category not in case_issues.categories():
+        raise HTTPException(status_code=422, detail="Unknown category")
+    try:
+        return case_issues.log_by_counsellor(user, victim_id, req.category, req.note)
+    except case_issues.IssueNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.patch("/counsellor/issues/{issue_id}")
+def update_issue(issue_id: int, req: IssueUpdate, user=Depends(auth.counsellor)):
+    try:
+        return case_issues.update(user, issue_id, status=req.status, action=req.action, note=req.note)
+    except case_issues.IssueNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/counsellor/contact-requests")
+def contact_requests(status: Literal["open", "acknowledged", "done", "all"] = "open", user=Depends(auth.counsellor)):
+    return support.counsellor_requests(user, status)
+
+
+@router.post("/counsellor/contact-requests/{request_id}")
+def handle_contact_request(request_id: int, req: RequestUpdate, user=Depends(auth.counsellor)):
+    try:
+        return support.handle_request(user, request_id, req.status, req.response)
+    except support.NotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/counsellor/messages")
+def message_inbox(user=Depends(auth.counsellor)):
+    return support.inbox(user)
+
+
+@router.get("/counsellor/victims/{victim_id}/messages")
+def victim_thread(victim_id: str, user=Depends(auth.counsellor)):
+    try:
+        return support.thread_for_counsellor(user, victim_id)
+    except support.NotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.post("/counsellor/victims/{victim_id}/messages")
+def reply_to_victim(victim_id: str, req: CounsellorMessage, user=Depends(auth.counsellor)):
+    try:
+        return support.send_from_counsellor(user, victim_id, req.text)
+    except support.NotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/counsellor/outreach")
+def outreach_calls(status: Literal["active", "all"] = "active", user=Depends(auth.counsellor)):
+    return outreach.counsellor_calls(user, status)
+
+
+@router.get("/counsellor/me/contact")
+def my_contact_card(user=Depends(auth.counsellor)):
+    return support.counsellor_contact(user["id"])
+
+
+@router.put("/counsellor/me/contact")
+def set_my_contact_card(req: CounsellorContact, user=Depends(auth.counsellor)):
+    return support.set_counsellor_contact(user, req.phone, req.hours)
+
+
+# ---------------------------------------------------------------- IVRS webhooks
+
+@router.post("/ivrs/webhook")
+def ivrs_webhook(req: IvrsEvent, key: str = Query(...)):
+    """Carrier-neutral: one step of the check-in call as JSON
+    {say: [...], gather: n or null, hangup, language}. Adapt it to Exotel,
+    Knowlarity or any IVR that can call a URL and speak text."""
+    if not outreach.check_key(key):
+        raise HTTPException(status_code=403, detail="Bad key")
+    return outreach.respond(req.call_id, req.event, req.digits)
+
+
+@router.post("/ivrs/simulate")
+def ivrs_simulate(req: IvrsEvent, user=Depends(auth.counsellor)):
+    """Walk a check-in call through its steps without a carrier (console mode)."""
+    with_calls = {c["id"] for c in outreach.counsellor_calls(user, "all")}
+    if req.call_id not in with_calls:
+        raise HTTPException(status_code=404, detail="No such call for your clients")
+    return outreach.respond(req.call_id, req.event, req.digits)
+
+
+def _twilio_event(status, digits):
+    if digits:
+        return "digits"
+    return {"in-progress": "answered", "ringing": "answered", "answered": "answered",
+            "no-answer": "no_answer", "busy": "busy", "failed": "failed", "canceled": "failed",
+            "completed": "completed"}.get(status or "", "answered")
+
+
+@router.post("/ivrs/twilio/voice")
+def twilio_voice(call_id: int, key: str, step: str | None = None, Digits: str | None = Form(default=None),
+                 CallStatus: str | None = Form(default=None)):
+    if not outreach.check_key(key):
+        raise HTTPException(status_code=403, detail="Bad key")
+    event = "digits" if step == "digits" else _twilio_event(CallStatus, None)
+    result = outreach.respond(call_id, event, Digits)
+    return Response(content=outreach.twiml(result, call_id), media_type="application/xml")
+
+
+@router.post("/ivrs/twilio/status")
+def twilio_status(call_id: int, key: str, CallStatus: str | None = Form(default=None)):
+    if not outreach.check_key(key):
+        raise HTTPException(status_code=403, detail="Bad key")
+    outreach.respond(call_id, _twilio_event(CallStatus, None))
+    return Response(status_code=204)

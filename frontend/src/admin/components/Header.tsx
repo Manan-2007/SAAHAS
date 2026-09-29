@@ -9,8 +9,6 @@ interface HeaderProps {
   unreadCount: number;
 }
 
-const BRAND_LOGO_URL =
-  'https://lh3.googleusercontent.com/aida/AEtjO1VEyAdYi5Yksnru_1OPhZWlg32VyMC0WRPb4X8Naj0MQOI-8GTGIf1Mx6rXvVJWsTNdlrdTv96zLXRdSrcTP6VtrfmngLPaP3j2DhTlNYBF-xw1BYXZs0Q-uuKtD6UTqmrSM8Slh_orJ2lYlKMLzEPUoPI1J0L_5py49yNtv1tcmxxrnD0MjPETL0amsM-j7HUx7DnUF8JelwHSzUIcbDfU3NBsR-yIc9bGj_EiGAkrrfGdiSyqC9brAYA';
 
 export const Header: React.FC<HeaderProps> = ({
   counsellorName,
@@ -35,11 +33,6 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <div className="flex items-center gap-2.5">
-          <img
-            src={BRAND_LOGO_URL}
-            alt="SAHAAS Brand Logo"
-            className="h-7 w-auto object-contain"
-          />
           <span className="font-['Plus_Jakarta_Sans'] text-[18px] text-[#352e24] font-semibold hidden sm:inline-block">
             SAHAAS Command
           </span>
