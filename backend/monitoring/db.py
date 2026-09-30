@@ -248,7 +248,7 @@ CREATE INDEX IF NOT EXISTS cmsg_user_time ON counsellor_messages(user_id, create
 CREATE TABLE IF NOT EXISTS outreach_calls (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    reason TEXT NOT NULL,          -- missed_checkin
+    reason TEXT NOT NULL,          -- missed_checkin | missed_call | after_court
     missed_since REAL NOT NULL,    -- when the check-in was due
     scheduled_for REAL NOT NULL,   -- next call attempt
     deadline REAL NOT NULL,        -- rescheduling can never push past this
@@ -281,6 +281,12 @@ MIGRATIONS = [
     ("users", "gender_enc", "TEXT"),
     # 'warm' | 'calm' - the person's own choice of app style, overriding the default
     ("users", "ui_style", "TEXT"),
+    # Duress (safety) password: signing in with it opens an empty decoy account
+    # and alerts the counsellor. scrypt hash like password_hash; NULL = not set.
+    ("credentials", "duress_hash", "TEXT"),
+    # A decoy account points at the real one. Decoys are never assigned a
+    # counsellor and never adopted, so they appear in no caseload.
+    ("users", "decoy_of", "TEXT"),
 ]
 
 

@@ -103,14 +103,14 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({ onOpenCase, connecte
             return (
               <button key={r.id} onClick={() => onOpenCase(r.victim_id)}
                       className={`w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-surface transition-colors ${fresh.has(r.id) ? 'animate-fadeIn bg-warn/10' : ''}`}>
-                <span className="material-symbols-outlined text-[20px] text-sun">{ch.icon}</span>
+                <span aria-hidden className="material-symbols-outlined text-[20px] text-sun">{ch.icon}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-ink truncate">{r.victim_name ?? 'Client'}</p>
                   <p className="text-[11px] text-ink-2">{ch.label} · {timeShort(r.at)}</p>
                 </div>
                 {r.issues.length > 0 && (
                   <span className="hidden md:inline-flex items-center gap-1 text-[11px] font-semibold text-ink bg-sun/12 px-2 py-0.5 rounded-full">
-                    <span className="material-symbols-outlined text-[14px]">gavel</span>
+                    <span aria-hidden className="material-symbols-outlined text-[14px]">gavel</span>
                     {r.issues.map((i) => i.replace(/_/g, ' ')).join(', ')}
                   </span>
                 )}

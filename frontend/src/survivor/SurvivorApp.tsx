@@ -79,6 +79,7 @@ export const SurvivorApp: React.FC<{ onQuickExit: () => void }> = ({ onQuickExit
       isGuest,
       counsellor: support.data?.counsellor ?? null,
       helplines: support.data?.helplines?.length ? support.data.helplines : FALLBACK_HELPLINES,
+      missedCall: support.data?.missed_call ?? null,
       unreadMessages: support.data?.unread_messages ?? 0,
       reloadSupport,
       subscribe: (listener: LiveListener) => {

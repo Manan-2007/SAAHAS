@@ -73,7 +73,8 @@ export const Problem: React.FC<{ initialCategory?: string }> = ({ initialCategor
           </Notice>
         ) : (
           <ChoiceGroup label="What happened?">
-            {(categories.data ?? []).map((c) => (
+            {/* Opened for a specific problem (from Rights or court day): that one leads. */}
+            {[...(categories.data ?? [])].sort((a, b) => Number(b.category === initialCategory) - Number(a.category === initialCategory)).map((c) => (
               <Choice
                 key={c.category}
                 accent="coral"

@@ -1,4 +1,5 @@
 import React from 'react';
+import { TIER_WORD, tierColor, tierOf } from './ScoreChart';
 import { CaseData } from '../types';
 import { PageHeader, QuietButton } from './PageHeader';
 
@@ -18,7 +19,8 @@ function outcomes(cases: CaseData[]) {
   const inTouch = cases.filter((c) => typeof c.metrics.missedCheckins === 'number' && c.metrics.missedCheckins <= 7).length;
   const calm = cases.filter((c) => c.alertTitle === 'No open alerts').length;
   return {
-    averageChange: average == null ? '—' : `${average > 0 ? '+' : ''}${average.toFixed(1)} pts`,
+    averageChange: average == null ? '—' : Math.abs(average) < 1 ? 'About the same' : `${Math.abs(average).toFixed(1)} pts ${average < 0 ? 'better' : 'worse'}`,
+    direction: average == null || Math.abs(average) < 1 ? 'flat' : average < 0 ? 'better' : 'worse',
     measured: changes.length,
     inTouch: pct(inTouch, cases.length),
     calm: pct(calm, cases.length),
@@ -45,7 +47,7 @@ export const RecoveryOutcomesView: React.FC<RecoveryOutcomesViewProps> = ({
             Average Distress Score Change
           </span>
           <div className="flex items-baseline gap-2 mt-2">
-            <span className=" text-3xl font-bold text-ink-2">
+            <span className={`text-3xl font-bold ${stats.direction === 'better' ? 'text-ok' : stats.direction === 'worse' ? 'text-danger' : 'text-ink-2'}`}>
               {stats.averageChange}
             </span>
             <span className="text-xs text-ink-2 font-semibold bg-soft/40 px-2 py-0.5 rounded-full">
@@ -53,7 +55,7 @@ export const RecoveryOutcomesView: React.FC<RecoveryOutcomesViewProps> = ({
             </span>
           </div>
           <p className="text-xs text-ink-2 mt-2">
-            Negative is better. Based on the {stats.measured} case{stats.measured === 1 ? '' : 's'} with a score 30 days ago and now.
+            Average change in the Distress Score, where lower means doing better. Based on the {stats.measured} case{stats.measured === 1 ? '' : 's'} with a score 30 days ago and now.
           </p>
         </div>
 
@@ -106,7 +108,7 @@ export const RecoveryOutcomesView: React.FC<RecoveryOutcomesViewProps> = ({
                 <th className="py-2.5 px-3">Care Phase</th>
                 <th className="py-2.5 px-3">30 Days Ago</th>
                 <th className="py-2.5 px-3">Now</th>
-                <th className="py-2.5 px-3">Change</th>
+                <th className="py-2.5 px-3">Change (lower is better)</th>
                 <th className="py-2.5 px-3">Counsellor</th>
               </tr>
             </thead>
@@ -122,15 +124,9 @@ export const RecoveryOutcomesView: React.FC<RecoveryOutcomesViewProps> = ({
                       Step {c.currentStep} of 5
                     </span>
                   </td>
-                  <td className="py-3 px-3 font-semibold text-danger">
-                    {c.distressBefore} / 100
-                  </td>
-                  <td className="py-3 px-3 font-semibold text-ink-2">
-                    {c.distressAfter} / 100
-                  </td>
-                  <td className="py-3 px-3 font-bold text-ink-2">
-                    {c.distressDelta || '—'}
-                  </td>
+                  <td className="py-3 px-3"><ScoreCell value={c.distressBefore} /></td>
+                  <td className="py-3 px-3"><ScoreCell value={c.distressAfter} /></td>
+                  <td className="py-3 px-3"><ChangeCell before={c.distressBefore} after={c.distressAfter} /></td>
                   <td className="py-3 px-3 text-ink-2">{c.assignedCounsellor}</td>
                 </tr>
               ))}
@@ -139,5 +135,25 @@ export const RecoveryOutcomesView: React.FC<RecoveryOutcomesViewProps> = ({
         </div>
       </div>
     </div>
+  );
+};
+
+const ScoreCell: React.FC<{ value: number | string }> = ({ value }) =>
+  typeof value !== 'number' ? (
+    <span className="text-ink-2">—</span>
+  ) : (
+    <span className="font-semibold" style={{ color: tierColor(tierOf(value)) }}>
+      {value} <span className="font-normal">· {TIER_WORD[tierOf(value)]}</span>
+    </span>
+  );
+
+const ChangeCell: React.FC<{ before: number | string; after: number | string }> = ({ before, after }) => {
+  if (typeof before !== 'number' || typeof after !== 'number') return <span className="text-ink-2">—</span>;
+  const d = after - before;
+  if (Math.abs(d) < 3) return <span className="text-ink-2 font-semibold">About the same</span>;
+  return d < 0 ? (
+    <span className="text-ok font-bold">↓ Better by {Math.abs(d)}</span>
+  ) : (
+    <span className="text-danger font-bold">↑ Worse by {d}</span>
   );
 };

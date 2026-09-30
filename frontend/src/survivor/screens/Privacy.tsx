@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { KeyRound, LogOut, Mic, Play, Smartphone, Trash2 } from 'lucide-react';
+import { KeyRound, LogOut, Mic, Play, ShieldAlert, Smartphone, Trash2 } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { MIN_PASSWORD_LENGTH } from '../../auth/authStore';
 import { useLanguage } from '../../i18n/LanguageProvider';
@@ -67,6 +67,7 @@ export const Privacy: React.FC = () => {
   const [savingMe, setSavingMe] = useState(false);
   const [creds, setCreds] = useState({ username: '', password: '', busy: false, done: false });
   const [pw, setPw] = useState({ open: false, current: '', next: '', busy: false, done: false });
+  const [duress, setDuress] = useState({ open: false, current: '', next: '', busy: false, done: '' });
   const [confirm, setConfirm] = useState<'forget' | 'delete' | null>(null);
   const [busy, setBusy] = useState(false);
   const [forgotten, setForgotten] = useState(false);
@@ -199,6 +200,23 @@ export const Privacy: React.FC = () => {
     } catch (err) {
       setPw((p) => ({ ...p, busy: false }));
       setError(err instanceof ApiError && err.status === 401 ? 'Your current password isn’t right.' : errorText(err));
+    }
+  };
+
+  const saveDuress = async (remove = false) => {
+    if (!remove && duress.next.length < MIN_PASSWORD_LENGTH) {
+      setError(`Please use at least ${MIN_PASSWORD_LENGTH} characters for the safety password.`);
+      return;
+    }
+    setError(null);
+    setDuress((d) => ({ ...d, busy: true }));
+    try {
+      const res = remove ? await account.clearDuress(duress.current) : await account.setDuress(duress.current, duress.next);
+      updateUser({ ...user, hasDuress: res.has_duress });
+      setDuress({ open: false, current: '', next: '', busy: false, done: remove ? 'Safety password removed.' : 'Safety password saved. Keep it somewhere only you know.' });
+    } catch (err) {
+      setDuress((d) => ({ ...d, busy: false }));
+      setError(err instanceof ApiError && err.status === 401 ? 'Your password isn’t right.' : errorText(err));
     }
   };
 
@@ -402,6 +420,43 @@ export const Privacy: React.FC = () => {
               ) : (
                 <Button variant="quiet" icon={KeyRound} className="self-start" onClick={() => setPw((p) => ({ ...p, open: true, done: false }))}>
                   Change my password
+                </Button>
+              )}
+            </Section>
+          )}
+
+          {user.hasPassword && (
+            <Section
+              title="Safety password"
+              hint="If someone ever makes you open SAHAAS, sign in with this instead of your password. The app opens looking new and empty, and your counsellor is quietly told you may need help. Nothing on the screen shows it."
+            >
+              {duress.done && <Notice>{duress.done}</Notice>}
+              {duress.open ? (
+                <form onSubmit={(e) => { e.preventDefault(); saveDuress(); }} className="flex flex-col gap-3">
+                  <TextField label="Your password" type="password" autoComplete="current-password" value={duress.current} onChange={(e) => setDuress((d) => ({ ...d, current: e.target.value }))} />
+                  <TextField
+                    label="Safety password"
+                    type="password"
+                    hint={`At least ${MIN_PASSWORD_LENGTH} characters, and different from your password. Pick something you'll remember under stress.`}
+                    autoComplete="new-password"
+                    value={duress.next}
+                    onChange={(e) => setDuress((d) => ({ ...d, next: e.target.value }))}
+                  />
+                  <Button type="submit" variant="solid" size="lg" busy={duress.busy} disabled={!duress.current || !duress.next}>
+                    Save safety password
+                  </Button>
+                  {user.hasDuress && (
+                    <Button variant="ghost" onClick={() => saveDuress(true)} disabled={!duress.current || duress.busy}>
+                      Remove my safety password
+                    </Button>
+                  )}
+                  <Button variant="ghost" onClick={() => setDuress((d) => ({ ...d, open: false, current: '', next: '' }))}>
+                    Cancel
+                  </Button>
+                </form>
+              ) : (
+                <Button variant="quiet" icon={ShieldAlert} className="self-start" onClick={() => setDuress((d) => ({ ...d, open: true, done: '' }))}>
+                  {user.hasDuress ? 'Change or remove my safety password' : 'Set a safety password'}
                 </Button>
               )}
             </Section>

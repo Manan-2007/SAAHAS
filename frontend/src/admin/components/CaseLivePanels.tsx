@@ -111,6 +111,9 @@ export const ReadingsPanel: React.FC<{ victimId: string }> = ({ victimId }) => {
   useLiveEvents((e) => { if (e.victim_id === victimId) load(); }, ['reading']);
 
   const recent = (items ?? []).slice(0, 60).reverse();
+  // At least 30 slots, newest on the right, so a few messages don't stretch into wide pills.
+  const slots = Math.max(recent.length, 30);
+  const offset = slots - recent.length;
   return (
     <div className={`${CARD} space-y-4`}>
       <div>
@@ -118,13 +121,31 @@ export const ReadingsPanel: React.FC<{ victimId: string }> = ({ victimId }) => {
         <p className="text-xs text-ink-2">Updated live. 0-100, higher is harder. No words are shown.</p>
       </div>
       {recent.length > 1 && (
-        <svg viewBox={`0 0 ${recent.length * 10} 60`} className="w-full h-16" preserveAspectRatio="none" role="img" aria-label="Distress per message">
-          {[25, 50, 75].map((y) => <line key={y} x1="0" x2={recent.length * 10} y1={60 - y * 0.6} y2={60 - y * 0.6} style={{ stroke: CHART.grid }} strokeWidth="0.5" />)}
-          {recent.map((r, i) => (
-            <rect key={r.id} x={i * 10 + 2} width="6" y={60 - Math.max(2, r.score * 0.6)} height={Math.max(2, r.score * 0.6)} rx="1.5"
-                  style={{ fill: CHART.levels[r.crisis ? 3 : r.level] }} />
-          ))}
-        </svg>
+        <figure className="space-y-2">
+          <svg viewBox={`0 0 ${slots * 10} 64`} className="w-full h-20" preserveAspectRatio="none" role="img"
+               aria-label={`Distress per message for the last ${recent.length} messages, oldest on the left. ${recent.filter((r) => r.level >= 2 || r.crisis).length} were moderate or higher.`}>
+            {[25, 50, 75].map((y) => <line key={y} x1="0" x2={slots * 10} y1={64 - y * 0.6} y2={64 - y * 0.6} style={{ stroke: CHART.grid }} strokeWidth="0.5" />)}
+            {recent.map((r, i) => (
+              <g key={r.id}>
+                <rect x={(offset + i) * 10 + 2} width="6" y={64 - Math.max(2, r.score * 0.6)} height={Math.max(2, r.score * 0.6)} rx="1.5"
+                      style={{ fill: CHART.levels[r.crisis ? 3 : r.level] }}>
+                  <title>{`${CHANNEL_LABEL[r.channel]?.label ?? r.channel}, ${timeShort(r.at)}: ${LEVEL_STYLE[r.label]?.label ?? r.label} (${Math.round(r.score)})${r.crisis ? ', crisis signal' : ''}`}</title>
+                </rect>
+                {r.crisis && <circle cx={(offset + i) * 10 + 5} cy={64 - Math.max(2, r.score * 0.6) - 3} r="1.8" style={{ fill: CHART.crisis }} />}
+              </g>
+            ))}
+          </svg>
+          <figcaption className="flex items-center gap-x-4 gap-y-1 flex-wrap text-xs text-ink-2">
+            <span>← older</span>
+            {(['Calm', 'Low', 'Moderate', 'High or crisis'] as const).map((label, i) => (
+              <span key={label} className="inline-flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm" style={{ background: CHART.levels[i] }} aria-hidden />{label}
+              </span>
+            ))}
+            <span className="flex-1" />
+            <span>Taller bar = harder message · newest →</span>
+          </figcaption>
+        </figure>
       )}
       <div className="divide-y divide-line">
         {items === null ? <p className="text-xs text-ink-2">Loading…</p> : items.length === 0 ? (
@@ -133,7 +154,7 @@ export const ReadingsPanel: React.FC<{ victimId: string }> = ({ victimId }) => {
           const lvl = LEVEL_STYLE[r.label];
           return (
             <div key={r.id} className="py-2 flex items-center gap-3 text-xs">
-              <span className="material-symbols-outlined text-[18px] text-sun">{CHANNEL_LABEL[r.channel]?.icon ?? 'forum'}</span>
+              <span aria-hidden className="material-symbols-outlined text-[18px] text-sun">{CHANNEL_LABEL[r.channel]?.icon ?? 'forum'}</span>
               <span className="flex-1 text-ink-2">{CHANNEL_LABEL[r.channel]?.label ?? r.channel} · {timeShort(r.at)}
                 {r.issues.length > 0 && <span className="text-ink"> · ⚖ {r.issues.map((i) => i.replace(/_/g, ' ')).join(', ')}</span>}
               </span>

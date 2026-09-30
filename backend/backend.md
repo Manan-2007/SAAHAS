@@ -142,10 +142,18 @@ the voice call screen (3b).
 Done in `frontend/src/admin/`: `data/live.ts` maps these routes onto the
 dashboard, and anything the backend doesn't measure shows "—".
 
-- [x] **Login:** the same `POST /auth/login` screen as victims - counsellors
-      created with `manage.py create-counsellor "Name" --username ananya` sign
-      in with a username and password, and `role: "counsellor"` in the response
-      is what routes them here. Pasting the token `create-counsellor` prints also works.
+- [x] **Login:** its own page at `/staff` (`POST /auth/login`, same endpoint as
+      victims). `role: "counsellor"` in the response routes them here; the
+      survivor sign-in turns a counsellor account away and points to `/staff`,
+      and `/staff` turns a survivor account away. There is no token field on
+      either page.
+- [x] **Adding counsellors (no public sign-up):** `GET /counsellor/team` lists
+      every counsellor `{id, name, username, clients, since}`;
+      `POST /counsellor/team {name, username, password}` (counsellor only) adds
+      one - 201, 409 if the username is taken, 422 if the password is under 8
+      characters. The response never includes a token. The new counsellor adopts
+      anyone unassigned. Shown as Settings -> Team. The first counsellor still
+      comes from `manage.py create-counsellor`.
 - [x] **Caseload list:** `GET /counsellor/victims`, already sorted most urgent
       first. Per row: `name`, `case_ref`, `score` (0–100), `tier`, `crisis`,
       `trend.direction` + `trend.change_7d`, `open_alerts`, `last_contact_at`, `next_event`.
@@ -475,6 +483,42 @@ behind (the database is backed up to `data/backups/` first).
   walk a call through with `POST /ivrs/simulate`.
 - Counsellor: `GET /counsellor/outreach`. Victim: `GET /me/checkin-call`.
 
+### 6g. Safety password (duress)
+- [x] `PUT /me/duress-password {current_password, duress_password}` (8+ chars,
+      must differ from the password; 401 wrong password, 422 same/short) and
+      `DELETE /me/duress-password {current_password}`. `/me` has `has_duress`.
+      UI: Privacy -> Safety password.
+- Signing in with it (`POST /auth/login`, same response shape) returns a session
+  on an **empty decoy account**: same name and username, onboarded, no
+  counsellor, none of the real data. The same decoy is reused every time. A
+  `duress_login` alert (crisis) goes to the real account's counsellor each time.
+- Inside the decoy, changing the password or safety password "succeeds" and
+  changes nothing; `has_duress` is false. Decoys are never assigned a counsellor
+  or adopted, get no calls, and are deleted with the real account.
+
+### 6h. Missed-call check-in
+- Someone who agreed to calls rings `SAHAAS_MISSED_CALL_NUMBER` and hangs up
+  (free); SAHAAS queues a `missed_call` callback through the IVRS loop above
+  (same menu, greeting "calling you back"). Max 3 a day; a queued call is
+  brought forward instead of doubled.
+- Webhooks: carrier-neutral `POST /ivrs/missed-call?key=` `{"from": "+91..."}`
+  and Twilio `POST /ivrs/twilio/incoming?key=` (form `From`; answers `<Reject>`
+  so the caller is never charged). Same answer for known and unknown numbers.
+- `GET /me/support` has `missed_call: {number, enabled} | null` (null until the
+  number is set; `enabled` needs `ivrs_calls` + a phone). UI: Support screen.
+
+### 6i. Court-day mode
+- [x] `GET /me/court-day` -> `null`, or `{event_id, phase, date, title, intro,
+      tips[], actions[]}` for a hearing/bail/parole/verdict date. `phase`:
+      `before` (tomorrow), `day` (today before 17:00), `after` (today from 17:00,
+      and the next day). Tips carry `basis` + `source_url` (legal_actions.json
+      sources) and an optional `action` (`problem` with a category, `breathe`,
+      `chat`, `checkin`). Content: `monitoring/court_day.json` (Hindi is a draft).
+      No docket words, no numbers. UI: a card at the top of Home.
+- From 18:00 on a court day, people with `ivrs_calls` get one `after_court` call
+  ("how you are this evening" - it never says court) unless they checked in that
+  evening. No answer escalates as `watch`, not `high`.
+
 ### 6f. Gender and app style
 - Sign-up asks gender (`woman | man | nonbinary | prefer_not`), stored encrypted.
   `ui_style` defaults to `warm` for women (rose palette, daily encouragement,
@@ -579,6 +623,19 @@ behind (the database is backed up to `data/backups/` first).
 ---
 
 ## Update log (what changed for the frontend)
+
+**2026-09-30 (safety password, missed-call check-in, court-day mode)**
+- Sections 6g-6i: `/me/duress-password`, the decoy sign-in and the
+  `duress_login` alert; `/ivrs/missed-call`, `/ivrs/twilio/incoming` and
+  `missed_call` on `/me/support`; `/me/court-day` and the `after_court` call.
+  Outreach calls now have `reason` `missed_checkin | missed_call | after_court`.
+
+**2026-09-30 (separate counsellor sign-in, team, readable charts)**
+- `GET /counsellor/team` and `POST /counsellor/team` (section 3). Counsellors sign
+  in at `/staff`; the access-token sign-in is gone from the UI.
+- Frontend: the 30-day score chart has named zones, axes, a one-line summary,
+  hover/arrow-key reading and a table view; the per-message chart has a legend;
+  Outcomes says better/worse in words; case tabs show open counts.
 
 **2026-09-26 (chat via Azure OpenAI)**
 - `CHAT_BACKEND=azure` in `backend/.env` sends chat, voice-call replies and

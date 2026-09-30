@@ -31,6 +31,7 @@ import {
   Wellbeing,
   api,
   victimKind,
+  CourtDay,
 } from '../../lib/api';
 import type { LanguageCode } from '../../types';
 import type { StringKey } from '../../i18n/strings';
@@ -69,6 +70,8 @@ export const useSupportInfo = (enabled: boolean) => useRemote<SupportInfo>(() =>
 export const useWellbeing = (enabled: boolean) => useRemote<Wellbeing>(() => api.wellbeing(), [], enabled);
 export const useDue = (enabled: boolean) => useRemote<DueCheckin[]>(() => api.due(), [], enabled);
 export const useProgress = (enabled: boolean) => useRemote<Progress>(() => api.progress(), [], enabled);
+/** The day before, the day of and the evening after a court date (null otherwise). */
+export const useCourtDay = (enabled: boolean) => useRemote<CourtDay | null>(() => api.courtDay(), [], enabled);
 
 /** A missed check-in call that's scheduled or ringing (IVRS, backend.md 6e). */
 export const useCheckinCall = (enabled: boolean) =>
@@ -190,6 +193,8 @@ export const account = {
   updateSettings: (body: { gender?: Gender; ui_style?: UiStyle; phone?: string; clear_phone?: boolean }) => api.updateSettings(body),
   setCredentials: (username: string, password: string) => api.setCredentials(username, password),
   changePassword: (current: string, next: string) => api.changePassword(current, next),
+  setDuress: (current: string, duress: string) => api.setDuressPassword(current, duress),
+  clearDuress: (current: string) => api.clearDuressPassword(current),
   forgetConversation: () => api.forgetConversation(),
   deleteEverything: () => api.deleteMe(),
 };

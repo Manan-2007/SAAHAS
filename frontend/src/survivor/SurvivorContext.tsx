@@ -27,6 +27,8 @@ export interface SurvivorContextValue {
   /** From /me/support: who the counsellor is and how to reach them, when known. */
   counsellor: SupportInfo['counsellor'];
   helplines: Helpline[];
+  /** Ring and hang up for a free callback; null until a number is set up. */
+  missedCall: { number: string; enabled: boolean } | null;
   unreadMessages: number;
   reloadSupport: () => void;
   /** Live events from /me/stream (one connection, shared). Returns an unsubscribe. */

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ArrowLeft, ArrowRight, ShieldCheck } from 'lucide-react';
-import { AuthError, MIN_PASSWORD_LENGTH, SessionUser, guestUser, signIn, signInWithToken, signUp } from './authStore';
+import { ArrowLeft, ArrowRight, BriefcaseMedical, ShieldCheck } from 'lucide-react';
+import { AuthError, MIN_PASSWORD_LENGTH, SessionUser, WrongDoorError, guestUser, signIn, signUp } from './authStore';
 import type { Consent, Gender } from '../lib/api';
 import { useLanguage } from '../i18n/LanguageProvider';
 import { EntryShell } from '../survivor/entry/EntryShell';
@@ -9,7 +9,7 @@ import { Button, IconButton } from '../survivor/ui/Button';
 import { ConsentCard, TextField } from '../survivor/ui/forms';
 import { Choice, ChoiceGroup, Notice, ProgressIndicator, Serif } from '../survivor/ui/primitives';
 
-export type AuthMode = 'signup' | 'signin';
+export type AuthMode = 'signup' | 'signin' | 'staff';
 
 interface AuthScreenProps {
   mode: AuthMode;
@@ -28,7 +28,7 @@ const GENDERS: { id: Gender; label: string }[] = [
 const failure = (err: unknown) => (err instanceof AuthError ? err.message : 'Something went wrong. Please try again.');
 
 export const AuthScreen: React.FC<AuthScreenProps> = (props) =>
-  props.mode === 'signup' ? <SignUp {...props} /> : <SignIn {...props} />;
+  props.mode === 'signup' ? <SignUp {...props} /> : props.mode === 'staff' ? <StaffSignIn {...props} /> : <SignIn {...props} />;
 
 // ---------------------------------------------------------------- sign up: three calm steps
 
@@ -200,15 +200,14 @@ const SignUp: React.FC<AuthScreenProps> = ({ onAuthenticated, onBack, onSwitch }
   );
 };
 
-// ---------------------------------------------------------------- sign in
+// ---------------------------------------------------------------- sign in (survivors)
 
 const SignIn: React.FC<AuthScreenProps> = ({ onAuthenticated, onBack, onSwitch }) => {
   const { t } = useLanguage();
-  const [useToken, setUseToken] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [token, setToken] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [wrongDoor, setWrongDoor] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
@@ -216,9 +215,11 @@ const SignIn: React.FC<AuthScreenProps> = ({ onAuthenticated, onBack, onSwitch }
     if (busy) return;
     setBusy(true);
     setError(null);
+    setWrongDoor(false);
     try {
-      onAuthenticated(useToken ? await signInWithToken(token) : await signIn(username, password));
+      onAuthenticated(await signIn(username, password, 'survivor'));
     } catch (err) {
+      setWrongDoor(err instanceof WrongDoorError);
       setError(failure(err));
       setBusy(false);
     }
@@ -235,35 +236,20 @@ const SignIn: React.FC<AuthScreenProps> = ({ onAuthenticated, onBack, onSwitch }
           <p className="mt-2 text-[17px] text-ink-2">Step back into your space.</p>
         </div>
         <div className="flex flex-col gap-4 settle" style={{ ['--i' as string]: 1 }}>
-          {useToken ? (
-            <TextField
-              label="Access token"
-              type="password"
-              hint="The token you were given."
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              autoComplete="off"
-            />
-          ) : (
-            <>
-              <TextField label="Username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" />
-              <TextField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
-            </>
-          )}
+          <TextField label="Username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" />
+          <TextField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
         </div>
-        {error && <Notice tone="error">{error}</Notice>}
+        {error && (
+          <Notice
+            tone="error"
+            action={wrongDoor ? <Button variant="ghost" onClick={() => onSwitch('staff')}>Go to counsellor sign-in</Button> : undefined}
+          >
+            {error}
+          </Notice>
+        )}
         <div className="flex flex-col gap-2">
           <Button type="submit" variant="solid" size="lg" full busy={busy}>
             Sign in
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setUseToken((v) => !v);
-              setError(null);
-            }}
-          >
-            {useToken ? 'Use a username and password instead' : 'I have an access token instead'}
           </Button>
           <Button variant="ghost" onClick={() => onSwitch('signup')}>
             New here? {t('welcome.start')}
@@ -271,5 +257,72 @@ const SignIn: React.FC<AuthScreenProps> = ({ onAuthenticated, onBack, onSwitch }
         </div>
       </form>
     </EntryShell>
+  );
+};
+
+// ---------------------------------------------------------------- sign in (counsellors)
+
+// Its own page (/staff). There is deliberately no public counsellor sign-up:
+// a counsellor account sees survivors' scores, so a colleague adds new ones
+// from Settings -> Team (or an administrator runs manage.py create-counsellor).
+const StaffSignIn: React.FC<AuthScreenProps> = ({ onAuthenticated, onBack }) => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onAuthenticated(await signIn(username, password, 'counsellor'));
+    } catch (err) {
+      setError(failure(err));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="sahaas min-h-dvh grid lg:grid-cols-2">
+      <aside className="hidden lg:flex flex-col justify-between p-12 bg-surface border-r border-line">
+        <span className="text-[15px] font-extrabold tracking-[0.2em]">SAHAAS <span className="ml-1 font-semibold tracking-normal text-ink-2">counsellor</span></span>
+        <div className="max-w-[420px]">
+          <h2 className="text-[28px] leading-[1.2] font-semibold">See who needs you first, and why.</h2>
+          <ul className="mt-6 flex flex-col gap-3 text-[15px] text-ink-2">
+            <li>Your caseload sorted by who may need help soonest.</li>
+            <li>Every alert explains which signals raised it.</li>
+            <li>Summaries of how people are doing, never their private words.</li>
+          </ul>
+        </div>
+        <p className="text-sm text-ink-2">Survivors never see scores. Everything here is for the people supporting them.</p>
+      </aside>
+      <main className="flex flex-col justify-center px-4 sm:px-6 py-10">
+        <form onSubmit={submit} className="w-full max-w-[400px] mx-auto flex flex-col gap-6" noValidate>
+          <div className="lg:hidden text-[15px] font-extrabold tracking-[0.2em]">SAHAAS <span className="ml-1 font-semibold tracking-normal text-ink-2">counsellor</span></div>
+          <div>
+            <span className="inline-flex items-center gap-2 text-sm font-semibold text-ink-2">
+              <BriefcaseMedical className="w-4 h-4" aria-hidden /> For counsellors and case workers
+            </span>
+            <h1 className="mt-2 text-[32px] leading-[1.15] font-semibold tracking-[-0.015em]">Counsellor sign in</h1>
+          </div>
+          <div className="flex flex-col gap-4">
+            <TextField label="Username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" />
+            <TextField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+          </div>
+          {error && <Notice tone="error">{error}</Notice>}
+          <Button type="submit" variant="solid" size="lg" full busy={busy}>
+            Sign in
+          </Button>
+          <p className="text-sm text-ink-2">
+            No account yet? A colleague who already uses SAHAAS can add you from <strong className="text-ink">Settings → Team</strong>.
+          </p>
+          <Button variant="ghost" onClick={onBack}>
+            Not a counsellor? Go to the SAHAAS app
+          </Button>
+        </form>
+      </main>
+    </div>
   );
 };

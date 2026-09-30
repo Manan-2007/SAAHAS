@@ -167,6 +167,7 @@ export interface Me {
   gender: Gender | null;
   ui_style: UiStyle;
   phone: string | null;
+  has_duress?: boolean;
 }
 
 export interface RegisterBody {
@@ -331,7 +332,9 @@ export type AlertReason =
   // case-aware distress (backend.md §5e)
   | 'hearing_soon' | 'bail_no_notice' | 'entitlement_unpaid' | 'adjournment_streak'
   // live monitoring (backend.md §6)
-  | 'threat_reported' | 'case_issue' | 'repeated_distress' | 'outreach_escalated';
+  | 'threat_reported' | 'case_issue' | 'repeated_distress' | 'outreach_escalated'
+  // safety password used: someone may be forcing them to open the app
+  | 'duress_login';
 
 export interface Alert {
   id: number;
@@ -590,6 +593,23 @@ export interface SupportInfo {
   unread_messages: number;
   requests: ContactRequestView[];
   helplines: Helpline[];
+  /** Ring this number and hang up; SAHAAS calls back. null until a number is set up. */
+  missed_call: { number: string; enabled: boolean } | null;
+}
+
+// GET /me/court-day - the day before, the day of and the evening after a court date.
+export type CourtDayAction =
+  | { kind: 'problem'; category: string; label: string }
+  | { kind: 'breathe' | 'chat' | 'checkin'; label: string };
+
+export interface CourtDay {
+  event_id: number;
+  phase: 'before' | 'day' | 'after';
+  date: string;
+  title: string;
+  intro: string;
+  tips: { id: string; text: string; basis?: string; source_url?: string; action?: CourtDayAction }[];
+  actions: CourtDayAction[];
 }
 
 export interface CheckinCall {
@@ -630,6 +650,14 @@ export type Mood = 'calm' | 'okay' | 'tired' | 'anxious' | 'low' | 'reflective';
 const json = (method: string, body?: unknown, extra: Partial<RequestOptions> = {}): RequestOptions =>
   ({ method, body, ...extra });
 
+export interface TeamMember {
+  id: string;
+  name: string;
+  username: string | null;
+  clients: number;
+  since: string | null;
+}
+
 export const api = {
   // accounts
   register: (body: RegisterBody) => apiFetch<AuthResult>('/auth/register', json('POST', body, { auth: false })),
@@ -648,6 +676,12 @@ export const api = {
       json('PUT', { username, password }, { keepSessionOn401: true })),
   sessions: () => apiFetch<SessionInfo[]>('/me/sessions'),
   revokeSession: (id: number) => apiFetch<{ revoked: boolean }>(`/me/sessions/${id}`, json('DELETE')),
+  setDuressPassword: (currentPassword: string, duressPassword: string) =>
+    apiFetch<{ has_duress: boolean }>('/me/duress-password',
+      json('PUT', { current_password: currentPassword, duress_password: duressPassword }, { keepSessionOn401: true })),
+  clearDuressPassword: (currentPassword: string) =>
+    apiFetch<{ has_duress: boolean }>('/me/duress-password',
+      json('DELETE', { current_password: currentPassword }, { keepSessionOn401: true })),
   changePassword: (currentPassword: string, newPassword: string) =>
     apiFetch<{ changed: boolean; other_sessions_signed_out: number }>('/me/password',
       json('POST', { current_password: currentPassword, new_password: newPassword }, { keepSessionOn401: true })),
@@ -656,6 +690,7 @@ export const api = {
   wellbeing: () => apiFetch<Wellbeing>('/me/wellbeing'),
   events: () => apiFetch<CaseEvent[]>('/me/events'),
   case: () => apiFetch<CaseInfo>('/me/case'),
+  courtDay: () => apiFetch<CourtDay | null>('/me/court-day'),
   // Victim answers "did the support money arrive?" — no amounts (backend.md §5b).
   answerEntitlement: (id: number, status: EntitlementStatus) =>
     apiFetch<Entitlement>(`/me/entitlements/${id}`, json('POST', { status })),
@@ -752,6 +787,9 @@ export const api = {
   outreach: (status: 'active' | 'all' = 'active') => apiFetch<CheckinCall[]>(`/counsellor/outreach?status=${status}`),
   simulateCall: (callId: number, event: string, digits?: string) =>
     apiFetch<IvrsStep>('/ivrs/simulate', json('POST', { call_id: callId, event, digits: digits ?? null })),
+  team: () => apiFetch<TeamMember[]>('/counsellor/team'),
+  addCounsellor: (name: string, username: string, password: string) =>
+    apiFetch<{ id: string; name: string; username: string; adopted: number }>('/counsellor/team', json('POST', { name, username, password })),
   myContactCard: () => apiFetch<{ name: string; phone: string | null; hours: string | null }>('/counsellor/me/contact'),
   setMyContactCard: (phone: string | null, hours: string | null) =>
     apiFetch<{ name: string; phone: string | null; hours: string | null }>('/counsellor/me/contact', json('PUT', { phone, hours })),

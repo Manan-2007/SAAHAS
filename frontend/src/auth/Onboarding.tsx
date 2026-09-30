@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  type LucideIcon,
   ArrowRight,
   Clock,
   Heart,
@@ -33,7 +34,7 @@ interface OnboardingProps {
 }
 
 type Draft = Omit<OnboardingProfile, 'completedAt'>;
-type Option = { value: string; icon: React.ElementType };
+type Option = { value: string; icon: LucideIcon };
 
 const COPING: Option[] = [
   { value: 'Talking it out', icon: MessageCircle },

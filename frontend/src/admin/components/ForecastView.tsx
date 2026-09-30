@@ -59,7 +59,7 @@ export const ForecastView: React.FC<ForecastViewProps> = ({ onOpenCase }) => {
         </div>
       ) : rows.length === 0 ? (
         <div className="bg-surface rounded-card p-8 border border-line text-center flex flex-col items-center gap-2">
-          <span className="material-symbols-outlined text-ink-2 text-[32px]">event_available</span>
+          <span aria-hidden className="material-symbols-outlined text-ink-2 text-[32px]">event_available</span>
           <p className="text-sm font-semibold text-ink">A calm week ahead</p>
           <p className="text-xs text-ink-2 max-w-sm leading-relaxed">
             No hearings within the next 14 days across your caseload, so nothing is forecast to spike.
@@ -87,7 +87,7 @@ export const ForecastView: React.FC<ForecastViewProps> = ({ onOpenCase }) => {
                         className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full"
                         style={{ backgroundColor: style.chip, color: style.text }}
                       >
-                        <span className="material-symbols-outlined text-[13px]">gavel</span>
+                        <span aria-hidden className="material-symbols-outlined text-[13px]">gavel</span>
                         {r.driver}
                       </span>
                     </div>
@@ -105,7 +105,7 @@ export const ForecastView: React.FC<ForecastViewProps> = ({ onOpenCase }) => {
                         {r.score == null ? '—' : Math.round(r.score)}
                       </span>
                     </div>
-                    <span className="material-symbols-outlined text-ink-2 text-[20px]">trending_flat</span>
+                    <span aria-hidden className="material-symbols-outlined text-ink-2 text-[20px]">trending_flat</span>
                     <div className="flex flex-col items-center">
                       <span className=" text-[10px] uppercase tracking-wide" style={{ color: style.text }}>
                         Peak
@@ -132,7 +132,7 @@ export const ForecastView: React.FC<ForecastViewProps> = ({ onOpenCase }) => {
                     onClick={() => onOpenCase(r.victim_id)}
                     className="shrink-0 px-3.5 py-2 rounded-lg bg-ink text-canvas text-xs font-semibold hover:bg-ink/90 transition-colors flex items-center gap-1.5"
                   >
-                    <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                    <span aria-hidden className="material-symbols-outlined text-[16px]">open_in_new</span>
                     Open case
                   </button>
                 </div>

@@ -8,7 +8,12 @@ import { Serif, Stack } from '../ui/primitives';
 import { EntryShell } from './EntryShell';
 
 /** The first thing anyone sees: a quiet room, their language, three ways in. */
-export const Welcome: React.FC<{ onStart: () => void; onSignIn: () => void; onGuest: () => void }> = ({ onStart, onSignIn, onGuest }) => {
+export const Welcome: React.FC<{ onStart: () => void; onSignIn: () => void; onGuest: () => void; onStaff: () => void }> = ({
+  onStart,
+  onSignIn,
+  onGuest,
+  onStaff,
+}) => {
   const { t, language, setLanguage } = useLanguage();
 
   return (
@@ -41,6 +46,9 @@ export const Welcome: React.FC<{ onStart: () => void; onSignIn: () => void; onGu
               </Button>
               <p className="text-sm text-ink-2 -mt-1">{t('welcome.guestHint')}</p>
             </div>
+            <button type="button" onClick={onStaff} className="self-center mt-4 min-h-11 px-2 text-sm text-ink-2 underline underline-offset-4 hover:text-ink">
+              {t('welcome.staff')}
+            </button>
           </div>
         </Stack>
       </div>

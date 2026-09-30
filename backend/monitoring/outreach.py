@@ -50,6 +50,8 @@ PULSE = "phq4"
 SCRIPTS = {
     "en": {
         "greet": "Hello. This is SAHAAS, calling for your regular check-in. We just want to know how you are.",
+        "greet_callback": "Hello. This is SAHAAS, calling you back. We just want to know how you are.",
+        "greet_evening": "Hello. This is SAHAAS. We are calling to see how you are this evening.",
         "menu": "Press 1 to answer four short questions now. Press 2 to choose another time. "
                 "Press 3 if you would like someone to call you back. If you are in danger, hang up and dial 112.",
         "menu_no_reschedule": "Press 1 to answer four short questions now, or press 3 if you would like "
@@ -67,6 +69,8 @@ SCRIPTS = {
     },
     "hi": {
         "greet": "नमस्ते। यह साहस है, आपके नियमित चेक-इन के लिए कॉल कर रहे हैं। हम बस जानना चाहते हैं कि आप कैसे हैं।",
+        "greet_callback": "नमस्ते। यह साहस है, आपको वापस कॉल कर रहे हैं। हम बस जानना चाहते हैं कि आप कैसे हैं।",
+        "greet_evening": "नमस्ते। यह साहस है। हम जानना चाहते हैं कि आज शाम आप कैसे हैं।",
         "menu": "अभी चार छोटे सवालों के जवाब देने के लिए 1 दबाएँ। कोई और समय चुनने के लिए 2 दबाएँ। "
                 "अगर आप चाहें कि कोई आपको वापस कॉल करे तो 3 दबाएँ। अगर आप खतरे में हैं तो फ़ोन काटकर 112 डायल करें।",
         "menu_no_reschedule": "अभी चार छोटे सवालों के जवाब देने के लिए 1 दबाएँ, या वापस कॉल के लिए 3 दबाएँ। "
@@ -196,12 +200,110 @@ def _counsellor(conn, user_id):
     return row["counsellor_id"] if row else None
 
 
+GREETING = {"missed_checkin": "greet", "missed_call": "greet_callback", "after_court": "greet_evening"}
+WHAT = {"missed_checkin": "Missed check-in", "missed_call": "Asked for a call back by missed call",
+        "after_court": "Evening check after a court date"}
+
+# Missed-call check-in: the person rings the SAHAAS number and hangs up (free
+# for them), and SAHAAS calls back. Only numbers of people who agreed to calls
+# (consent.ivrs_calls), at most MISSED_CALL_PER_DAY callbacks a day.
+MISSED_CALL_PER_DAY = 3
+MISSED_CALL_DEADLINE_H = 24
+
+# Evening after a court date: a neutral check-in call (it never mentions court).
+COURT_KINDS = ("hearing", "bail_hearing", "parole", "trial_end")
+AFTER_COURT_HOUR = 18
+
+
+def missed_call_number():
+    """The number people ring for a callback, shown in the app. None until set."""
+    return os.environ.get("SAHAAS_MISSED_CALL_NUMBER") or None
+
+
+def _digits(phone):
+    return "".join(ch for ch in str(phone or "") if ch.isdigit())[-10:]
+
+
+def request_callback(caller, now=None):
+    """A missed call from `caller`. Returns the call id queued, or None. The
+    webhook answers the same either way, so it can't be used to test numbers."""
+    now = now or time.time()
+    want = _digits(caller)
+    if len(want) < 10:
+        return None
+    with db.connect() as conn:
+        match = None
+        # Phones are encrypted at rest, so there is no index to look up; fine at
+        # pilot scale, add a blind index before thousands of people.
+        for u in conn.execute("SELECT * FROM users WHERE role = 'victim' AND phone_enc IS NOT NULL "
+                              "AND decoy_of IS NULL").fetchall():
+            if _digits(crypto.dec(u["phone_enc"])) == want:
+                match = u
+                break
+        if match is None or not json.loads(match["consent"] or "{}").get("ivrs_calls"):
+            return None
+        recent = conn.execute("SELECT COUNT(*) FROM outreach_calls WHERE user_id = ? AND reason = 'missed_call' "
+                              "AND created_at > ?", (match["id"], now - 86400)).fetchone()[0]
+        if recent >= MISSED_CALL_PER_DAY:
+            return None
+        active = _active(conn, match["id"])
+        if active is not None:
+            # A call is already queued: bring it forward rather than add another.
+            conn.execute("UPDATE outreach_calls SET scheduled_for = ?, updated_at = ? WHERE id = ?",
+                         (next_call_time(now), now, active["id"]))
+            call_id = active["id"]
+        else:
+            call_id = conn.execute(
+                "INSERT INTO outreach_calls (user_id, reason, missed_since, scheduled_for, deadline, status, "
+                "created_at, updated_at) VALUES (?, 'missed_call', ?, ?, ?, 'scheduled', ?, ?)",
+                (match["id"], now, next_call_time(now), now + MISSED_CALL_DEADLINE_H * 3600, now, now)).lastrowid
+        counsellor = _counsellor(conn, match["id"])
+    events.publish(counsellor, "outreach", victim_id=match["id"], call_id=call_id, status="scheduled")
+    return call_id
+
+
+def schedule_after_court(now=None):
+    """From AFTER_COURT_HOUR on a court day, one gentle call to each person with
+    a court date today who agreed to calls and hasn't been checked on since."""
+    now = now or time.time()
+    local = datetime.fromtimestamp(now)
+    if local.hour < AFTER_COURT_HOUR:
+        return []
+    today = local.date().isoformat()
+    created = []
+    with db.connect() as conn:
+        rows = conn.execute(
+            f"SELECT DISTINCT u.* FROM users u JOIN case_events e ON e.user_id = u.id "
+            f"WHERE u.role = 'victim' AND u.phone_enc IS NOT NULL AND u.decoy_of IS NULL AND e.event_date = ? "
+            f"AND e.kind IN ({','.join('?' * len(COURT_KINDS))})", (today, *COURT_KINDS)).fetchall()
+        day_start = datetime.combine(local.date(), datetime.min.time()).timestamp()
+        for u in rows:
+            if not json.loads(u["consent"] or "{}").get("ivrs_calls") or _active(conn, u["id"]) is not None:
+                continue
+            if conn.execute("SELECT 1 FROM outreach_calls WHERE user_id = ? AND reason = 'after_court' "
+                            "AND missed_since = ?", (u["id"], day_start)).fetchone():
+                continue
+            # They already checked in this evening: no need to ring.
+            if conn.execute("SELECT 1 FROM questionnaires WHERE user_id = ? AND created_at >= ?",
+                            (u["id"], day_start + AFTER_COURT_HOUR * 3600)).fetchone():
+                continue
+            cur = conn.execute(
+                "INSERT INTO outreach_calls (user_id, reason, missed_since, scheduled_for, deadline, status, "
+                "created_at, updated_at) VALUES (?, 'after_court', ?, ?, ?, 'scheduled', ?, ?)",
+                (u["id"], day_start, next_call_time(now), day_start + 86400 + CALL_WINDOW[1] * 3600, now, now))
+            created.append((cur.lastrowid, u["id"], _counsellor(conn, u["id"])))
+    for call_id, user_id, counsellor in created:
+        events.publish(counsellor, "outreach", victim_id=user_id, call_id=call_id, status="scheduled")
+    return [c[0] for c in created]
+
+
 def schedule_missed(now=None):
     """Find missed check-ins and queue a call for each person who opted in."""
     now = now or time.time()
     created = []
     with db.connect() as conn:
-        for u in conn.execute("SELECT * FROM users WHERE role = 'victim' AND phone_enc IS NOT NULL").fetchall():
+        for u in conn.execute("SELECT * FROM users WHERE role = 'victim' AND phone_enc IS NOT NULL "
+                              "AND decoy_of IS NULL").fetchall():
             consent = json.loads(u["consent"] or "{}")
             if not consent.get("ivrs_calls") or not crypto.dec(u["phone_enc"]):
                 continue
@@ -226,10 +328,12 @@ def schedule_missed(now=None):
 
 def _escalate(conn, call, now, why):
     conn.execute("UPDATE outreach_calls SET status = 'escalated', updated_at = ? WHERE id = ?", (now, call["id"]))
+    # An unanswered evening call after court is worth a look, not a high alert.
+    level = "watch" if call["reason"] == "after_court" else "high"
     if not conn.execute("SELECT 1 FROM alerts WHERE user_id = ? AND reason = 'outreach_escalated' "
                         "AND status != 'resolved'", (call["user_id"],)).fetchone():
-        conn.execute("INSERT INTO alerts (user_id, created_at, level, reason, message) VALUES (?, ?, 'high', "
-                     "'outreach_escalated', ?)", (call["user_id"], now, why))
+        conn.execute("INSERT INTO alerts (user_id, created_at, level, reason, message) VALUES (?, ?, ?, "
+                     "'outreach_escalated', ?)", (call["user_id"], now, level, why))
 
 
 def dial_due(now=None, dialer=None):
@@ -242,7 +346,7 @@ def dial_due(now=None, dialer=None):
                             "WHERE o.status = 'scheduled' AND o.scheduled_for <= ?", (now,)).fetchall()
         for call in rows:
             if now > call["deadline"] + 12 * 3600 or call["attempts"] >= MAX_ATTEMPTS:
-                _escalate(conn, call, now, "Missed check-in: could not reach them by phone")
+                _escalate(conn, call, now, f"{WHAT[call['reason']]}: could not reach them by phone")
                 touched.append(call)
                 continue
             if not _in_window(now):
@@ -327,7 +431,7 @@ def _step(conn, call, state, s, lang, event, digit, now):
 
     if event in ("no_answer", "busy", "failed"):
         if call["attempts"] >= MAX_ATTEMPTS or now + RETRY_AFTER_MIN * 60 > call["deadline"]:
-            _escalate(conn, call, now, f"Missed check-in: no answer after {call['attempts']} call(s)")
+            _escalate(conn, call, now, f"{WHAT[call['reason']]}: no answer after {call['attempts']} call(s)")
         else:
             _save(conn, call, {"step": "menu", "answers": []}, now, "scheduled",
                   scheduled_for=next_call_time(now + RETRY_AFTER_MIN * 60))
@@ -337,7 +441,7 @@ def _step(conn, call, state, s, lang, event, digit, now):
         if state["step"] not in ("done",):
             # Hung up part-way: try again later rather than counting it done.
             if call["attempts"] >= MAX_ATTEMPTS or now + RETRY_AFTER_MIN * 60 > call["deadline"]:
-                _escalate(conn, call, now, "Missed check-in: the call ended before the check-in")
+                _escalate(conn, call, now, f"{WHAT[call['reason']]}: the call ended before the check-in")
             else:
                 _save(conn, call, {"step": "menu", "answers": []}, now, "scheduled",
                       scheduled_for=next_call_time(now + RETRY_AFTER_MIN * 60))
@@ -346,7 +450,7 @@ def _step(conn, call, state, s, lang, event, digit, now):
     if event == "answered":
         state = {"step": "menu", "answers": []}
         _save(conn, call, state, now, "calling")
-        return {"say": [s["greet"], _menu(s, call, now)], "gather": 1, "hangup": False}
+        return {"say": [s[GREETING.get(call["reason"], "greet")], _menu(s, call, now)], "gather": 1, "hangup": False}
 
     step = state["step"]
     if step == "menu":

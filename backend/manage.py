@@ -73,7 +73,7 @@ def list_counsellors():
         rows = conn.execute("SELECT c.id, c.name_enc, (SELECT COUNT(*) FROM users v WHERE v.counsellor_id = c.id) AS n, "
                             "(SELECT 1 FROM credentials WHERE user_id = c.id) AS pw FROM users c "
                             "WHERE c.role = 'counsellor'").fetchall()
-        unassigned = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'victim' AND counsellor_id IS NULL").fetchone()[0]
+        unassigned = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'victim' AND counsellor_id IS NULL AND decoy_of IS NULL").fetchone()[0]
     for r in rows:
         print(f"  {crypto.dec(r['name_enc'])}  id={r['id']}  clients={r['n']}  password={'yes' if r['pw'] else 'no'}")
     if not rows:

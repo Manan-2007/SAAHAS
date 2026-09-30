@@ -12,11 +12,13 @@ import {
   upcomingFrom,
   useCaseInfo,
   useCheckinCall,
+  useCourtDay,
 } from '../data/survivorData';
 import { affirmationFor } from '../data/affirmations';
 import { ActionCard } from '../ui/ActionCard';
 import { Button } from '../ui/Button';
 import { EntitlementCard, UpcomingCard } from '../ui/CaseCards';
+import { CourtDayCard } from '../ui/CourtDayCard';
 import { Eyebrow, Notice, Serif, Stack } from '../ui/primitives';
 import { Sprout } from '../illustrations/scenes';
 import type { CheckinCall } from '../../lib/api';
@@ -31,6 +33,7 @@ export const Home: React.FC = () => {
   const { navigate, isVictim, isGuest, lastFeeling } = useSurvivor();
   const caseInfo = useCaseInfo(isVictim);
   const call = useCheckinCall(isVictim);
+  const courtDay = useCourtDay(isVictim);
 
   const firstName = user.role === 'guest' ? '' : user.name.trim().split(/\s+/)[0];
   // One date on Home. A court date is what people most need time to prepare
@@ -57,6 +60,8 @@ export const Home: React.FC = () => {
         )}
       </header>
 
+      {courtDay.data && <CourtDayCard day={courtDay.data} />}
+
       <ActionCard
         variant="hero"
         accent="sun"
@@ -78,7 +83,7 @@ export const Home: React.FC = () => {
         <ActionCard accent="sage" icon={Leaf} title={t('home.breathe')} hint={t('home.breatheHint')} onClick={() => navigate('breathe')} />
       </section>
 
-      {next && (
+      {next && !courtDay.data && (
         <section aria-labelledby="coming-up" className="flex flex-col gap-3">
           <Eyebrow id="coming-up">{t('home.comingUp')}</Eyebrow>
           <UpcomingCard

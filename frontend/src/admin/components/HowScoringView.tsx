@@ -49,7 +49,7 @@ export const HowScoringView: React.FC = () => (
         {SIGNALS.map((s) => (
           <div key={s.label} className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-lg bg-raised flex items-center justify-center text-sun shrink-0">
-              <span className="material-symbols-outlined text-[20px]">{s.icon}</span>
+              <span aria-hidden className="material-symbols-outlined text-[20px]">{s.icon}</span>
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
@@ -93,7 +93,7 @@ export const HowScoringView: React.FC = () => (
     <div className="grid md:grid-cols-2 gap-5">
       <Card className="border-danger/40 bg-danger/15">
         <div className="flex items-center gap-2 text-danger">
-          <span className="material-symbols-outlined text-[22px]">e911_emergency</span>
+          <span aria-hidden className="material-symbols-outlined text-[22px]">e911_emergency</span>
           <h2 className=" text-base font-bold">Crisis is never softened</h2>
         </div>
         <p className="text-xs text-ink-2 mt-2 leading-relaxed">
@@ -105,7 +105,7 @@ export const HowScoringView: React.FC = () => (
       </Card>
       <Card>
         <div className="flex items-center gap-2 text-sun">
-          <span className="material-symbols-outlined text-[22px]">insights</span>
+          <span aria-hidden className="material-symbols-outlined text-[22px]">insights</span>
           <h2 className=" text-base font-bold text-ink">The calendar is the stressor</h2>
         </div>
         <p className="text-xs text-ink-2 mt-2 leading-relaxed">
@@ -128,7 +128,7 @@ export const HowScoringView: React.FC = () => (
           ['diversity_3', 'Known gaps are named, not hidden: some Hindi/Hinglish phrasings of hopelessness, and threats from other people, are under-caught by the model today — the crisis keyword list backs them up, and a human is always in the loop.'],
         ].map(([icon, text]) => (
           <li key={text} className="flex items-start gap-2.5">
-            <span className="material-symbols-outlined text-[18px] text-sun mt-0.5 shrink-0">{icon}</span>
+            <span aria-hidden className="material-symbols-outlined text-[18px] text-sun mt-0.5 shrink-0">{icon}</span>
             <span className="leading-relaxed">{text}</span>
           </li>
         ))}

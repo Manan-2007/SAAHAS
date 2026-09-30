@@ -1,5 +1,5 @@
 import React from 'react';
-import { CalendarHeart, ChevronRight, HeartHandshake, Megaphone, Phone, Scale, ShieldCheck } from 'lucide-react';
+import { CalendarHeart, ChevronRight, HeartHandshake, Megaphone, Phone, PhoneIncoming, Scale, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { useLanguage } from '../../i18n/LanguageProvider';
 import { useSurvivor } from '../SurvivorContext';
@@ -15,7 +15,7 @@ import { Companions } from '../illustrations/scenes';
 export const SupportScreen: React.FC = () => {
   const { t } = useLanguage();
   const { lock } = useAuth();
-  const { navigate, openHelplines, crisis, counsellor, unreadMessages, isVictim } = useSurvivor();
+  const { navigate, openHelplines, crisis, counsellor, unreadMessages, isVictim, missedCall } = useSurvivor();
 
   return (
     <Stack gap="gap-5">
@@ -53,6 +53,25 @@ export const SupportScreen: React.FC = () => {
           <Notice action={<Button variant="ghost" onClick={lock}>{t('home.guestCta')}</Button>}>
             A counsellor comes with an account. Every helpline works without one.
           </Notice>
+        )}
+        {isVictim && missedCall && (
+          missedCall.enabled ? (
+            <ActionCard
+              accent="coral"
+              icon={PhoneIncoming}
+              title={t('support.missedCall')}
+              hint={t('support.missedCallHint', { number: missedCall.number })}
+              href={`tel:${missedCall.number.replace(/[^\d+]/g, '')}`}
+            />
+          ) : (
+            <ActionCard
+              accent="coral"
+              icon={PhoneIncoming}
+              title={t('support.missedCall')}
+              hint={t('support.missedCallOff')}
+              onClick={() => navigate('privacy')}
+            />
+          )
         )}
         <ActionCard accent="coral" icon={Phone} title={t('support.helpline')} hint={t('support.helplineHint')} onClick={openHelplines} />
         <ActionCard accent="coral" icon={Scale} title={t('support.legal')} hint={t('support.legalHint')} onClick={() => navigate('rights')} />

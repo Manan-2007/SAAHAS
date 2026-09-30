@@ -394,7 +394,7 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-ink text-canvas px-4 py-3 rounded-tile shadow-xl flex items-center gap-2.5 animate-fadeIn max-w-sm"
              role="status" aria-live="polite">
-          <span className="material-symbols-outlined text-[20px]">notifications_active</span>
+          <span aria-hidden className="material-symbols-outlined text-[20px]">notifications_active</span>
           <span className=" text-xs font-semibold">{toastMessage}</span>
         </div>
       )}

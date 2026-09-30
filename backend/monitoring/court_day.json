@@ -1,0 +1,70 @@
+{
+  "about": "Court-day mode: what a victim sees the day before, the day of, and the evening after a court date. Plain, non-clinical and informational, not legal advice. Every legal statement names its basis and a source key from legal_actions.json. Hindi is a draft and needs a native reviewer; Punjabi falls back to English.",
+  "checked": "2026-09-30",
+  "phases": {
+    "before": {
+      "title": {"en": "Tomorrow is a court date", "hi": "कल अदालत की तारीख है"},
+      "intro": {"en": "A few things that can make tomorrow a little easier.", "hi": "कुछ बातें जो कल को थोड़ा आसान बना सकती हैं।"}
+    },
+    "day": {
+      "title": {"en": "Today is a court date", "hi": "आज अदालत की तारीख है"},
+      "intro": {"en": "Take it one step at a time. You don't have to carry today alone.", "hi": "एक-एक कदम लें। आज का दिन आपको अकेले नहीं उठाना है।"}
+    },
+    "after": {
+      "title": {"en": "How did today go?", "hi": "आज का दिन कैसा रहा?"},
+      "intro": {"en": "Whatever happened in court, you got through the day. If you want, tell us how you are.", "hi": "अदालत में जो भी हुआ, आपने यह दिन पार कर लिया। चाहें तो बताइए कि आप कैसे हैं।"}
+    }
+  },
+  "tips": [
+    {
+      "id": "waiting",
+      "phases": ["before", "day"],
+      "text": {"en": "Courts often run late. Take water, something to eat, and anything that helps you wait.", "hi": "अदालत में अक्सर देर होती है। पानी, कुछ खाने को, और इंतज़ार में मदद करने वाली कोई चीज़ साथ रखें।"}
+    },
+    {
+      "id": "company",
+      "phases": ["before", "day"],
+      "text": {"en": "You can have someone with you. Women, children, people over 60 and people with a disability can bring someone along, and that person's travel is paid too.", "hi": "आप किसी को साथ ले जा सकते हैं। महिलाएँ, बच्चे, 60 साल से ऊपर के लोग और विकलांग व्यक्ति किसी को साथ ला सकते हैं, और उनका किराया भी मिलता है।"},
+      "basis": "SC/ST (PoA) Rules r.11",
+      "source": "poa_rules"
+    },
+    {
+      "id": "tickets",
+      "phases": ["before", "day", "after"],
+      "text": {"en": "Keep your bus or train tickets. Travel and daily costs for going to court are paid back to victims and witnesses.", "hi": "बस या ट्रेन के टिकट संभालकर रखें। पीड़ितों और गवाहों को अदालत जाने का किराया और दैनिक खर्च वापस मिलता है।"},
+      "basis": "SC/ST (PoA) Rules r.11",
+      "source": "poa_rules",
+      "action": {"kind": "problem", "category": "tame_not_paid", "label": {"en": "I had to pay for travel myself", "hi": "किराया मुझे खुद देना पड़ा"}}
+    },
+    {
+      "id": "rights",
+      "phases": ["before", "day"],
+      "text": {"en": "You have the right to be told about every court date, and to be heard.", "hi": "आपको हर अदालत की तारीख के बारे में बताए जाने और अपनी बात रखने का अधिकार है।"},
+      "basis": "SC/ST (PoA) Act s.15A(3), s.15A(5)",
+      "source": "poa_s15a"
+    },
+    {
+      "id": "moved",
+      "phases": ["day", "after"],
+      "text": {"en": "Dates often get moved to another day. If that happens, it is not your fault, and it does not mean the case is lost.", "hi": "तारीखें अक्सर आगे बढ़ जाती हैं। ऐसा हो तो यह आपकी गलती नहीं है, और इसका मतलब यह नहीं कि केस हार गए।"}
+    },
+    {
+      "id": "safety",
+      "phases": ["before", "day", "after"],
+      "text": {"en": "If anyone threatens you or pushes you to settle, you don't have to answer them. Tell your counsellor, or call 112 if you are in danger.", "hi": "अगर कोई आपको धमकाए या समझौते के लिए दबाव डाले, तो आपको जवाब देने की ज़रूरत नहीं। अपने काउंसलर को बताएँ, या खतरा हो तो 112 पर कॉल करें।"},
+      "basis": "SC/ST (PoA) Act s.15A(1)",
+      "source": "poa_s15a",
+      "action": {"kind": "problem", "category": "threat", "label": {"en": "Someone threatened or pressured me", "hi": "किसी ने धमकाया या दबाव डाला"}}
+    },
+    {
+      "id": "breathe",
+      "phases": ["before"],
+      "text": {"en": "Tonight, a few slow breaths can help you rest.", "hi": "आज रात कुछ धीमी साँसें आराम करने में मदद कर सकती हैं।"},
+      "action": {"kind": "breathe", "label": {"en": "Breathe for a minute", "hi": "एक मिनट साँस लें"}}
+    }
+  ],
+  "after_actions": [
+    {"kind": "chat", "label": {"en": "Talk about it", "hi": "इसके बारे में बात करें"}},
+    {"kind": "checkin", "label": {"en": "Quick check-in", "hi": "छोटा चेक-इन"}}
+  ]
+}

@@ -17,7 +17,7 @@ export const QuickLockModal: React.FC<QuickLockModalProps> = ({ isOpen, onUnlock
     <div className="fixed inset-0 z-50 bg-raised/95 backdrop-blur-xl flex items-center justify-center p-4">
       <div className="bg-surface max-w-sm w-full rounded-card p-6 shadow-2xl flex flex-col items-center text-center">
         <div className="w-12 h-12 rounded-full bg-raised text-sun flex items-center justify-center mb-3">
-          <span className="material-symbols-outlined text-[26px]">visibility_off</span>
+          <span aria-hidden className="material-symbols-outlined text-[26px]">visibility_off</span>
         </div>
 
         <h3 className=" text-xl font-bold text-ink">Screen hidden</h3>
@@ -60,7 +60,7 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
       <div className="relative w-full max-w-md bg-surface h-full shadow-2xl flex flex-col z-50 animate-slideInRight">
         <div className="p-4 border-b border-line flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-sun text-[20px]">
+            <span aria-hidden className="material-symbols-outlined text-sun text-[20px]">
               notifications_active
             </span>
             <h3 className=" font-semibold text-ink">
@@ -78,9 +78,10 @@ export const NotificationDrawer: React.FC<NotificationDrawerProps> = ({
             <button
               type="button"
               onClick={onClose}
+              aria-label="Close"
               className="p-1 rounded-md text-ink-2 hover:bg-raised"
             >
-              <span className="material-symbols-outlined text-[20px]">close</span>
+              <span aria-hidden className="material-symbols-outlined text-[20px]">close</span>
             </button>
           </div>
         </div>
@@ -156,13 +157,13 @@ export const ScheduleFollowUpModal: React.FC<ScheduleFollowUpModalProps> = ({
       <div className="bg-surface max-w-md w-full rounded-card p-6 shadow-xl">
         <div className="flex items-center justify-between pb-3 border-b border-line">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-sun">calendar_add_on</span>
+            <span aria-hidden className="material-symbols-outlined text-sun">calendar_add_on</span>
             <h3 className=" font-bold text-lg text-ink">
               Schedule a Follow-up
             </h3>
           </div>
-          <button type="button" onClick={onClose} className="text-ink-2 hover:text-ink">
-            <span className="material-symbols-outlined text-[20px]">close</span>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-ink-2 hover:text-ink">
+            <span aria-hidden className="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
 
@@ -300,13 +301,13 @@ export const AuditTrailModal: React.FC<AuditTrailModalProps> = ({
       <div className="bg-surface max-w-lg w-full rounded-card p-6 shadow-2xl">
         <div className="flex items-center justify-between pb-3 border-b border-line">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-sun">history</span>
+            <span aria-hidden className="material-symbols-outlined text-sun">history</span>
             <h3 className=" font-bold text-lg text-ink">
               Case History • {currentCase.number}
             </h3>
           </div>
-          <button type="button" onClick={onClose} className="text-ink-2 hover:text-ink">
-            <span className="material-symbols-outlined text-[20px]">close</span>
+          <button type="button" onClick={onClose} aria-label="Close" className="text-ink-2 hover:text-ink">
+            <span aria-hidden className="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
 
@@ -326,7 +327,7 @@ export const AuditTrailModal: React.FC<AuditTrailModalProps> = ({
 
         <div className="mt-5 pt-3 border-t border-line flex items-center justify-between">
           <span className="text-xs text-ink-2 font-semibold flex items-center gap-1">
-            <span className="material-symbols-outlined text-[16px]">lock</span>
+            <span aria-hidden className="material-symbols-outlined text-[16px]">lock</span>
             Encrypted at rest
           </span>
           <button

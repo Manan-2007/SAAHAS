@@ -41,9 +41,19 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   // Survivors start at a quiet welcome. The project pitch page (it explains the
   // Distress Score, so it must never be a survivor's first screen) is kept for
   // demos at ?about.
-  const [entry, setEntry] = useState<'pitch' | 'welcome' | AuthMode>(() =>
-    new URLSearchParams(window.location.search).has('about') ? 'pitch' : 'welcome',
+  // Counsellors have their own sign-in page at /staff.
+  const [entry, setEntryState] = useState<'pitch' | 'welcome' | AuthMode>(() =>
+    window.location.pathname.startsWith('/staff')
+      ? 'staff'
+      : new URLSearchParams(window.location.search).has('about')
+        ? 'pitch'
+        : 'welcome',
   );
+  const setEntry = useCallback((next: 'pitch' | 'welcome' | AuthMode) => {
+    const path = next === 'staff' ? '/staff' : '/';
+    if (window.location.pathname !== path) window.history.replaceState(null, '', path + window.location.search);
+    setEntryState(next);
+  }, []);
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -88,7 +98,12 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
     }
     if (entry === 'welcome') {
       return (
-        <Welcome onStart={() => setEntry('signup')} onSignIn={() => setEntry('signin')} onGuest={() => setUser(guestUser())} />
+        <Welcome
+          onStart={() => setEntry('signup')}
+          onSignIn={() => setEntry('signin')}
+          onGuest={() => setUser(guestUser())}
+          onStaff={() => setEntry('staff')}
+        />
       );
     }
     return <AuthScreen mode={entry} onAuthenticated={setUser} onBack={() => setEntry('welcome')} onSwitch={setEntry} />;

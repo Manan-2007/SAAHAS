@@ -242,6 +242,14 @@ def authenticate(username, password, device=None, now=None):
         elif row["locked_until"] and row["locked_until"] > now:
             minutes = max(1, round((row["locked_until"] - now) / 60))
             failure = AuthError(f"Too many attempts. Try again in {minutes} minute(s)", status=429)
+        elif row["duress_hash"] and not verify_password(password, row["password_hash"]) \
+                and verify_password(password, row["duress_hash"]):
+            # The safety password: someone may be making them open the app.
+            # No session on the real account - the caller opens a decoy.
+            conn.execute("UPDATE credentials SET failed_attempts = 0, locked_until = NULL WHERE user_id = ?",
+                         (row["user_id"],))
+            user = _as_user(conn.execute("SELECT * FROM users WHERE id = ?", (row["user_id"],)).fetchone())
+            return {"duress": True, "user": user, "username": crypto.dec(row["username_enc"])}
         elif not verify_password(password, row["password_hash"]):
             failed = row["failed_attempts"] + 1
             conn.execute("UPDATE credentials SET failed_attempts = ?, locked_until = ? WHERE user_id = ?",
@@ -255,7 +263,7 @@ def authenticate(username, password, device=None, now=None):
     if failure is not None:
         raise failure
     return {"token": token, "session_id": session_id, "user": user,
-            "username": crypto.dec(row["username_enc"])}
+            "username": crypto.dec(row["username_enc"]), "duress": False}
 
 
 def change_password(user, current_password, new_password, keep_session_id=None, now=None):

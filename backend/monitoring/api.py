@@ -77,6 +77,15 @@ class PasswordChangeRequest(BaseModel):
     new_password: str = Field(min_length=auth.MIN_PASSWORD_LENGTH, max_length=auth.MAX_PASSWORD_LENGTH)
 
 
+class DuressPasswordRequest(BaseModel):
+    current_password: str
+    duress_password: str
+
+
+class CurrentPassword(BaseModel):
+    current_password: str
+
+
 class LogoutRequest(BaseModel):
     all_devices: bool = False
 
@@ -126,6 +135,12 @@ class CounsellorMessage(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
 
 
+class NewCounsellor(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    username: str = Field(min_length=1, max_length=60)
+    password: str
+
+
 class CounsellorContact(BaseModel):
     phone: str | None = Field(default=None, max_length=20)
     hours: str | None = Field(default=None, max_length=120)
@@ -133,6 +148,10 @@ class CounsellorContact(BaseModel):
 
 class RescheduleRequest(BaseModel):
     option: Literal["1", "2"]
+
+
+class MissedCall(BaseModel):
+    caller: str = Field(alias="from", max_length=32)
 
 
 class IvrsEvent(BaseModel):
@@ -257,8 +276,21 @@ def set_credentials(req: CredentialsRequest, user=Depends(auth.current_user)):
 
 @router.post("/me/password")
 def change_password(req: PasswordChangeRequest, user=Depends(auth.current_user)):
+    if service.is_decoy(user):
+        return {"changed": True, "other_sessions_signed_out": 0}
     return _or_auth_error(auth.change_password, user, req.current_password, req.new_password,
                           user.get("session_id"))
+
+
+@router.put("/me/duress-password")
+def set_duress_password(req: DuressPasswordRequest, user=Depends(auth.victim)):
+    """A second password that opens an empty copy of the app and alerts the counsellor."""
+    return _or_auth_error(service.set_duress_password, user, req.current_password, req.duress_password)
+
+
+@router.delete("/me/duress-password")
+def clear_duress_password(req: CurrentPassword, user=Depends(auth.victim)):
+    return _or_auth_error(service.clear_duress_password, user, req.current_password)
 
 
 @router.post("/me/token/rotate")
@@ -510,6 +542,13 @@ async def my_stream(request: Request, user=Depends(auth.victim)):
 
 # ---------------------------------------------------------------- support (victim side)
 
+@router.get("/me/court-day")
+def my_court_day(user=Depends(auth.victim)):
+    """The day before, the day of and the evening after a court date: what to
+    expect and what they can claim. null on other days."""
+    return service.court_day(user)
+
+
 @router.get("/me/support")
 def my_support(user=Depends(auth.victim)):
     return support.victim_support(user)
@@ -658,6 +697,17 @@ def set_my_contact_card(req: CounsellorContact, user=Depends(auth.counsellor)):
     return support.set_counsellor_contact(user, req.phone, req.hours)
 
 
+
+@router.get("/counsellor/team")
+def list_team(user=Depends(auth.counsellor)):
+    return service.team()
+
+
+@router.post("/counsellor/team", status_code=201)
+def add_to_team(req: NewCounsellor, user=Depends(auth.counsellor)):
+    return _or_auth_error(service.add_counsellor, req.name, req.username, req.password)
+
+
 # ---------------------------------------------------------------- IVRS webhooks
 
 @router.post("/ivrs/webhook")
@@ -668,6 +718,29 @@ def ivrs_webhook(req: IvrsEvent, key: str = Query(...)):
     if not outreach.check_key(key):
         raise HTTPException(status_code=403, detail="Bad key")
     return outreach.respond(req.call_id, req.event, req.digits)
+
+
+@router.post("/ivrs/missed-call")
+def ivrs_missed_call(req: MissedCall, key: str = Query(...)):
+    """Carrier-neutral: POST {"from": "<caller number>"} when someone rings the
+    missed-call number. Always the same answer, so it can't be used to test
+    which numbers are registered."""
+    if not outreach.check_key(key):
+        raise HTTPException(status_code=403, detail="Bad key")
+    outreach.request_callback(req.caller)
+    return {"ok": True}
+
+
+@router.post("/ivrs/twilio/incoming")
+def twilio_incoming(key: str, From: str | None = Form(default=None)):
+    """Point the missed-call number's Voice webhook here. Rejecting the call
+    means it is never answered, so the caller pays nothing."""
+    if not outreach.check_key(key):
+        raise HTTPException(status_code=403, detail="Bad key")
+    if From:
+        outreach.request_callback(From)
+    return Response(content='<?xml version="1.0" encoding="UTF-8"?><Response><Reject reason="busy"/></Response>',
+                    media_type="application/xml")
 
 
 @router.post("/ivrs/simulate")

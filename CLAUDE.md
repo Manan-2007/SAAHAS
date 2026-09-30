@@ -77,6 +77,8 @@ cd backend && ./venv/bin/python -m pytest -q tests        # must pass before com
 - Never commit `backend/data/`, `.env*`, the Python environment, datasets or trained models.
 - Frontend: keep the token in memory or `sessionStorage`, never `localStorage`. Quick
   Exit clears it.
+- **No public counsellor sign-up.** Counsellors sign in at `/staff`; new ones are
+  added by a signed-in counsellor (Settings -> Team) or `manage.py create-counsellor`.
 
 **Engineering**
 - Every backend change: update `backend/backend.md` (the frontend instructions and the
@@ -105,6 +107,11 @@ cd backend && ./venv/bin/python -m pytest -q tests        # must pass before com
   unless the person chose `store_messages`. Insight turns live in memory only.
 - **Legal steps come from `monitoring/legal_actions.json` with a source URL per
   provision.** Check the text before adding one, as with the relief schedule.
+- **The safety password must stay invisible.** The decoy account looks exactly
+  like the real one and never shows a sign that it is a decoy; don't add one.
+  Anything that lists victims must exclude `decoy_of IS NOT NULL` rows.
+- **Court-day text comes from `monitoring/court_day.json`**, with a basis and
+  source for every legal point, like the legal steps. No docket words for victims.
 - **The IVRS call never says the person's name, the case or "counsellor"** -
   phones are shared. Reschedules are capped (2, within 72 h) on purpose.
 

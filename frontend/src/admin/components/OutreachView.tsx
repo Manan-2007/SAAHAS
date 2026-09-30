@@ -14,6 +14,8 @@ const STATUS: Record<CheckinCall['status'], { label: string; color: string; bg: 
 
 const errorText = (err: unknown) => (err instanceof ApiError ? err.message : "Can't reach the SAHAAS backend.");
 
+// Three kinds of call: a missed check-in, a callback after the person rang the
+// missed-call number, and an evening check-in after a court date.
 // Missed check-ins turn into a short automated call. The person can move it,
 // but only twice and never past 72 hours - after that you're alerted to reach
 // them yourself. This screen shows the queue and lets you walk a call through
@@ -51,7 +53,7 @@ export const OutreachView: React.FC<{ onOpenCase: (id: string) => void }> = ({ o
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Check-in calls"
-        description="When someone who opted in misses a check-in, SAHAAS calls them (9am-8pm) with four keypad questions. They can move it twice, within 72 hours. No answer after three tries: you get an alert to reach them yourself."
+        description="SAHAAS calls people who opted in (9am-8pm) with four keypad questions: when they miss a check-in, when they ring the missed-call number, and on the evening of a court date. A missed check-in can be moved twice, within 72 hours. No answer after three tries: you get an alert to reach them yourself."
       />
       <div className="flex gap-1.5">
         {(['active', 'all'] as const).map((s) => (
@@ -77,7 +79,13 @@ export const OutreachView: React.FC<{ onOpenCase: (id: string) => void }> = ({ o
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <button onClick={() => onOpenCase(c.victim_id!)} className="text-sm font-bold text-ink hover:text-sun">{c.victim_name}</button>
-                    <p className="text-xs text-ink-2">Check-in missed since {timeShort(c.missed_since)}</p>
+                    <p className="text-xs text-ink-2">
+                      {c.reason === 'missed_call'
+                        ? `Rang the missed-call number at ${timeShort(c.missed_since)} - calling them back`
+                        : c.reason === 'after_court'
+                          ? 'Evening check-in after a court date today'
+                          : `Check-in missed since ${timeShort(c.missed_since)}`}
+                    </p>
                   </div>
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ color: st.color, backgroundColor: st.bg }}>{st.label}</span>
                 </div>

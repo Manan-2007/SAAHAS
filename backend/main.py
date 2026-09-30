@@ -168,6 +168,7 @@ async def outreach_loop():
         await asyncio.sleep(OUTREACH_TICK_S)
         try:
             queued = await run_in_threadpool(monitoring_outreach.schedule_missed)
+            queued += await run_in_threadpool(monitoring_outreach.schedule_after_court)
             placed = await run_in_threadpool(monitoring_outreach.dial_due)
             if queued or placed:
                 print(f"[outreach] queued {len(queued)} call(s), placed {len(placed)}")

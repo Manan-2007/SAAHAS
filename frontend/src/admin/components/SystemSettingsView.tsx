@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { ApiError, api } from '../../lib/api';
+import { ApiError, TeamMember, api } from '../../lib/api';
+import { MIN_PASSWORD_LENGTH } from '../../auth/authStore';
 import { PageHeader, QuietButton } from './PageHeader';
 
 // A read-only reference for counsellors: how the Distress Score and alerts
@@ -99,7 +100,7 @@ const ContactCard: React.FC = () => {
   return (
     <div className={CARD}>
       <h3 className={HEADING}>
-        <span className="material-symbols-outlined text-sun">contact_phone</span>
+        <span aria-hidden className="material-symbols-outlined text-sun">contact_phone</span>
         Your contact card (what clients see)
       </h3>
       <p className="text-[11px] text-ink-2">
@@ -121,6 +122,100 @@ const ContactCard: React.FC = () => {
   );
 };
 
+const FIELD = 'w-full px-3 py-2 rounded-lg border border-line bg-canvas text-sm text-ink';
+
+// There is no public counsellor sign-up: a counsellor account sees survivors'
+// scores, so only someone already signed in as a counsellor can add one.
+const TeamCard: React.FC = () => {
+  const [team, setTeam] = useState<TeamMember[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [added, setAdded] = useState<string | null>(null);
+
+  const load = () => api.team().then(setTeam).catch(() => setTeam([]));
+  useEffect(() => { load(); }, []);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(`The password needs at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api.addCounsellor(name.trim(), username.trim(), password);
+      setAdded(`${r.name} can now sign in at ${window.location.origin}/staff as “${r.username}”. Share the password with them in person.`);
+      setName(''); setUsername(''); setPassword(''); setOpen(false);
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Couldn't add them. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={CARD}>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className={HEADING}>
+          <span aria-hidden className="material-symbols-outlined text-sun">group</span>
+          Team
+        </h3>
+        {!open && (
+          <button type="button" onClick={() => { setOpen(true); setAdded(null); }}
+                  className="px-3.5 py-2 rounded-lg bg-ink text-canvas text-xs font-semibold">
+            Add a counsellor
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-ink-2">Counsellors sign in at <span className="font-mono text-ink">/staff</span>. New sign-ups are shared out so everyone has a similar caseload.</p>
+      {team === null ? (
+        <p className="text-xs text-ink-2">Loading…</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {team.map((m) => (
+            <li key={m.id} className="py-2 flex items-center justify-between text-sm">
+              <span className="text-ink font-semibold">{m.name}{m.username && <span className="ml-2 text-xs font-normal text-ink-2">@{m.username}</span>}</span>
+              <span className="text-xs text-ink-2">{m.clients} {m.clients === 1 ? 'person' : 'people'}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {added && <p role="status" className="text-xs text-ok">{added}</p>}
+      {open && (
+        <form onSubmit={submit} className="space-y-3 border-t border-line pt-4" noValidate>
+          <label className="block text-xs font-semibold text-ink">Their name
+            <input className={`${FIELD} mt-1`} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required autoComplete="off" />
+          </label>
+          <label className="block text-xs font-semibold text-ink">Username they'll sign in with
+            <input className={`${FIELD} mt-1`} value={username} onChange={(e) => setUsername(e.target.value)} maxLength={60} required autoCapitalize="none" autoComplete="off" />
+          </label>
+          <label className="block text-xs font-semibold text-ink">A first password (at least {MIN_PASSWORD_LENGTH} characters)
+            <input className={`${FIELD} mt-1`} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="new-password" />
+          </label>
+          {error && <p role="alert" className="text-xs text-danger">{error}</p>}
+          <div className="flex gap-2">
+            <button type="submit" disabled={busy || !name.trim() || !username.trim() || !password}
+                    className="px-3.5 py-2 rounded-lg bg-ink text-canvas text-xs font-semibold disabled:opacity-50">
+              {busy ? 'Adding…' : 'Add counsellor'}
+            </button>
+            <button type="button" onClick={() => { setOpen(false); setError(null); }}
+                    className="px-3.5 py-2 rounded-lg border border-line text-xs font-semibold text-ink">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+};
+
 const CARD = 'bg-surface rounded-tile p-6 border border-line space-y-4';
 const HEADING = " text-base font-bold text-ink flex items-center gap-2";
 
@@ -128,14 +223,14 @@ export const SystemSettingsView: React.FC<{ onOpenHowScoring?: () => void }> = (
   <div className="flex flex-col space-y-6">
     <PageHeader
       title="Settings & scoring"
-      description="Your contact card, and a reference for reading the dashboard. The score is recomputed every hour and after every check-in; its weights are fixed and not yet clinically validated."
+      description="Your team, your contact card, and a reference for reading the dashboard. The score is recomputed every hour and after every check-in; its weights are fixed and not yet clinically validated."
       actions={onOpenHowScoring && <QuietButton icon="help" onClick={onOpenHowScoring}>How scoring works</QuietButton>}
     />
 
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <div className={`lg:col-span-6 ${CARD}`}>
         <h3 className={HEADING}>
-          <span className="material-symbols-outlined text-sun">tune</span>
+          <span aria-hidden className="material-symbols-outlined text-sun">tune</span>
           What goes into the score (0-100)
         </h3>
         {WEIGHTS.map((w) => (
@@ -156,7 +251,7 @@ export const SystemSettingsView: React.FC<{ onOpenHowScoring?: () => void }> = (
         </p>
 
         <h3 className={`${HEADING} pt-2`}>
-          <span className="material-symbols-outlined text-sun">stacked_bar_chart</span>
+          <span aria-hidden className="material-symbols-outlined text-sun">stacked_bar_chart</span>
           Tiers
         </h3>
         <div className="grid grid-cols-4 gap-2 text-center">
@@ -170,10 +265,11 @@ export const SystemSettingsView: React.FC<{ onOpenHowScoring?: () => void }> = (
       </div>
 
       <div className="lg:col-span-6 flex flex-col gap-6">
+        <TeamCard />
         <ContactCard />
         <div className={CARD}>
           <h3 className={HEADING}>
-            <span className="material-symbols-outlined text-danger">notifications</span>
+            <span aria-hidden className="material-symbols-outlined text-danger">notifications</span>
             When an alert is raised
           </h3>
           <div className="space-y-2">
@@ -192,7 +288,7 @@ export const SystemSettingsView: React.FC<{ onOpenHowScoring?: () => void }> = (
 
         <div className={CARD}>
           <h3 className={HEADING}>
-            <span className="material-symbols-outlined text-ink-2">lock</span>
+            <span aria-hidden className="material-symbols-outlined text-ink-2">lock</span>
             Data and privacy
           </h3>
           <ul className="space-y-1.5 text-xs text-ink-2 list-disc pl-4">

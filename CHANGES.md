@@ -1,3 +1,45 @@
+## Safety password, missed-call check-in, court-day mode (2026-09-30)
+
+- **Safety password (duress).** A survivor can set a second password. Signing in
+  with it opens an empty copy of their account (same name and look, none of the
+  real data, no counsellor) and raises a crisis alert for their counsellor, every
+  time. Built for the threat that matters most here: someone forcing them to
+  unlock the phone. Nothing on screen gives it away; password changes inside the
+  copy "work" and change nothing.
+- **Missed-call check-in.** Ring the SAHAAS number and hang up (free); SAHAAS
+  calls back through the existing IVRS flow. For people without data or who
+  can't read much. Only for numbers that agreed to calls, 3 a day, and the
+  webhook answers the same for any number. Twilio incoming calls are rejected so
+  the caller pays nothing. Set `SAHAAS_MISSED_CALL_NUMBER` to switch it on.
+- **Court-day mode.** The day before, the day of, and the evening after a court
+  date, Home leads with what to expect, what they can claim (travel and
+  maintenance, r.11; notice and being heard, s.15A(3),(5); protection,
+  s.15A(1)), each linked to its source, and one-tap reports ("I paid for travel
+  myself", "someone pressured me"). That evening, people who agreed to calls get a
+  neutral check-in call that never mentions court.
+- Tests: 154 passing (10 new). Hindi court-day and missed-call text is a draft.
+
+## Separate counsellor sign-in, team management, readable charts (2026-09-30)
+
+- Counsellors sign in on their own page (`/staff`); survivors keep the calm
+  sign-in. Each page turns the other kind of account away with a pointer to the
+  right page. The "access token" option is removed from the UI.
+- No public counsellor sign-up, on purpose: a counsellor account sees survivors'
+  scores. A signed-in counsellor adds colleagues from Settings -> Team
+  (`POST /counsellor/team`); the first one still comes from `manage.py`.
+- Score chart rebuilt (`admin/components/ScoreChart.tsx`): Stable/Watch/Elevated/High
+  zones, dated axis, a plain sentence ("Now 49 (Watch). Down 31 points since
+  Sep 14..."), exact values on hover or arrow keys, a table view, and a legend that
+  matches the lines (it didn't: three swatches were the wrong colour). A score
+  that fell because the person went quiet is not called "better".
+- "What makes up the score" shows each part's weight, a zone word and the main
+  driver. The per-message chart got a legend and labels. Outcomes colours scores
+  by zone (every past score was red) and says "Better by 31" / "Worse by 28".
+- Accessibility: 32 Material icons were read aloud by screen readers as words
+  ("chevron_right"); now hidden, with labels added to icon-only buttons. Case
+  tabs show open counts and move with arrow keys.
+- Fixed the frontend type error in `Onboarding.tsx`. Tests: 144 passing.
+
 ## Chat through Azure OpenAI gpt-4o (2026-09-26)
 
 - `CHAT_BACKEND=azure` (in the git-ignored `backend/.env`) routes chat, the voice

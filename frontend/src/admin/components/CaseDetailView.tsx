@@ -11,6 +11,7 @@ import { MessageThread } from './InboxView';
 import { useLiveEvents } from '../liveBus';
 import { CHART, TONE } from '../palette';
 import { QuietButton } from './PageHeader';
+import { ScoreChart, TIER_WORD, WEIGHTS, mainDriver, tierColor, tierOf } from './ScoreChart';
 
 interface CaseDetailViewProps {
   caseData: CaseData;
@@ -97,56 +98,6 @@ const when = (iso: string) =>
 const errorText = (err: unknown) => (err instanceof ApiError ? err.message : "Can't reach the SAHAAS backend.");
 
 const CARD = 'bg-surface rounded-tile p-5 border border-line';
-
-// The 30-day Distress Score line (0-100, higher is harder)
-const ScoreChart: React.FC<{ timeline: Timeline; forecast?: VictimDetail['forecast'] }> = ({ timeline, forecast }) => {
-  const points = timeline.scores;
-  if (points.length < 2) {
-    return <p className="text-xs text-ink-2">Not enough scores yet for a trend line.</p>;
-  }
-  const t0 = new Date(points[0].at).getTime();
-  const last = points[points.length - 1];
-  const tLast = new Date(last.at).getTime();
-  // Extend the axis to the forecast peak so the dotted continuation fits.
-  const fc = forecast?.peak_on ? { t: new Date(`${forecast.peak_on}T00:00:00`).getTime(), score: forecast.peak_score } : null;
-  const span = Math.max(1, (fc ? Math.max(tLast, fc.t) : tLast) - t0);
-  const X = (t: number) => ((t - t0) / span) * 600;
-  const Y = (s: number) => 120 - (s / 100) * 120;
-  const xy = points.map((p) => [X(new Date(p.at).getTime()), Y(p.score)] as const);
-  return (
-    <svg viewBox="0 0 600 120" className="w-full h-32" preserveAspectRatio="none" role="img" aria-label="Distress Score over 30 days, with forecast">
-      {[25, 50, 75].map((y) => (
-        <line key={y} x1="0" x2="600" y1={Y(y)} y2={Y(y)} style={{ stroke: CHART.grid }} strokeWidth="1" />
-      ))}
-      {/* §3: faint per-day chat / voice distress means, under the score line */}
-      {(['text_distress', 'voice_distress'] as const).map((m, mi) => {
-        const s = timeline.signals?.[m]?.filter((o) => o.mean != null);
-        if (!s || s.length < 2) return null;
-        const pts = s.map((o) => `${X(new Date(`${o.date}T00:00:00`).getTime())},${Y(o.mean)}`).join(' ');
-        return (
-          <polyline key={m} points={pts} fill="none" style={{ stroke: mi === 0 ? CHART.text : CHART.voice }}
-            strokeWidth="1.2" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" opacity="0.85" />
-        );
-      })}
-      <polyline points={xy.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" style={{ stroke: CHART.score }} strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
-      {points.map((p, i) => (p.crisis ? <circle key={i} cx={xy[i][0]} cy={xy[i][1]} r="4" style={{ fill: CHART.crisis }} /> : null))}
-      {/* §3: questionnaire submissions as ticks along the bottom axis */}
-      {(timeline.questionnaires ?? []).map((q, i) => {
-        const x = X(new Date(q.at).getTime());
-        return <line key={`q${i}`} x1={x} x2={x} y1="110" y2="120" style={{ stroke: CHART.tick }} strokeWidth="2" vectorEffect="non-scaling-stroke" />;
-      })}
-      {fc && (
-        <>
-          <line
-            x1={X(tLast)} y1={Y(last.score)} x2={X(fc.t)} y2={Y(fc.score)}
-            style={{ stroke: CHART.forecast }} strokeWidth="2" strokeDasharray="5 4" vectorEffect="non-scaling-stroke"
-          />
-          <circle cx={X(fc.t)} cy={Y(fc.score)} r="4.5" fill="none" style={{ stroke: CHART.forecast }} strokeWidth="2" vectorEffect="non-scaling-stroke" />
-        </>
-      )}
-    </svg>
-  );
-};
 
 // One victim's real record: score components, timeline, alerts, recordings, consent.
 export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
@@ -378,20 +329,41 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
         </div>
 
         <div role="tablist" aria-label="Case sections" className="mt-5 flex gap-5 overflow-x-auto no-scrollbar border-b border-line">
-          {TABS.map((tab) => {
+          {TABS.map((tab, index) => {
             const on = activeTab === tab.id;
+            const count =
+              tab.id === 'Alerts' ? detail?.alerts.filter((a) => a.status !== 'resolved').length ?? 0
+              : tab.id === 'Issues' ? caseData.openIssues ?? 0
+              : 0;
+            const urgent = tab.id === 'Alerts' && !!detail?.alerts.some((a) => a.status === 'open' && a.level === 'crisis');
             return (
               <button
                 key={tab.id}
+                id={`case-tab-${tab.id}`}
                 type="button"
                 role="tab"
                 aria-selected={on}
+                tabIndex={on ? 0 : -1}
                 onClick={() => setActiveTab(tab.id)}
-                className={`-mb-px pb-2.5 pt-1 text-[14px] whitespace-nowrap border-b-2 transition-colors ${
+                onKeyDown={(e) => {
+                  const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+                  if (!step) return;
+                  e.preventDefault();
+                  const next = TABS[(index + step + TABS.length) % TABS.length].id;
+                  setActiveTab(next);
+                  document.getElementById(`case-tab-${next}`)?.focus();
+                }}
+                className={`-mb-px pb-2.5 pt-1 text-[14px] whitespace-nowrap border-b-2 transition-colors inline-flex items-center gap-1.5 ${
                   on ? 'border-ink text-ink font-semibold' : 'border-transparent text-ink-2 hover:text-ink'
                 }`}
               >
                 {tab.label}
+                {count > 0 && (
+                  <span className={`min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold grid place-items-center ${urgent ? 'bg-danger text-canvas' : 'bg-soft text-ink'}`}>
+                    {count}
+                    <span className="sr-only"> open</span>
+                  </span>
+                )}
               </button>
             );
           })}
@@ -411,26 +383,24 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
           {activeTab === 'Signals' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               <div className={`lg:col-span-8 ${CARD} space-y-4`}>
-                <div className="flex items-center justify-between">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className=" text-base font-bold text-ink">Distress Score, last 30 days</h3>
-                    <p className="text-xs text-ink-2">0-100, higher is harder. Red dots mark crisis signals.</p>
+                    <h3 className="text-base font-bold text-ink">Distress Score, last 30 days</h3>
+                    <p className="text-xs text-ink-2">0 to 100. Higher means they may be finding things harder. Point at the line, or focus it and use the arrow keys, to read any day.</p>
                   </div>
-                  <span className="px-2.5 py-0.5 rounded-full bg-raised text-ink text-xs font-bold">
-                    {detail.latest ? `${Math.round(detail.latest.score)} · ${detail.latest.tier}` : 'No score yet'}
-                  </span>
+                  {detail.latest ? (
+                    <span className="shrink-0 px-2.5 py-1 rounded-full text-xs font-bold"
+                          style={{ color: tierColor(detail.latest.tier), background: 'var(--color-raised)' }}>
+                      {Math.round(detail.latest.score)} · {TIER_WORD[detail.latest.tier]}
+                    </span>
+                  ) : (
+                    <span className="shrink-0 px-2.5 py-1 rounded-full bg-raised text-ink-2 text-xs font-bold">No score yet</span>
+                  )}
                 </div>
-                <ScoreChart timeline={timeline} forecast={detail.forecast} />
-                <div className="flex items-center gap-3 flex-wrap text-[10px] text-ink-2">
-                  <span className="flex items-center gap-1"><span className="w-3 h-[2.5px] bg-ink rounded-full"></span> Distress Score</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-[2px] border-t-2 border-dashed border-info"></span> Chat distress</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-[2px] border-t-2 border-dashed border-sun"></span> Voice distress</span>
-                  <span className="flex items-center gap-1"><span className="w-[2px] h-3 bg-ink"></span> Questionnaire</span>
-                  {detail.forecast && <span className="flex items-center gap-1"><span className="w-3 h-[2px] border-t-2 border-dashed border-sun"></span> Forecast</span>}
-                </div>
+                <ScoreChart timeline={timeline} forecast={detail.forecast} latest={detail.latest} />
                 {detail.forecast ? (
                   <div className="flex items-start gap-2 text-xs text-ink bg-raised/70 border border-line rounded-lg px-3 py-2">
-                    <span className="material-symbols-outlined text-[16px] text-sun mt-0.5">insights</span>
+                    <span aria-hidden className="material-symbols-outlined text-[16px] text-sun mt-0.5">insights</span>
                     <span className="leading-relaxed">
                       <strong>Forecast (dashed):</strong> distress may rise toward{' '}
                       <strong>{Math.round(detail.forecast.peak_score)}/100</strong> around{' '}
@@ -447,22 +417,28 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
               </div>
 
               <div className={`lg:col-span-4 ${CARD} space-y-3`}>
-                <h3 className=" text-base font-bold text-ink">What makes up the score</h3>
+                <div>
+                  <h3 className="text-base font-bold text-ink">What makes up the score</h3>
+                  <p className="text-xs text-ink-2">Each part is 0 to 100. The % is how much it counts towards the total.</p>
+                </div>
                 {COMPONENTS.map((c) => {
                   const value = detail.latest?.components[c.key];
+                  const driver = mainDriver(detail.latest) === c.key;
                   return (
-                    <div key={c.key}>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-semibold text-ink">{c.label}</span>
-                        <span className="text-ink-2">{value == null ? 'No data' : `${Math.round(value)}/100`}</span>
+                    <div key={c.key} className={driver ? 'rounded-lg -mx-2 px-2 py-1.5 bg-raised' : ''}>
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-semibold text-ink">
+                          {c.label} <span className="font-normal text-ink-2">· counts {Math.round(WEIGHTS[c.key] * 100)}%</span>
+                          {driver && <span className="ml-1.5 px-1.5 py-0.5 rounded bg-ink text-canvas text-[10px] font-bold uppercase tracking-wide">main driver</span>}
+                        </span>
+                        <span className="shrink-0 font-semibold" style={{ color: value == null ? undefined : tierColor(tierOf(value)) }}>
+                          {value == null ? <span className="text-ink-2 font-normal">No data yet</span> : `${Math.round(value)} · ${TIER_WORD[tierOf(value)]}`}
+                        </span>
                       </div>
-                      <div className="h-1.5 rounded-full bg-raised mt-1 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${value != null && value >= 60 ? 'bg-danger' : 'bg-ink'}`}
-                          style={{ width: `${value ?? 0}%` }}
-                        />
+                      <div className="h-2 rounded-full bg-raised mt-1 overflow-hidden" aria-hidden>
+                        <div className="h-full rounded-full" style={{ width: `${value ?? 0}%`, background: value == null ? undefined : tierColor(tierOf(value)) }} />
                       </div>
-                      <span className="text-[10px] text-ink-2">{c.source}</span>
+                      <span className="text-[11px] text-ink-2">From {c.source}</span>
                       {c.key === 'engagement' && detail.latest?.details?.engagement?.days_since_last_contact != null && (
                         <span className="block text-[10px] font-semibold text-danger mt-0.5">
                           Silent {Math.round(detail.latest.details.engagement.days_since_last_contact)} day
@@ -519,7 +495,7 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
                     onClick={() => setShowAddEvent((v) => !v)}
                     className="text-xs font-semibold text-sun hover:underline flex items-center gap-1"
                   >
-                    <span className="material-symbols-outlined text-[16px]">{showAddEvent ? 'close' : 'add'}</span>
+                    <span aria-hidden className="material-symbols-outlined text-[16px]">{showAddEvent ? 'close' : 'add'}</span>
                     {showAddEvent ? 'Cancel' : 'Add a date'}
                   </button>
                 </div>
@@ -586,8 +562,9 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
                           onClick={() => removeCaseEvent(ce.id)}
                           className="p-1.5 rounded-lg text-ink-2 hover:text-danger hover:bg-danger/15"
                           title="Delete date"
+                          aria-label="Delete date"
                         >
-                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                          <span aria-hidden className="material-symbols-outlined text-[18px]">delete</span>
                         </button>
                       </div>
                     ))}
@@ -742,6 +719,7 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-bold text-ink flex items-center gap-1.5">
                         <span
+                          aria-hidden
                           className={`material-symbols-outlined text-[18px] ${a.reason === 'bail_no_notice' ? 'text-danger' : a.level === 'crisis' ? 'text-danger' : 'text-sun'}`}
                         >
                           {REASON_ICONS[a.reason] ?? 'notifications'}

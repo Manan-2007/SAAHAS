@@ -21,7 +21,8 @@ export const REASON_TITLES: Record<AlertReason, string> = {
   threat_reported: 'Threat / Pressure Reported',
   case_issue: 'Case Problem Reported',
   repeated_distress: 'Repeated Distress in Messages',
-  outreach_escalated: 'Missed Check-in · Unreachable',
+  outreach_escalated: 'Phone Check-in · Unreachable',
+  duress_login: 'Safety Password Used · May Be Coerced',
 };
 
 // Material Symbols per reason. bail_no_notice gets a distinct legal icon — it is
@@ -40,6 +41,7 @@ export const REASON_ICONS: Record<AlertReason, string> = {
   case_issue: 'gavel',
   repeated_distress: 'forum',
   outreach_escalated: 'phone_missed',
+  duress_login: 'lock_person',
 };
 
 const LEVEL_RANK: Record<Alert['level'], number> = { crisis: 0, high: 1, watch: 2 };

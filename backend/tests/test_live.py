@@ -462,3 +462,24 @@ def test_purge_demo_removes_only_seeded_data():
     with db.connect() as conn:
         left = [crypto.dec(r[0]) for r in conn.execute("SELECT name_enc FROM users")]
     assert left == ["Jais"]
+
+
+def test_only_a_counsellor_can_add_a_counsellor_and_the_new_one_can_sign_in():
+    body = {"name": "Dr. New", "username": "drnew", "password": "long-enough-pass"}
+    assert client.post("/counsellor/team", json=body).status_code == 401
+    v = victim()
+    assert client.post("/counsellor/team", json=body, headers=bearer(v["token"])).status_code == 403
+
+    c = counsellor()
+    r = client.post("/counsellor/team", json=body, headers=bearer(c["token"]))
+    assert r.status_code == 201, r.text
+    assert "token" not in r.json()
+    assert client.post("/counsellor/team", json=body, headers=bearer(c["token"])).status_code == 409
+    short = {**body, "username": "other", "password": "x"}
+    assert client.post("/counsellor/team", json=short, headers=bearer(c["token"])).status_code == 422
+
+    login = client.post("/auth/login", json={"username": "drnew", "password": "long-enough-pass"})
+    assert login.status_code == 200 and login.json()["role"] == "counsellor"
+    team = client.get("/counsellor/team", headers=bearer(c["token"])).json()
+    assert {t["name"] for t in team} == {"Dr. C", "Dr. New"}
+    assert next(t for t in team if t["name"] == "Dr. C")["clients"] == 1

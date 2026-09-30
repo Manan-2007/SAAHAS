@@ -38,6 +38,8 @@ export interface SessionUser {
   // 'warm' is the more encouraging look (the default for women); 'calm' the plain one
   uiStyle: UiStyle;
   phone: string | null;
+  /** A safety password is set (see Privacy). */
+  hasDuress: boolean;
 }
 
 export interface SignUpInput {
@@ -71,6 +73,7 @@ function toUser(me: Me): SessionUser {
     gender: me.gender ?? null,
     uiStyle: me.ui_style ?? 'calm',
     phone: me.phone ?? null,
+    hasDuress: me.has_duress ?? false,
   };
 }
 
@@ -119,28 +122,36 @@ export async function signUp({ name, username, password, consent, gender, phone,
   }
 }
 
-export async function signIn(username: string, password: string): Promise<SessionUser> {
+export type Door = 'survivor' | 'counsellor';
+
+/** Signing in on the other page's form: the account works, it's just the wrong door. */
+export class WrongDoorError extends AuthError {
+  constructor(public door: Door) {
+    super(
+      door === 'counsellor'
+        ? 'This is a counsellor account. Please use the counsellor sign-in page.'
+        : 'This page is for counsellors. Survivors sign in from the SAHAAS home screen.',
+    );
+  }
+}
+
+export async function signIn(username: string, password: string, door: Door): Promise<SessionUser> {
   if (!username.trim() || !password) throw new AuthError('Please enter your username and password.');
+  let user: SessionUser;
   try {
     const res = await api.login(username.trim(), password);
     setToken(res.token);
-    return await currentUser();
+    user = await currentUser();
   } catch (err) {
     clearSession();
     throw asAuthError(err, { 401: 'Incorrect username or password.' });
   }
-}
-
-// For accounts made with an access token (manage.py, or registration without a password)
-export async function signInWithToken(token: string): Promise<SessionUser> {
-  if (!token.trim()) throw new AuthError('Please paste your access token.');
-  setToken(token.trim());
-  try {
-    return await currentUser();
-  } catch (err) {
-    clearSession();
-    throw asAuthError(err, { 401: "That access token didn't work. Please check it and try again." });
+  const isCounsellor = user.role === 'counsellor';
+  if (isCounsellor !== (door === 'counsellor')) {
+    await signOut();
+    throw new WrongDoorError(isCounsellor ? 'counsellor' : 'survivor');
   }
+  return user;
 }
 
 // null when there's no usable token. Throws when the backend can't be reached,
@@ -200,5 +211,6 @@ export function guestUser(): SessionUser {
     gender: null,
     uiStyle: 'calm',
     phone: null,
+    hasDuress: false,
   };
 }

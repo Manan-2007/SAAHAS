@@ -59,7 +59,7 @@ export const IssueCard: React.FC<{ issue: CaseIssue; onChanged: (i: CaseIssue) =
   return (
     <div className={`bg-surface rounded-tile border ${issue.severity === 'high' && issue.status === 'open' ? 'border-danger/40' : 'border-line'}`}>
       <button onClick={() => setOpen((o) => !o)} className="w-full text-left p-4 flex items-start gap-3">
-        <span className={`material-symbols-outlined text-[22px] ${issue.severity === 'high' ? 'text-danger' : 'text-sun'}`}>
+        <span aria-hidden className={`material-symbols-outlined text-[22px] ${issue.severity === 'high' ? 'text-danger' : 'text-sun'}`}>
           {issue.category === 'threat' || issue.category === 'pressure_to_compromise' ? 'shield_person' : 'gavel'}
         </span>
         <div className="flex-1 min-w-0">
@@ -77,7 +77,7 @@ export const IssueCard: React.FC<{ issue: CaseIssue; onChanged: (i: CaseIssue) =
             {issue.occurrences > 1 ? ` · raised ${issue.occurrences} times` : ''} · last {timeShort(issue.last_seen_at)}
           </p>
         </div>
-        <span className="material-symbols-outlined text-ink-2">{open ? 'expand_less' : 'expand_more'}</span>
+        <span aria-hidden className="material-symbols-outlined text-ink-2">{open ? 'expand_less' : 'expand_more'}</span>
       </button>
 
       {open && (
@@ -105,7 +105,7 @@ export const IssueCard: React.FC<{ issue: CaseIssue; onChanged: (i: CaseIssue) =
                     )}
                   </div>
                   {done.has(s.id) ? (
-                    <span className="material-symbols-outlined text-[18px] text-ok">check_circle</span>
+                    <span aria-hidden className="material-symbols-outlined text-[18px] text-ok">check_circle</span>
                   ) : (
                     <button disabled={busy} onClick={() => act({ action: s.id })}
                             className="text-[11px] font-semibold text-sun hover:underline shrink-0 disabled:opacity-50">Done</button>

@@ -9,7 +9,7 @@ person's app for a reply.
 
 import time
 
-from . import crypto, db, events
+from . import crypto, db, events, outreach
 
 LEVEL_LABELS = ("none", "low", "moderate", "high")
 CHANNELS = ("chat", "voice_call", "voice_checkin", "voice_note", "message", "ivrs")
@@ -316,4 +316,9 @@ def victim_support(user):
         "unread_messages": unread,
         "requests": my_requests(user),
         "helplines": [{**h, "what": h["what"].get(lang) or h["what"]["en"]} for h in HELPLINES],
+        # Ring it and hang up: SAHAAS calls back, free. Only once a number is set
+        # up, and only for people who agreed to calls.
+        "missed_call": {"number": outreach.missed_call_number(),
+                        "enabled": bool(user["consent"].get("ivrs_calls") and user.get("phone_enc"))}
+        if outreach.missed_call_number() else None,
     }

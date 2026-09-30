@@ -102,13 +102,36 @@ def create_counsellor(name, username=None, password=None, phone=None, hours=None
         user_id, token = _insert_user(conn, "counsellor", name)
         if username and password:
             username = auth.set_credentials(conn, user_id, username, password)
-        adopted = conn.execute("UPDATE users SET counsellor_id = ? WHERE role = 'victim' AND counsellor_id IS NULL",
+        adopted = conn.execute("UPDATE users SET counsellor_id = ? WHERE role = 'victim' AND counsellor_id IS NULL "
+                               "AND decoy_of IS NULL",
                                (user_id,)).rowcount
     if phone or hours:
         support.set_counsellor_contact({"id": user_id}, phone, hours)
     return {"user_id": user_id, "token": token, "role": "counsellor", "name": name,
             "username": username if password else None, "adopted": adopted}
 
+
+
+def team():
+    """Every counsellor, with how many people each looks after."""
+    with db.connect() as conn:
+        rows = conn.execute(
+            "SELECT c.id, c.name_enc, c.created_at, cr.username_enc, "
+            "(SELECT COUNT(*) FROM users v WHERE v.counsellor_id = c.id AND v.role = 'victim') AS clients "
+            "FROM users c LEFT JOIN credentials cr ON cr.user_id = c.id "
+            "WHERE c.role = 'counsellor' ORDER BY c.created_at").fetchall()
+    return [{"id": r["id"], "name": crypto.dec(r["name_enc"]),
+             "username": crypto.dec(r["username_enc"]) if r["username_enc"] else None,
+             "clients": r["clients"], "since": db.iso(r["created_at"])} for r in rows]
+
+
+def add_counsellor(name, username, password):
+    """A signed-in counsellor adds a colleague. There is no public counsellor
+    sign-up: whoever holds a counsellor account sees survivors' scores."""
+    auth.check_password_strength(password)
+    result = create_counsellor(name.strip(), username, password)
+    return {"id": result["user_id"], "name": result["name"], "username": result["username"],
+            "adopted": result["adopted"]}
 
 def register_victim(name, language="en", phone=None, case_ref=None, consent=None, created_at=None,
                     username=None, password=None, gender=None):
@@ -145,8 +168,11 @@ def _profile_of(conn, user_id):
 def profile(user):
     with db.connect() as conn:
         counsellor = _name_of(conn, user["counsellor_id"])
-        credentials = auth.credentials_of(conn, user["id"])
+        # A decoy shows the real username so nothing looks different.
+        credentials = auth.credentials_of(conn, user.get("decoy_of") or user["id"])
         onboarding = _profile_of(conn, user["id"])
+        has_duress = not is_decoy(user) and conn.execute(
+            "SELECT 1 FROM credentials WHERE user_id = ? AND duress_hash IS NOT NULL", (user["id"],)).fetchone() is not None
     gender = crypto.dec(user.get("gender_enc"))
     return {"user_id": user["id"], "role": user["role"], "name": crypto.dec(user["name_enc"]),
             "language": user["language"], "consent": user["consent"], "counsellor": counsellor,
@@ -157,6 +183,7 @@ def profile(user):
             "profile": onboarding,
             "gender": gender,
             "ui_style": user.get("ui_style") or default_style(gender),
+            "has_duress": has_duress,
             "phone": crypto.dec(user.get("phone_enc")) if user["role"] == "victim" else None}
 
 
@@ -213,9 +240,12 @@ def delete_account(user):
     Database rows go by cascade; bucket objects have to be deleted explicitly,
     and they go first so a failure cannot leave orphaned audio behind.
     """
-    removed = storage.delete_all_for_user(user["id"])
     with db.connect() as conn:
-        conn.execute("DELETE FROM users WHERE id = ?", (user["id"],))
+        decoys = [r["id"] for r in conn.execute("SELECT id FROM users WHERE decoy_of = ?", (user["id"],))]
+    removed = sum(storage.delete_all_for_user(uid) for uid in [user["id"], *decoys])
+    with db.connect() as conn:
+        for uid in [user["id"], *decoys]:
+            conn.execute("DELETE FROM users WHERE id = ?", (uid,))
     return {"deleted": True, "recordings_deleted": removed}
 
 
@@ -224,6 +254,8 @@ def delete_account(user):
 def login(username, password, device=None):
     """username + password -> session token. Raises auth.AuthError."""
     result = auth.authenticate(username, password, device)
+    if result["duress"]:
+        return _duress_login(result["user"], result["username"], device)
     user = result["user"]
     with db.connect() as conn:
         counsellor = _name_of(conn, user["counsellor_id"])
@@ -233,10 +265,80 @@ def login(username, password, device=None):
             "expires_at": iso(db.now() + auth.SESSION_TTL)}
 
 
+
+# ---------------------------------------------------------------- safety (duress) password
+
+DURESS_ALERT = ("Signed in with their safety password: someone may be making them open the app. They are "
+                "seeing an empty copy of it. Do not message them in the app or call that phone as if "
+                "nothing happened; reach them through a safe route, and call 112 if there is a known threat.")
+
+
+def is_decoy(user):
+    return bool(user.get("decoy_of"))
+
+
+def _decoy_for(conn, real, now):
+    """The same empty stand-in every time, so a second forced sign-in looks the same as the first."""
+    row = conn.execute("SELECT * FROM users WHERE decoy_of = ?", (real["id"],)).fetchone()
+    if row is not None:
+        return auth._as_user(row)
+    decoy_id, _ = _insert_user(conn, "victim", crypto.dec(real["name_enc"]), real["language"],
+                               consent={"data_storage": True}, created_at=real["created_at"],
+                               gender=crypto.dec(real.get("gender_enc")))
+    conn.execute("UPDATE users SET decoy_of = ?, ui_style = ? WHERE id = ?", (real["id"], real.get("ui_style"), decoy_id))
+    conn.execute("INSERT INTO profiles (user_id, data_enc, updated_at) VALUES (?, ?, ?)",
+                 (decoy_id, crypto.enc_json({"completed_at": iso(now)}), now))
+    return auth._as_user(conn.execute("SELECT * FROM users WHERE id = ?", (decoy_id,)).fetchone())
+
+
+def _duress_login(real, username, device=None):
+    now = db.now()
+    with db.connect() as conn:
+        decoy = _decoy_for(conn, real, now)
+        token, session_id = auth.start_session(conn, decoy["id"], device, now)
+        # A fresh alert every time: each forced sign-in is its own event.
+        conn.execute("INSERT INTO alerts (user_id, created_at, level, reason, message) VALUES (?, ?, 'crisis', "
+                     "'duress_login', ?)", (real["id"], now, DURESS_ALERT))
+    events.publish(real["counsellor_id"], "alert", victim_id=real["id"], reason="duress_login", level="crisis")
+    return {"token": token, "session_id": session_id, "user_id": decoy["id"], "role": "victim",
+            "name": crypto.dec(decoy["name_enc"]), "username": username, "language": decoy["language"],
+            "consent": decoy["consent"], "counsellor": None, "expires_at": iso(now + auth.SESSION_TTL)}
+
+
+def set_duress_password(user, current_password, duress_password):
+    """Needs the real password, and must differ from it."""
+    if is_decoy(user):
+        return {"has_duress": True}          # looks like it worked; the real account is untouched
+    auth.check_password_strength(duress_password)
+    with db.connect() as conn:
+        row = conn.execute("SELECT password_hash FROM credentials WHERE user_id = ?", (user["id"],)).fetchone()
+        if row is None:
+            raise auth.AuthError("Set a username and password first.", status=409)
+        if not auth.verify_password(current_password, row["password_hash"]):
+            raise auth.AuthError("Current password is incorrect")
+        if auth.verify_password(duress_password, row["password_hash"]):
+            raise auth.AuthError("The safety password must be different from your password.", status=422)
+        conn.execute("UPDATE credentials SET duress_hash = ? WHERE user_id = ?",
+                     (auth.hash_password(duress_password), user["id"]))
+    return {"has_duress": True}
+
+
+def clear_duress_password(user, current_password):
+    if is_decoy(user):
+        return {"has_duress": False}
+    with db.connect() as conn:
+        row = conn.execute("SELECT password_hash FROM credentials WHERE user_id = ?", (user["id"],)).fetchone()
+        if row is None or not auth.verify_password(current_password, row["password_hash"]):
+            raise auth.AuthError("Current password is incorrect")
+        conn.execute("UPDATE credentials SET duress_hash = NULL WHERE user_id = ?", (user["id"],))
+    return {"has_duress": False}
+
 def set_credentials(user, username, password, current_password=None):
     """Adds a username + password to an account that only had an access token,
     or replaces them. Replacing needs the current password and signs every
     other device out, like auth.change_password(). Raises auth.AuthError."""
+    if is_decoy(user):
+        return {"username": username, "has_password": True, "other_sessions_signed_out": 0}
     with db.connect() as conn:
         existing = conn.execute("SELECT password_hash FROM credentials WHERE user_id = ?",
                                 (user["id"],)).fetchone()
@@ -747,6 +849,69 @@ def my_case(user, now=None, days=60):
     }
 
 
+
+# ---------------------------------------------------------------- court-day mode (victim side)
+
+# The day before, the day of and the evening after a court date, the victim's
+# home screen changes: what to expect, what they can claim, and a gentle
+# check-in afterwards. Content and its legal basis live in court_day.json.
+COURT_KINDS = ("hearing", "bail_hearing", "parole", "trial_end")
+EVENING_HOUR = 17
+_COURT_DAY = None
+
+
+def court_day_content():
+    global _COURT_DAY
+    if _COURT_DAY is None:
+        with open(Path(__file__).resolve().parent / "court_day.json", encoding="utf-8") as f:
+            _COURT_DAY = json.load(f)
+    return _COURT_DAY
+
+
+def _pick(texts, lang):
+    return texts.get(lang) or texts["en"]
+
+
+def court_day(user, now=None):
+    """None on an ordinary day. No docket words, no numbers."""
+    now = now or db.now()
+    today = _today(now)
+    with db.connect() as conn:
+        row = conn.execute(
+            f"SELECT id, event_date FROM case_events WHERE user_id = ? AND event_date BETWEEN ? AND ? "
+            f"AND kind IN ({','.join('?' * len(COURT_KINDS))}) ORDER BY event_date DESC LIMIT 1",
+            (user["id"], (today - timedelta(days=1)).isoformat(), (today + timedelta(days=1)).isoformat(),
+             *COURT_KINDS)).fetchone()
+    if row is None:
+        return None
+    days = (datetime.strptime(row["event_date"], "%Y-%m-%d").date() - today).days
+    if days == 1:
+        phase = "before"
+    elif days == 0 and datetime.fromtimestamp(now).hour < EVENING_HOUR:
+        phase = "day"
+    else:
+        phase = "after"
+    lang = user.get("language") or "en"
+    content = court_day_content()
+    sources = case_issues.legal_actions()["sources"]
+    tips = []
+    for tip in content["tips"]:
+        if phase not in tip["phases"]:
+            continue
+        out = {"id": tip["id"], "text": _pick(tip["text"], lang)}
+        if tip.get("basis"):
+            out["basis"] = tip["basis"]
+            out["source_url"] = sources[tip["source"]]
+        if tip.get("action"):
+            out["action"] = {**{k: v for k, v in tip["action"].items() if k != "label"},
+                             "label": _pick(tip["action"]["label"], lang)}
+        tips.append(out)
+    text = content["phases"][phase]
+    return {"event_id": row["id"], "phase": phase, "date": row["event_date"],
+            "title": _pick(text["title"], lang), "intro": _pick(text["intro"], lang), "tips": tips,
+            "actions": [{"kind": a["kind"], "label": _pick(a["label"], lang)} for a in content["after_actions"]]
+            if phase == "after" else []}
+
 def answer_entitlement(user, entitlement_id, status, now=None):
     if status not in ENTITLEMENT_STATUS:
         raise ValueError(f"status must be one of {', '.join(ENTITLEMENT_STATUS)}")
@@ -1078,6 +1243,7 @@ def purge_demo():
     with db.connect() as conn:
         for uid in victims + counsellors:
             conn.execute("DELETE FROM users WHERE id = ?", (uid,))
-        orphaned = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'victim' AND counsellor_id IS NULL").fetchone()[0]
+        orphaned = conn.execute("SELECT COUNT(*) FROM users WHERE role = 'victim' AND counsellor_id IS NULL "
+                                "AND decoy_of IS NULL").fetchone()[0]
     return {"victims": len(victims), "counsellors": len(counsellors), "recordings": recordings,
             "unassigned_victims": orphaned}
