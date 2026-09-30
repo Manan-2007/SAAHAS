@@ -1,101 +1,70 @@
 import React from 'react';
+import { useTheme } from '../../theme';
 
 interface HeaderProps {
-  counsellorName: string;
   onToggleMobileSidebar: () => void;
-  onSignOut: () => void;
   onQuickLock: () => void;
   onToggleNotifications: () => void;
   unreadCount: number;
+  live: boolean;
 }
 
+const IconButton: React.FC<{ icon: string; label: string; onClick: () => void; id?: string; children?: React.ReactNode }> = ({
+  icon,
+  label,
+  onClick,
+  id,
+  children,
+}) => (
+  <button
+    id={id}
+    type="button"
+    onClick={onClick}
+    title={label}
+    aria-label={label}
+    className="relative w-9 h-9 rounded-lg grid place-items-center text-ink-2 hover:text-ink hover:bg-raised transition-colors"
+  >
+    <span className="material-symbols-outlined text-[21px]" aria-hidden>{icon}</span>
+    {children}
+  </button>
+);
 
-export const Header: React.FC<HeaderProps> = ({
-  counsellorName,
-  onToggleMobileSidebar,
-  onSignOut,
-  onQuickLock,
-  onToggleNotifications,
-  unreadCount,
-}) => {
+/** Quiet by design: whether updates are live, and three icons. The page says what it is. */
+export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, onQuickLock, onToggleNotifications, unreadCount, live }) => {
+  const { theme, setPreference } = useTheme();
   return (
-    <header className="fixed top-0 left-0 lg:left-72 right-0 h-16 bg-[#f5f1e8]/90 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-30 flex items-center justify-between px-4 sm:px-6 border-b border-[#ece2ce]">
-      <div className="flex items-center gap-3 sm:gap-4">
-        {/* Mobile menu trigger */}
+    <header className="fixed top-0 left-0 lg:left-64 right-0 h-16 bg-canvas/90 backdrop-blur-md z-30 flex items-center justify-between px-4 sm:px-6 lg:px-8 border-b border-line">
+      <div className="flex items-center gap-3">
         <button
           id="btn-mobile-menu"
           onClick={onToggleMobileSidebar}
-          className="lg:hidden p-2 rounded-lg text-[#5c5142] hover:bg-[#ece2ce]"
-          title="Toggle Navigation Menu"
+          className="lg:hidden w-9 h-9 rounded-lg grid place-items-center text-ink-2 hover:bg-raised"
+          aria-label="Open navigation"
           type="button"
         >
-          <span className="material-symbols-outlined text-[24px]">menu</span>
+          <span className="material-symbols-outlined text-[22px]" aria-hidden>menu</span>
         </button>
-
-        <div className="flex items-center gap-2.5">
-          <span className="font-['Plus_Jakarta_Sans'] text-[18px] text-[#352e24] font-semibold hidden sm:inline-block">
-            SAHAAS Command
-          </span>
-        </div>
-
-        <div className="hidden md:flex items-center gap-1.5 bg-[#e5dac4] text-[#5c5142] px-3 py-1 rounded-full">
-          <span className="material-symbols-outlined text-[#9c6743] text-[16px]">lock</span>
-          <span className="font-['Inter'] text-[11px] font-medium">Client Confidential Session</span>
-        </div>
+        <span className="lg:hidden text-[14px] font-extrabold tracking-[0.2em] text-ink">SAHAAS</span>
+        <span
+          className="hidden lg:inline-flex items-center gap-2 text-[13px] text-ink-2"
+          title={live ? 'New check-ins and messages appear as they happen' : 'Reconnecting - the page refreshes every two minutes meanwhile'}
+        >
+          <span className={`w-2 h-2 rounded-full ${live ? 'bg-ok' : 'bg-ink-3'}`} aria-hidden />
+          {live ? 'Live' : 'Reconnecting…'}
+        </span>
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3">
-        {/* Sign out */}
-        <button
-          id="btn-sign-out"
-          onClick={onSignOut}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#ece2ce] hover:bg-[#e5dac4] text-[#352e24] font-['Inter'] text-[12px] font-semibold transition-colors shadow-xs"
-          type="button"
-        >
-          <span className="material-symbols-outlined text-[#8a6a4a] text-[18px]">logout</span>
-          <span className="hidden sm:inline">Sign out</span>
-        </button>
-
-        {/* Quick Lock button */}
-        <button
-          id="btn-quick-lock"
-          onClick={onQuickLock}
-          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-[#e5dac4] hover:bg-[#ffdad6] hover:text-[#93000a] text-[#5c5142] font-['Inter'] text-[12px] font-medium transition-colors"
-          type="button"
-          title="Confidential Screen Lock"
-        >
-          <span className="material-symbols-outlined text-[18px]">lock_clock</span>
-          <span className="hidden md:inline">Quick Lock</span>
-        </button>
-
-        {/* Notifications button */}
-        <button
-          id="btn-notifications-toggle"
-          onClick={onToggleNotifications}
-          className="relative p-2 rounded-full hover:bg-[#ece2ce] text-[#5c5142] hover:text-[#352e24] transition-colors"
-          type="button"
-          title="Clinical Alerts & Notifications"
-        >
-          <span className="material-symbols-outlined text-[22px]">notifications</span>
-          {unreadCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#ba1a1a] ring-2 ring-[#f5f1e8]"></span>
-          )}
-        </button>
-
-        {/* Doctor profile */}
-        <div className="flex items-center gap-2 pl-1 border-l border-[#e5dac4] ml-1">
-          <div className="hidden md:flex flex-col text-right">
-            <span className="font-['Inter'] text-[12px] text-[#352e24] font-semibold leading-tight">
-              {counsellorName}
-            </span>
-            <span className="font-['Inter'] text-[11px] text-[#837562] leading-tight">
-              Counsellor
-            </span>
-          </div>
-          <div className="w-8 h-8 rounded-full bg-[#9c6743] flex items-center justify-center text-white shadow-xs">
-            <span className="material-symbols-outlined text-[18px]">person</span>
-          </div>
-        </div>
+      <div className="flex items-center gap-1">
+        <IconButton id="btn-quick-lock" icon="lock" label="Lock the screen" onClick={onQuickLock} />
+        <IconButton
+          id="btn-theme-toggle"
+          icon={theme === 'dark' ? 'light_mode' : 'dark_mode'}
+          label={theme === 'dark' ? 'Switch to the light look' : 'Switch to the dark look'}
+          onClick={() => setPreference(theme === 'dark' ? 'light' : 'dark')}
+        />
+        <IconButton id="btn-notifications-toggle" icon="notifications" label={`Alerts${unreadCount ? `, ${unreadCount} new` : ''}`} onClick={onToggleNotifications}>
+          {unreadCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger ring-2 ring-canvas" aria-hidden />}
+        </IconButton>
       </div>
     </header>
   );

@@ -67,6 +67,9 @@ const TIER_LABELS: Record<Tier, string> = {
 const DAY_MS = 86_400_000;
 const NONE = '—';
 
+/** Who a counsellor should reach first: a crisis-level signal or open alert, or high escalation risk. */
+export const needsYou = (c: CaseData) => c.statusType === 'error' || c.escalationRisk === 'HIGH';
+
 export function timeAgo(iso: string | null): string {
   if (!iso) return 'No contact yet';
   const minutes = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));

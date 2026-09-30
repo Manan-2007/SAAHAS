@@ -1,5 +1,6 @@
 import React from 'react';
 import { CaseData } from '../types';
+import { PageHeader, QuietButton } from './PageHeader';
 
 interface RecoveryOutcomesViewProps {
   cases: CaseData[];
@@ -31,99 +32,76 @@ export const RecoveryOutcomesView: React.FC<RecoveryOutcomesViewProps> = ({
   const stats = outcomes(cases);
   return (
     <div className="flex flex-col space-y-6">
-      {/* Header Banner */}
-      <div className="bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#8a6a4a] text-[24px]">
-              trending_up
-            </span>
-            <h2 className="font-['Plus_Jakarta_Sans'] text-xl text-[#352e24] font-bold">
-              Closed-Loop Recovery & Outcomes
-            </h2>
-            <span className="px-2.5 py-0.5 rounded-full bg-[#e7d3b5] text-[#7a5a3f] font-['Inter'] text-xs font-bold">
-              Last 30 days
-            </span>
-          </div>
-          <p className="font-['Plus_Jakarta_Sans'] text-xs text-[#837562] mt-1">
-            How your caseload is moving, from the Distress Score history and check-in activity.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={onOpenAuditTrail}
-          className="px-3.5 py-2 rounded-lg bg-[#9c6743] text-white hover:bg-[#b3654a] font-['Inter'] text-xs font-semibold flex items-center gap-1.5 shadow-xs"
-        >
-          <span className="material-symbols-outlined text-[16px]">history</span>
-          <span>Case History</span>
-        </button>
-      </div>
+      <PageHeader
+        title="Outcomes"
+        description="How your caseload has moved over the last 30 days, from the Distress Score history and check-ins."
+        actions={<QuietButton icon="history" onClick={onOpenAuditTrail}>Case history</QuietButton>}
+      />
 
       {/* Caseload Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce]">
-          <span className="text-xs text-[#837562] font-['Inter'] block font-semibold">
+        <div className="bg-surface rounded-tile p-5 border border-line">
+          <span className="text-xs text-ink-2 block font-semibold">
             Average Distress Score Change
           </span>
           <div className="flex items-baseline gap-2 mt-2">
-            <span className="font-['Plus_Jakarta_Sans'] text-3xl font-bold text-[#8a6a4a]">
+            <span className=" text-3xl font-bold text-ink-2">
               {stats.averageChange}
             </span>
-            <span className="text-xs text-[#8a6a4a] font-semibold bg-[#e7d3b5]/40 px-2 py-0.5 rounded-full">
+            <span className="text-xs text-ink-2 font-semibold bg-soft/40 px-2 py-0.5 rounded-full">
               over 30 days
             </span>
           </div>
-          <p className="text-xs text-[#5c5142] mt-2">
+          <p className="text-xs text-ink-2 mt-2">
             Negative is better. Based on the {stats.measured} case{stats.measured === 1 ? '' : 's'} with a score 30 days ago and now.
           </p>
         </div>
 
-        <div className="bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce]">
-          <span className="text-xs text-[#837562] font-['Inter'] block font-semibold">
+        <div className="bg-surface rounded-tile p-5 border border-line">
+          <span className="text-xs text-ink-2 block font-semibold">
             In Touch This Week
           </span>
           <div className="flex items-baseline gap-2 mt-2">
-            <span className="font-['Plus_Jakarta_Sans'] text-3xl font-bold text-[#9c6743]">
+            <span className=" text-3xl font-bold text-sun">
               {stats.inTouch}
             </span>
-            <span className="text-xs text-[#9c6743] font-semibold bg-[#efe7d6] px-2 py-0.5 rounded-full">
+            <span className="text-xs text-sun font-semibold bg-raised px-2 py-0.5 rounded-full">
               last 7 days
             </span>
           </div>
-          <p className="text-xs text-[#5c5142] mt-2">
+          <p className="text-xs text-ink-2 mt-2">
             Share of your clients with a chat, voice or questionnaire check-in in the past week.
           </p>
         </div>
 
-        <div className="bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce]">
-          <span className="text-xs text-[#837562] font-['Inter'] block font-semibold">
+        <div className="bg-surface rounded-tile p-5 border border-line">
+          <span className="text-xs text-ink-2 block font-semibold">
             No Open Alerts
           </span>
           <div className="flex items-baseline gap-2 mt-2">
-            <span className="font-['Plus_Jakarta_Sans'] text-3xl font-bold text-[#8a6a4a]">
+            <span className=" text-3xl font-bold text-ink-2">
               {stats.calm}
             </span>
-            <span className="text-xs text-[#8a6a4a] font-semibold bg-[#e7d3b5]/40 px-2 py-0.5 rounded-full">
+            <span className="text-xs text-ink-2 font-semibold bg-soft/40 px-2 py-0.5 rounded-full">
               right now
             </span>
           </div>
-          <p className="text-xs text-[#5c5142] mt-2">
+          <p className="text-xs text-ink-2 mt-2">
             Share of your clients with nothing waiting for follow-up.
           </p>
         </div>
       </div>
 
       {/* Caseload Trajectory Table */}
-      <div className="bg-white rounded-xl p-6 shadow-xs border border-[#ece2ce] space-y-4">
-        <h3 className="font-['Plus_Jakarta_Sans'] text-base font-bold text-[#352e24]">
+      <div className="bg-surface rounded-tile p-6 border border-line space-y-4">
+        <h3 className=" text-base font-bold text-ink">
           Client Trajectory
         </h3>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-[#efe7d6] text-[11px] text-[#837562] uppercase font-['Inter'] tracking-wider">
+              <tr className="border-b border-line text-[11px] text-ink-2 uppercase tracking-wider">
                 <th className="py-2.5 px-3">Client</th>
                 <th className="py-2.5 px-3">Care Phase</th>
                 <th className="py-2.5 px-3">30 Days Ago</th>
@@ -132,28 +110,28 @@ export const RecoveryOutcomesView: React.FC<RecoveryOutcomesViewProps> = ({
                 <th className="py-2.5 px-3">Counsellor</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#efe7d6] text-xs">
+            <tbody className="divide-y divide-line text-xs">
               {cases.map((c) => (
-                <tr key={c.id} className="hover:bg-[#f5f1e8]">
+                <tr key={c.id} className="hover:bg-raised">
                   <td className="py-3 px-3">
-                    <div className="font-bold text-[#352e24]">{c.name}</div>
-                    <div className="text-[11px] text-[#837562] font-mono">{c.number}</div>
+                    <div className="font-bold text-ink">{c.name}</div>
+                    <div className="text-[11px] text-ink-2 font-mono">{c.number}</div>
                   </td>
                   <td className="py-3 px-3">
-                    <span className="px-2.5 py-1 rounded-full bg-[#efe7d6] text-[#9c6743] font-semibold text-[11px]">
+                    <span className="px-2.5 py-1 rounded-full bg-raised text-sun font-semibold text-[11px]">
                       Step {c.currentStep} of 5
                     </span>
                   </td>
-                  <td className="py-3 px-3 font-semibold text-[#ba1a1a]">
+                  <td className="py-3 px-3 font-semibold text-danger">
                     {c.distressBefore} / 100
                   </td>
-                  <td className="py-3 px-3 font-semibold text-[#8a6a4a]">
+                  <td className="py-3 px-3 font-semibold text-ink-2">
                     {c.distressAfter} / 100
                   </td>
-                  <td className="py-3 px-3 font-bold text-[#8a6a4a]">
+                  <td className="py-3 px-3 font-bold text-ink-2">
                     {c.distressDelta || '—'}
                   </td>
-                  <td className="py-3 px-3 text-[#837562]">{c.assignedCounsellor}</td>
+                  <td className="py-3 px-3 text-ink-2">{c.assignedCounsellor}</td>
                 </tr>
               ))}
             </tbody>

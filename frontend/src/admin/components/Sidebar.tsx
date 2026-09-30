@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavigationTab } from '../types';
+import { NAV_GROUPS, NAV_PARENT } from '../nav';
 
 interface SidebarProps {
   activeTab: NavigationTab;
@@ -7,9 +8,14 @@ interface SidebarProps {
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   badges?: Partial<Record<NavigationTab, number>>;
-  live?: boolean;
+  /** Badges that mean "someone may not be safe" get the alert colour; the rest stay quiet. */
+  urgent?: Partial<Record<NavigationTab, boolean>>;
+  counsellorName: string;
+  onSignOut: () => void;
 }
 
+const initials = (name: string) =>
+  name.replace(/^Dr\.?\s+/i, '').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
@@ -17,148 +23,93 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
   badges = {},
-  live = false,
+  urgent = {},
+  counsellorName,
+  onSignOut,
 }) => {
-  const badge = (id: NavigationTab) => (badges[id] ? String(badges[id]) : undefined);
-  const navItems: { id: NavigationTab; label: string; icon: string; badge?: string }[] = [
-    { id: 'overview', label: 'Overview', icon: 'grid_view' },
-    { id: 'live-feed', label: 'Live Feed', icon: 'sensors', badge: badge('live-feed') },
-    { id: 'case-issues', label: 'Case Problems', icon: 'gavel', badge: badge('case-issues') },
-    { id: 'inbox', label: 'Messages & Calls', icon: 'mail', badge: badge('inbox') },
-    { id: 'outreach', label: 'Check-in Calls', icon: 'phone_callback', badge: badge('outreach') },
-    { id: 'priority-cases', label: 'Priority Cases', icon: 'emergency' },
-    { id: 'forecast', label: 'This Week', icon: 'calendar_month' },
-    { id: 'case-detail-signals', label: 'Case Detail & Signals', icon: 'neurology' },
-    { id: 'interventions', label: 'Interventions', icon: 'health_and_safety' },
-    { id: 'recovery-outcomes', label: 'Recovery & Outcomes', icon: 'trending_up' },
-    { id: 'system-settings', label: 'System Settings', icon: 'settings' },
-  ];
+  const current = NAV_PARENT[activeTab] ?? activeTab;
+  const go = (tab: NavigationTab) => {
+    onSelectTab(tab);
+    onCloseMobile();
+  };
+
+  const item = (id: NavigationTab, label: string, icon: string) => {
+    const on = current === id;
+    const count = badges[id] ?? 0;
+    return (
+      <button
+        key={id}
+        id={`nav-${id}`}
+        type="button"
+        onClick={() => go(id)}
+        aria-current={on ? 'page' : undefined}
+        className={`w-full h-9 flex items-center gap-2.5 px-3 rounded-lg text-[14px] text-left transition-colors ${
+          on ? 'bg-raised text-ink font-semibold' : 'text-ink-2 hover:bg-raised hover:text-ink'
+        }`}
+      >
+        <span className={`material-symbols-outlined text-[19px] ${on ? 'text-sun' : ''}`} aria-hidden>{icon}</span>
+        <span className="flex-1">{label}</span>
+        {count > 0 && (
+          <span
+            className={`min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold grid place-items-center ${
+              urgent[id] ? 'bg-danger text-canvas' : 'bg-soft text-ink'
+            }`}
+          >
+            {count}
+          </span>
+        )}
+      </button>
+    );
+  };
 
   return (
     <>
-      {/* Mobile backdrop */}
-      {isOpenMobile && (
-        <div
-          className="fixed inset-0 bg-black/40 z-30 lg:hidden backdrop-blur-xs transition-opacity"
-          onClick={onCloseMobile}
-        />
-      )}
+      {isOpenMobile && <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={onCloseMobile} aria-hidden />}
 
       <aside
         id="main-sidebar"
-        className={`fixed left-0 top-0 h-full w-72 bg-white z-40 flex flex-col justify-between shadow-[0_1px_8px_rgba(0,0,0,0.04)] border-r border-[#ece2ce] transition-transform duration-200 ease-in-out ${
+        className={`fixed left-0 top-0 h-full w-64 bg-canvas z-40 flex flex-col border-r border-line transition-transform duration-200 ease-in-out ${
           isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        <div className="flex flex-col">
-          {/* Logo & Brand Header */}
-          <div className="h-16 px-5 flex items-center justify-between gap-2 border-b border-[#efe7d6]">
-            <div className="flex items-center gap-2.5">
-              <div className="flex flex-col">
-                <span className="font-['Plus_Jakarta_Sans'] text-lg text-[#9c6743] font-bold tracking-tight leading-tight">
-                  SAHAAS
-                </span>
-                <span className="font-['Inter'] text-[11px] text-[#837562] uppercase tracking-wider font-semibold">
-                  Care & Counsel
-                </span>
-              </div>
-            </div>
-
-            <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full ${live ? 'bg-[#e3f1e4]' : 'bg-[#efe7d6]'}`}
-                 title={live ? 'Connected: updates arrive instantly' : 'Reconnecting to live updates'}>
-              <span className={`w-2 h-2 rounded-full ${live ? 'bg-[#2e7d32] animate-pulse' : 'bg-[#9c6743]'}`}></span>
-              <span className={`font-['Inter'] text-[11px] font-semibold ${live ? 'text-[#1f5c2a]' : 'text-[#8a6a4a]'}`}>
-                {live ? 'Live' : 'Secure'}
-              </span>
-            </div>
-          </div>
-
-          {/* Clinical Protocol Badge */}
-          <div className="px-4 py-3">
-            <div className="bg-[#efe7d6] rounded-lg p-2.5 flex items-center gap-2.5">
-              <span className="material-symbols-outlined text-[#9c6743] text-[20px]">
-                verified_user
-              </span>
-              <div className="flex flex-col">
-                <span className="font-['Inter'] text-[11px] text-[#352e24] font-semibold">
-                  Distress Score v1
-                </span>
-                <span className="font-['Inter'] text-[11px] text-[#837562]">
-                  Personal data encrypted at rest
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Navigation Links */}
-          <nav className="px-4 space-y-1 mt-1">
-            {navItems.map((item) => {
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  id={`nav-${item.id}`}
-                  onClick={() => {
-                    onSelectTab(item.id);
-                    onCloseMobile();
-                  }}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all text-[14px] font-['Inter'] text-left ${
-                    isActive
-                      ? 'bg-[#b3654a] text-white font-semibold shadow-xs'
-                      : 'text-[#5c5142] hover:bg-[#e5dac4] hover:text-[#352e24]'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="material-symbols-outlined text-[20px]">{item.icon}</span>
-                    <span>{item.label}</span>
-                  </div>
-                  {item.badge && (
-                    <span
-                      className={`font-['Inter'] text-[11px] px-2 py-0.5 rounded-full font-bold ${
-                        isActive
-                          ? 'bg-white/20 text-white'
-                          : 'bg-[#ffdad6] text-[#93000a]'
-                      }`}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+        <div className="h-16 px-5 flex items-center shrink-0">
+          <span className="text-[14px] font-extrabold tracking-[0.2em] text-ink">SAHAAS</span>
+          <span className="ml-2 text-[12px] text-ink-2">counsellor</span>
         </div>
 
-        {/* Explainable AI Note */}
-        <button
-          type="button"
-          onClick={() => {
-            onSelectTab('how-scoring');
-            onCloseMobile();
-          }}
-          className={`p-4 space-y-2 m-4 rounded-xl border text-left transition-colors ${
-            activeTab === 'how-scoring'
-              ? 'bg-[#e7d3b5] border-[#c8a97e]'
-              : 'bg-[#efe7d6]/70 border-[#e5dac4] hover:bg-[#efe7d6]'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#8a6a4a] text-[20px]">
-              auto_awesome
-            </span>
-            <div className="flex flex-col">
-              <span className="font-['Inter'] text-[11px] text-[#352e24] font-semibold">
-                Explainable AI
-              </span>
-              <span className="font-['Inter'] text-[11px] text-[#837562]">
-                Rules you can read
-              </span>
+        <nav aria-label="Command Centre" className="flex-1 overflow-y-auto px-3 pb-4 flex flex-col gap-5">
+          {NAV_GROUPS.map((group, i) => (
+            <div key={group.label ?? i} className="flex flex-col gap-0.5">
+              {group.label && (
+                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-2/80">{group.label}</p>
+              )}
+              {group.items.map((n) => item(n.id, n.label, n.icon))}
             </div>
-          </div>
-          <p className="font-['Plus_Jakarta_Sans'] text-[12px] text-[#5c5142] leading-relaxed">
-            Scores use only what the client consented to. <span className="font-semibold text-[#9c6743] underline">See how SAHAAS scores →</span>
-          </p>
-        </button>
+          ))}
+        </nav>
+
+        <div className="px-3 pb-3 flex flex-col gap-0.5">
+          {item('system-settings', 'Settings & scoring', 'tune')}
+        </div>
+
+        <div className="border-t border-line px-4 py-3 flex items-center gap-3">
+          <span className="w-9 h-9 rounded-full bg-sun text-on-accent grid place-items-center text-[13px] font-bold shrink-0" aria-hidden>
+            {initials(counsellorName) || 'C'}
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[13px] font-semibold text-ink truncate">{counsellorName}</span>
+            <span className="block text-[12px] text-ink-2">Counsellor</span>
+          </span>
+          <button
+            type="button"
+            onClick={onSignOut}
+            title="Sign out"
+            aria-label="Sign out"
+            className="w-9 h-9 rounded-lg grid place-items-center text-ink-2 hover:text-ink hover:bg-raised"
+          >
+            <span className="material-symbols-outlined text-[20px]" aria-hidden>logout</span>
+          </button>
+        </div>
       </aside>
     </>
   );

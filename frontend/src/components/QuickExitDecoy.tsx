@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CloudSun, Wind, Droplets, Compass, Search, ChevronRight, RefreshCw, Eye } from 'lucide-react';
 
 interface QuickExitDecoyProps {
@@ -9,6 +9,16 @@ export const QuickExitDecoy: React.FC<QuickExitDecoyProps> = ({ onRestoreSanctua
   const [activeTab, setActiveTab] = useState<'weather' | 'recipes' | 'news'>('weather');
   const [showRestorePrompt, setShowRestorePrompt] = useState(false);
   const [tapCount, setTapCount] = useState(0);
+
+  // The tab title is visible too: while the decoy is up it says what the page
+  // appears to be, not "SAHAAS".
+  useEffect(() => {
+    const previous = document.title;
+    document.title = 'Everyday Digest & Weather';
+    return () => {
+      document.title = previous;
+    };
+  }, []);
 
   const handleHeaderTap = () => {
     const nextCount = tapCount + 1;

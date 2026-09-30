@@ -157,6 +157,7 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
 
   useEffect(() => {
     if (activeTab === 'live-feed') setFeedUnseen(0);
+    window.scrollTo(0, 0);
   }, [activeTab]);
 
   const openCase = (id: string) => {
@@ -257,22 +258,22 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
   };
 
   const emptyState = loading ? (
-    <div className="flex flex-col items-center gap-3 py-24 text-[#9c6743]">
-      <div className="w-8 h-8 rounded-full border-2 border-[#e7d3b5] border-t-[#9c6743] animate-spin"></div>
+    <div className="flex flex-col items-center gap-3 py-24 text-sun">
+      <div className="w-8 h-8 rounded-full border-2 border-line border-t-sun animate-spin"></div>
       <span className="text-sm font-semibold">Loading your caseload…</span>
     </div>
   ) : loadError ? (
-    <div className="max-w-md mx-auto mt-16 bg-white rounded-2xl p-6 border border-[#e5dac4] text-center flex flex-col gap-3">
-      <p className="text-sm text-[#352e24] font-semibold">Couldn't load your caseload</p>
-      <p className="text-xs text-[#5c5142]">{loadError}</p>
-      <button onClick={refresh} className="text-xs font-semibold text-[#9c6743] hover:underline">
+    <div className="max-w-md mx-auto mt-16 bg-surface rounded-card p-6 border border-line text-center flex flex-col gap-3">
+      <p className="text-sm text-ink font-semibold">Couldn't load your caseload</p>
+      <p className="text-xs text-ink-2">{loadError}</p>
+      <button onClick={refresh} className="text-xs font-semibold text-sun hover:underline">
         Try again
       </button>
     </div>
   ) : (
-    <div className="max-w-md mx-auto mt-16 bg-white rounded-2xl p-6 border border-[#e5dac4] text-center flex flex-col gap-2">
-      <p className="text-sm text-[#352e24] font-semibold">No one is assigned to you yet</p>
-      <p className="text-xs text-[#5c5142] leading-relaxed">
+    <div className="max-w-md mx-auto mt-16 bg-surface rounded-card p-6 border border-line text-center flex flex-col gap-2">
+      <p className="text-sm text-ink font-semibold">No one is assigned to you yet</p>
+      <p className="text-xs text-ink-2 leading-relaxed">
         New victims are assigned to the counsellor with the fewest cases when they sign up. They'll appear here with
         their check-ins and alerts.
       </p>
@@ -280,7 +281,7 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
   );
 
   return (
-    <div className="min-h-screen bg-[#f5f1e8] text-[#352e24] flex font-['Plus_Jakarta_Sans'] antialiased">
+    <div className="sahaas flex antialiased">
       {/* Sidebar navigation */}
       <Sidebar
         activeTab={activeTab}
@@ -288,23 +289,24 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
         isOpenMobile={mobileSidebarOpen}
         onCloseMobile={() => setMobileSidebarOpen(false)}
         badges={badges}
-        live={live}
+        urgent={{ outreach: escalatedCalls > 0 }}
+        counsellorName={counsellorName}
+        onSignOut={onSignOut}
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 lg:pl-72 flex flex-col min-w-0">
+      <div className="flex-1 lg:pl-64 flex flex-col min-w-0">
         {/* Top Header */}
         <Header
-          counsellorName={counsellorName}
           onToggleMobileSidebar={() => setMobileSidebarOpen((prev) => !prev)}
-          onSignOut={onSignOut}
           onQuickLock={() => setIsQuickLocked(true)}
           onToggleNotifications={() => setIsNotificationsOpen((prev) => !prev)}
           unreadCount={unreadNotificationsCount}
+          live={live}
         />
 
         {/* Dynamic Page Container (pt-20 clears the fixed 4rem header + breathing room) */}
-        <main className="flex-1 pt-20 sm:pt-24 px-4 pb-4 sm:px-6 sm:pb-6 lg:px-8 lg:pb-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 pt-24 sm:pt-[104px] px-4 pb-10 sm:px-6 lg:px-10 max-w-6xl w-full mx-auto">
           {activeTab === 'live-feed' ? (
             <LiveFeedView onOpenCase={openCase} connected={live} />
           ) : activeTab === 'case-issues' ? (
@@ -314,7 +316,7 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
           ) : activeTab === 'outreach' ? (
             <OutreachView onOpenCase={openCase} />
           ) : activeTab === 'system-settings' ? (
-            <SystemSettingsView />
+            <SystemSettingsView onOpenHowScoring={() => setActiveTab('how-scoring')} />
           ) : activeTab === 'how-scoring' ? (
             <HowScoringView />
           ) : activeTab === 'forecast' ? (
@@ -331,10 +333,10 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
               {activeTab === 'overview' && (
                 <OverviewView
                   cases={cases}
+                  counsellorName={counsellorName}
                   selectedCaseId={activeCase.id}
                   onSelectCase={(id) => setSelectedCaseId(id)}
-                  onToggleIntervention={handleToggleIntervention}
-                  onOpenAssignCounsellor={handleAssignCounsellor}
+                  onOpenCase={openCase}
                   onOpenScheduleFollowUp={() => setIsScheduleModalOpen(true)}
                   onOpenAuditTrail={() => setIsAuditModalOpen(true)}
                   onAcknowledgePlan={handleAcknowledgePlan}
@@ -364,6 +366,7 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
                   onOpenScheduleFollowUp={() => setIsScheduleModalOpen(true)}
                   onOpenAssignCounsellor={handleAssignCounsellor}
                   onChanged={refresh}
+                  onBack={() => setActiveTab('priority-cases')}
                 />
               )}
 
@@ -389,10 +392,10 @@ export default function AdminApp({ counsellorName, onSignOut }: AdminAppProps) {
 
       {/* Floating Action Feedback Toast */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#9c6743] text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2.5 animate-fadeIn max-w-sm"
+        <div className="fixed bottom-6 right-6 z-50 bg-ink text-canvas px-4 py-3 rounded-tile shadow-xl flex items-center gap-2.5 animate-fadeIn max-w-sm"
              role="status" aria-live="polite">
           <span className="material-symbols-outlined text-[20px]">notifications_active</span>
-          <span className="font-['Inter'] text-xs font-semibold">{toastMessage}</span>
+          <span className=" text-xs font-semibold">{toastMessage}</span>
         </div>
       )}
 

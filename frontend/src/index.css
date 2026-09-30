@@ -1,121 +1,161 @@
 @import "tailwindcss";
 
+/* ------------------------------------------------------------------
+   SAHAAS design tokens.
+
+   "A quiet room with colourful objects in it": a warm near-black canvas,
+   cream type, and six accents that belong to experiences - never to
+   status. Yellow is checking in, blue is writing, purple is voice, green is
+   breathing, coral is reaching a person, pink is what's coming up. None of
+   them means good, warning or bad.
+
+   The counsellor Command Centre (src/admin) uses the same canvas, surfaces
+   and type, plus the status colours below that survivors never see.
+   ------------------------------------------------------------------ */
 @theme {
-  --color-primary: #9c6743;
-  --color-on-primary: #ffffff;
-  --color-primary-container: #b3654a;
-  --color-on-primary-container: #fffdf7;
-  --color-primary-fixed: #ecdcbf;
-  --color-primary-fixed-dim: #d9bf97;
-  --color-on-primary-fixed: #3a2c1e;
-  --color-on-primary-fixed-variant: #7a4a30;
+  --color-canvas: #111111;
+  --color-surface: #1a1a1a;
+  --color-raised: #222222;
+  --color-soft: #282725;
 
-  --color-secondary: #8a6a4a;
-  --color-on-secondary: #ffffff;
-  --color-secondary-container: #e7d3b5;
-  --color-on-secondary-container: #7a5a3f;
-  --color-secondary-fixed: #e7d3b5;
-  --color-secondary-fixed-dim: #d9bf97;
-  --color-on-secondary-fixed: #3a2c1e;
-  --color-on-secondary-fixed-variant: #7a5a3f;
+  --color-ink: #f5f1e8;
+  --color-ink-2: #a9a59d;
+  --color-ink-3: #68655f;          /* decorative / placeholder only: under 4.5:1 */
+  --color-line: rgb(245 241 232 / 0.10);
+  --color-line-strong: rgb(245 241 232 / 0.18);
 
-  --color-tertiary: #837562;
-  --color-on-tertiary: #ffffff;
-  --color-tertiary-container: #9a8b76;
-  --color-on-tertiary-container: #fffdf7;
-  --color-tertiary-fixed: #e2d6c0;
-  --color-tertiary-fixed-dim: #cbbda4;
-  --color-on-tertiary-fixed: #352e24;
-  --color-on-tertiary-fixed-variant: #5c5142;
+  --color-sun: #f4c95d;            /* check in */
+  --color-iris: #6f8fe8;           /* chat, writing */
+  --color-lilac: #9a82c4;          /* voice */
+  --color-sage: #7dba83;           /* breathe, ground */
+  --color-coral: #ef765a;          /* reach a person */
+  --color-rose: #e58aae;           /* what's coming up */
+  --color-on-accent: #141414;      /* text on any accent: all pass 5.7:1 or better */
 
-  --color-surface: #f5f1e8;
-  --color-surface-dim: #d2c3a9;
-  --color-surface-bright: #f5f1e8;
-  --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #efe7d6;
-  --color-surface-container: #ece2ce;
-  --color-surface-container-high: #e5dac4;
-  --color-surface-container-highest: #ddd0b8;
-  --color-surface-variant: #ddd0b8;
+  /* Counsellor Command Centre only. Triage genuinely needs status colour -
+     crisis, rising, resolved - so it gets its own set instead of borrowing the
+     accents above, which mean experiences. Never use these on survivor screens. */
+  --color-danger: #f06a64;
+  --color-warn: #eea04a;
+  --color-ok: #74c287;
+  --color-info: #8ea7f0;
 
-  --color-on-surface: #352e24;
-  --color-on-surface-variant: #5c5142;
-  --color-inverse-surface: #3a2c1e;
-  --color-inverse-on-surface: #f3ece0;
-  --color-outline: #8a7d68;
-  --color-outline-variant: #cabca6;
-  --color-surface-tint: #9c6743;
+  --font-sans: "Plus Jakarta Sans", "Noto Sans Devanagari", "Noto Sans Gurmukhi", system-ui, -apple-system, sans-serif;
+  --font-serif: "Fraunces", "Noto Sans Devanagari", "Noto Sans Gurmukhi", Georgia, serif;
 
-  --color-error: #ba1a1a;
-  --color-on-error: #ffffff;
-  --color-error-container: #ffdad6;
-  --color-on-error-container: #93000a;
+  --radius-tile: 14px;
+  --radius-card: 18px;
+  --radius-sheet: 24px;
 
-  --font-display: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
-  --font-body: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
-  --font-label: "Inter", system-ui, -apple-system, sans-serif;
+  --ease-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-breath: cubic-bezier(0.45, 0, 0.55, 1);
+}
 
-  --spacing-space-xs: 0.25rem;
-  --spacing-space-sm: 0.5rem;
-  --spacing-space-md: 1rem;
-  --spacing-space-lg: 1.5rem;
-  --spacing-space-xl: 2.5rem;
+/* ------------------------------------------------------------------
+   Themes. Dark is the quiet room; light is the same room by day - warm
+   off-white, white cards, soft hairlines. data-theme is set on <html> before
+   first paint (index.html) and by ThemeProvider (src/theme.tsx).
+
+   The accent FILLS are the same in both themes: colourful objects stay
+   colourful. Accents used as TEXT get deeper shades in light (below), because
+   yellow or pink type on white can't be read.
+   ------------------------------------------------------------------ */
+:root {
+  color-scheme: dark;
+  /* Illustration "room" colours (src/survivor/illustrations/scenes.tsx) */
+  --scene-room: #1b1a18;
+  --scene-floor: #24221f;
+  --scene-wood: #3b342d;
+  --scene-wood-deep: #2c2621;
+  --scene-ink: #f5f1e8;
+  --scene-paper: #e9e2d3;
+  --scene-metal: #f5f1e8;
+  --chart-grid: rgb(245 241 232 / 0.09);
+  --color-sun-ink: #f4c95d;        /* yellow when it has to be read: text, thin lines */
+  --scrim: rgb(0 0 0 / 0.65);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-canvas: #f6f2ea;
+  --color-surface: #fffdf9;
+  --color-raised: #f1ece2;
+  --color-soft: #e9e2d5;
+
+  --color-ink: #2a2622;
+  --color-ink-2: #665f55;          /* 5.6:1 on canvas */
+  --color-ink-3: #a39b8f;          /* decorative / placeholder only */
+  --color-line: rgb(42 38 34 / 0.10);
+  --color-line-strong: rgb(42 38 34 / 0.18);
+  --color-on-accent: #1f1b17;
+
+  /* Status colours deep enough to be text on white and fills under light text. */
+  --color-danger: #c23b33;
+  --color-warn: #a35a08;
+  --color-ok: #2e7a45;
+  --color-info: #3d5fc0;
+
+  --scene-room: #ede6d9;
+  --scene-floor: #e2d9c8;
+  --scene-wood: #b9a58c;
+  --scene-wood-deep: #a08b72;
+  --scene-ink: #fffdf8;
+  --scene-paper: #f4efe4;
+  --scene-metal: #8a7d6a;
+  --chart-grid: rgb(42 38 34 / 0.08);
+  --color-sun-ink: #8f6300;
+  --scrim: rgb(42 38 34 / 0.38);
+}
+
+/* Accents as text or outline, in light: deeper shades of the same hue.
+   Unlayered, so these win over the utilities. */
+:root[data-theme="light"] .text-sun { color: #8f6300; }
+:root[data-theme="light"] .text-sage { color: #3c7545; }
+:root[data-theme="light"] .text-coral { color: #b0432b; }
+:root[data-theme="light"] .text-rose { color: #a4436d; }
+:root[data-theme="light"] .text-lilac { color: #684f9c; }
+:root[data-theme="light"] .text-iris { color: #3d5cbf; }
+:root[data-theme="light"] .border-sun { border-color: #c4952a; }
+:root[data-theme="light"] .ring-sun { --tw-ring-color: #c4952a; }
+
+/* Light cards sit on the canvas with the faintest lift instead of darkness around them. */
+:root[data-theme="light"] .sahaas .bg-surface.border {
+  box-shadow: 0 1px 2px rgb(74 52 30 / 0.04), 0 4px 12px -8px rgb(74 52 30 / 0.10);
 }
 
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
   body {
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    background-color: #f5f1e8;
-    color: #352e24;
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
     -webkit-tap-highlight-color: transparent;
+    text-rendering: optimizeLegibility;
   }
 
-  /* Accessible keyboard focus ring app-wide. `:where()` keeps specificity at 0
-     so the `!important` reliably wins over per-element `focus:outline-none`,
-     while mouse clicks (no :focus-visible) stay ring-free. */
+  /* Keyboard focus, app-wide. `:where()` keeps specificity at 0 so this wins
+     over per-element `focus:outline-none`, and mouse clicks stay ring-free. */
   :where(button, a, [role="button"], input, select, textarea, [tabindex]):focus-visible {
     outline: 2px solid #9c6743 !important;
     outline-offset: 2px;
     border-radius: 4px;
   }
+  /* On the dark survivor surfaces the ring is cream, and follows the shape. */
+  .sahaas :where(button, a, [role="button"], input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-ink) !important;
+    outline-offset: 3px;
+    border-radius: inherit;
+  }
 }
 
-/* Custom Typography Helpers */
-.font-display { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; }
-.font-headline-lg { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 28px; line-height: 36px; font-weight: 600; }
-.font-headline-lg-mobile { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 22px; line-height: 30px; font-weight: 600; }
-.font-headline-md { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 20px; line-height: 28px; font-weight: 600; }
-.font-headline-sm { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 18px; line-height: 26px; font-weight: 600; }
-.font-body-lg { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 17px; line-height: 26px; font-weight: 400; }
-.font-body-md { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 15px; line-height: 24px; font-weight: 400; }
-.font-body-sm { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; line-height: 20px; font-weight: 400; }
-.font-label-lg { font-family: 'Inter', sans-serif; font-size: 14px; line-height: 20px; font-weight: 500; letter-spacing: 0.1px; }
-.font-label-md { font-family: 'Inter', sans-serif; font-size: 12px; line-height: 16px; font-weight: 500; letter-spacing: 0.2px; }
-.font-label-sm { font-family: 'Inter', sans-serif; font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0.3px; }
-
-/* Safe area padding utilities */
-.pb-safe {
-  padding-bottom: max(1rem, env(safe-area-inset-bottom));
-}
-.pt-safe {
-  padding-top: max(0.5rem, env(safe-area-inset-top));
-}
-
-/* Gentle entrance animations (used across views). Kept subtle so surfaces
-   settle in calmly rather than drawing attention. */
+/* Gentle entrance, shared with the Command Centre. */
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-@keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 .animate-fadeIn {
   animation: fadeIn 0.4s ease-out both;
-}
-.animate-fadeInUp {
-  animation: fadeInUp 0.45s ease-out both;
 }
 @keyframes slideInRight {
   from { opacity: 0; transform: translateX(24px); }
@@ -125,16 +165,7 @@
   animation: slideInRight 0.22s ease-out both;
 }
 
-/* Respect users who prefer reduced motion — trauma-informed default. */
-@media (prefers-reduced-motion: reduce) {
-  .animate-fadeIn,
-  .animate-fadeInUp,
-  .animate-slideInRight {
-    animation: none;
-  }
-}
-
-/* Hide scrollbars on horizontal chip / suggestion strips while keeping scroll. */
+/* Horizontal chip strips: scrollable, no scrollbar. */
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -143,326 +174,9 @@
   display: none;
 }
 
-
-/* Calming ambience: slow drifting light behind every victim screen. Long,
-   irregular periods so it never reads as a loop, and off for reduced motion. */
-@keyframes calmDriftA {
-  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
-  50% { transform: translate3d(40px, 30px, 0) scale(1.12); }
-}
-@keyframes calmDriftB {
-  0%, 100% { transform: translate3d(0, 0, 0) scale(1.05); }
-  50% { transform: translate3d(-35px, -25px, 0) scale(0.95); }
-}
-.calm-aura-a { animation: calmDriftA 29s ease-in-out infinite; }
-.calm-aura-b { animation: calmDriftB 37s ease-in-out infinite; }
-@keyframes gentlePulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(156, 103, 67, 0.28); }
-  50% { box-shadow: 0 0 0 10px rgba(156, 103, 67, 0); }
-}
-.gentle-pulse { animation: gentlePulse 4.5s ease-in-out infinite; }
-@keyframes sparkleIn {
-  0% { opacity: 0; transform: scale(0.6) rotate(-10deg); }
-  60% { opacity: 1; transform: scale(1.08) rotate(4deg); }
-  100% { opacity: 1; transform: scale(1) rotate(0); }
-}
-.sparkle-in { animation: sparkleIn 0.6s ease-out both; }
 @media (prefers-reduced-motion: reduce) {
-  .calm-aura-a, .calm-aura-b, .gentle-pulse, .sparkle-in { animation: none; }
+  .animate-fadeIn,
+  .animate-slideInRight {
+    animation: none;
+  }
 }
-
-/* ------------------------------------------------------------------
-   The 'warm' app style: softer rose and peach, for people who chose it (the
-   default for women). It re-colours the existing palette rather than forking
-   the components, so the 'calm' style - everyone else - is exactly as before.
-   ------------------------------------------------------------------ */
-[data-style="warm"] { background-color: #fcf5f6; }
-[data-style="warm"] .bg-\[\#9c6743\] { background-color: #b0587a; }
-[data-style="warm"] .hover\:bg-\[\#9c6743\]:hover { background-color: #b0587a; }
-[data-style="warm"] .text-\[\#9c6743\] { color: #b0587a; }
-[data-style="warm"] .hover\:text-\[\#9c6743\]:hover { color: #b0587a; }
-[data-style="warm"] .border-\[\#9c6743\] { border-color: #b0587a; }
-[data-style="warm"] .hover\:border-\[\#9c6743\]:hover { border-color: #b0587a; }
-[data-style="warm"] .ring-\[\#9c6743\] { --tw-ring-color: #b0587a; }
-[data-style="warm"] .from-\[\#9c6743\] { --tw-gradient-from: #b0587a; }
-[data-style="warm"] .to-\[\#9c6743\] { --tw-gradient-to: #b0587a; }
-[data-style="warm"] .via-\[\#9c6743\] { --tw-gradient-via: #b0587a; }
-[data-style="warm"] .bg-\[\#9c6743\]\/20 { background-color: color-mix(in srgb, #b0587a 20%, transparent); }
-[data-style="warm"] .bg-\[\#9c6743\]\/25 { background-color: color-mix(in srgb, #b0587a 25%, transparent); }
-[data-style="warm"] .bg-\[\#9c6743\]\/30 { background-color: color-mix(in srgb, #b0587a 30%, transparent); }
-[data-style="warm"] .bg-\[\#9c6743\]\/40 { background-color: color-mix(in srgb, #b0587a 40%, transparent); }
-[data-style="warm"] .bg-\[\#9c6743\]\/45 { background-color: color-mix(in srgb, #b0587a 45%, transparent); }
-[data-style="warm"] .bg-\[\#9c6743\]\/50 { background-color: color-mix(in srgb, #b0587a 50%, transparent); }
-[data-style="warm"] .bg-\[\#9c6743\]\/60 { background-color: color-mix(in srgb, #b0587a 60%, transparent); }
-[data-style="warm"] .bg-\[\#9c6743\]\/70 { background-color: color-mix(in srgb, #b0587a 70%, transparent); }
-[data-style="warm"] .bg-\[\#9c6743\]\/80 { background-color: color-mix(in srgb, #b0587a 80%, transparent); }
-[data-style="warm"] .bg-\[\#b3654a\] { background-color: #c96f8a; }
-[data-style="warm"] .hover\:bg-\[\#b3654a\]:hover { background-color: #c96f8a; }
-[data-style="warm"] .text-\[\#b3654a\] { color: #c96f8a; }
-[data-style="warm"] .hover\:text-\[\#b3654a\]:hover { color: #c96f8a; }
-[data-style="warm"] .border-\[\#b3654a\] { border-color: #c96f8a; }
-[data-style="warm"] .hover\:border-\[\#b3654a\]:hover { border-color: #c96f8a; }
-[data-style="warm"] .ring-\[\#b3654a\] { --tw-ring-color: #c96f8a; }
-[data-style="warm"] .from-\[\#b3654a\] { --tw-gradient-from: #c96f8a; }
-[data-style="warm"] .to-\[\#b3654a\] { --tw-gradient-to: #c96f8a; }
-[data-style="warm"] .via-\[\#b3654a\] { --tw-gradient-via: #c96f8a; }
-[data-style="warm"] .bg-\[\#b3654a\]\/20 { background-color: color-mix(in srgb, #c96f8a 20%, transparent); }
-[data-style="warm"] .bg-\[\#b3654a\]\/25 { background-color: color-mix(in srgb, #c96f8a 25%, transparent); }
-[data-style="warm"] .bg-\[\#b3654a\]\/30 { background-color: color-mix(in srgb, #c96f8a 30%, transparent); }
-[data-style="warm"] .bg-\[\#b3654a\]\/40 { background-color: color-mix(in srgb, #c96f8a 40%, transparent); }
-[data-style="warm"] .bg-\[\#b3654a\]\/45 { background-color: color-mix(in srgb, #c96f8a 45%, transparent); }
-[data-style="warm"] .bg-\[\#b3654a\]\/50 { background-color: color-mix(in srgb, #c96f8a 50%, transparent); }
-[data-style="warm"] .bg-\[\#b3654a\]\/60 { background-color: color-mix(in srgb, #c96f8a 60%, transparent); }
-[data-style="warm"] .bg-\[\#b3654a\]\/70 { background-color: color-mix(in srgb, #c96f8a 70%, transparent); }
-[data-style="warm"] .bg-\[\#b3654a\]\/80 { background-color: color-mix(in srgb, #c96f8a 80%, transparent); }
-[data-style="warm"] .bg-\[\#835636\] { background-color: #93466a; }
-[data-style="warm"] .hover\:bg-\[\#835636\]:hover { background-color: #93466a; }
-[data-style="warm"] .text-\[\#835636\] { color: #93466a; }
-[data-style="warm"] .hover\:text-\[\#835636\]:hover { color: #93466a; }
-[data-style="warm"] .border-\[\#835636\] { border-color: #93466a; }
-[data-style="warm"] .hover\:border-\[\#835636\]:hover { border-color: #93466a; }
-[data-style="warm"] .ring-\[\#835636\] { --tw-ring-color: #93466a; }
-[data-style="warm"] .from-\[\#835636\] { --tw-gradient-from: #93466a; }
-[data-style="warm"] .to-\[\#835636\] { --tw-gradient-to: #93466a; }
-[data-style="warm"] .via-\[\#835636\] { --tw-gradient-via: #93466a; }
-[data-style="warm"] .bg-\[\#835636\]\/20 { background-color: color-mix(in srgb, #93466a 20%, transparent); }
-[data-style="warm"] .bg-\[\#835636\]\/25 { background-color: color-mix(in srgb, #93466a 25%, transparent); }
-[data-style="warm"] .bg-\[\#835636\]\/30 { background-color: color-mix(in srgb, #93466a 30%, transparent); }
-[data-style="warm"] .bg-\[\#835636\]\/40 { background-color: color-mix(in srgb, #93466a 40%, transparent); }
-[data-style="warm"] .bg-\[\#835636\]\/45 { background-color: color-mix(in srgb, #93466a 45%, transparent); }
-[data-style="warm"] .bg-\[\#835636\]\/50 { background-color: color-mix(in srgb, #93466a 50%, transparent); }
-[data-style="warm"] .bg-\[\#835636\]\/60 { background-color: color-mix(in srgb, #93466a 60%, transparent); }
-[data-style="warm"] .bg-\[\#835636\]\/70 { background-color: color-mix(in srgb, #93466a 70%, transparent); }
-[data-style="warm"] .bg-\[\#835636\]\/80 { background-color: color-mix(in srgb, #93466a 80%, transparent); }
-[data-style="warm"] .bg-\[\#6f4a2f\] { background-color: #7d3d5c; }
-[data-style="warm"] .hover\:bg-\[\#6f4a2f\]:hover { background-color: #7d3d5c; }
-[data-style="warm"] .text-\[\#6f4a2f\] { color: #7d3d5c; }
-[data-style="warm"] .hover\:text-\[\#6f4a2f\]:hover { color: #7d3d5c; }
-[data-style="warm"] .border-\[\#6f4a2f\] { border-color: #7d3d5c; }
-[data-style="warm"] .hover\:border-\[\#6f4a2f\]:hover { border-color: #7d3d5c; }
-[data-style="warm"] .ring-\[\#6f4a2f\] { --tw-ring-color: #7d3d5c; }
-[data-style="warm"] .from-\[\#6f4a2f\] { --tw-gradient-from: #7d3d5c; }
-[data-style="warm"] .to-\[\#6f4a2f\] { --tw-gradient-to: #7d3d5c; }
-[data-style="warm"] .via-\[\#6f4a2f\] { --tw-gradient-via: #7d3d5c; }
-[data-style="warm"] .bg-\[\#6f4a2f\]\/20 { background-color: color-mix(in srgb, #7d3d5c 20%, transparent); }
-[data-style="warm"] .bg-\[\#6f4a2f\]\/25 { background-color: color-mix(in srgb, #7d3d5c 25%, transparent); }
-[data-style="warm"] .bg-\[\#6f4a2f\]\/30 { background-color: color-mix(in srgb, #7d3d5c 30%, transparent); }
-[data-style="warm"] .bg-\[\#6f4a2f\]\/40 { background-color: color-mix(in srgb, #7d3d5c 40%, transparent); }
-[data-style="warm"] .bg-\[\#6f4a2f\]\/45 { background-color: color-mix(in srgb, #7d3d5c 45%, transparent); }
-[data-style="warm"] .bg-\[\#6f4a2f\]\/50 { background-color: color-mix(in srgb, #7d3d5c 50%, transparent); }
-[data-style="warm"] .bg-\[\#6f4a2f\]\/60 { background-color: color-mix(in srgb, #7d3d5c 60%, transparent); }
-[data-style="warm"] .bg-\[\#6f4a2f\]\/70 { background-color: color-mix(in srgb, #7d3d5c 70%, transparent); }
-[data-style="warm"] .bg-\[\#6f4a2f\]\/80 { background-color: color-mix(in srgb, #7d3d5c 80%, transparent); }
-[data-style="warm"] .bg-\[\#7a5a3f\] { background-color: #8a4a6a; }
-[data-style="warm"] .hover\:bg-\[\#7a5a3f\]:hover { background-color: #8a4a6a; }
-[data-style="warm"] .text-\[\#7a5a3f\] { color: #8a4a6a; }
-[data-style="warm"] .hover\:text-\[\#7a5a3f\]:hover { color: #8a4a6a; }
-[data-style="warm"] .border-\[\#7a5a3f\] { border-color: #8a4a6a; }
-[data-style="warm"] .hover\:border-\[\#7a5a3f\]:hover { border-color: #8a4a6a; }
-[data-style="warm"] .ring-\[\#7a5a3f\] { --tw-ring-color: #8a4a6a; }
-[data-style="warm"] .from-\[\#7a5a3f\] { --tw-gradient-from: #8a4a6a; }
-[data-style="warm"] .to-\[\#7a5a3f\] { --tw-gradient-to: #8a4a6a; }
-[data-style="warm"] .via-\[\#7a5a3f\] { --tw-gradient-via: #8a4a6a; }
-[data-style="warm"] .bg-\[\#7a5a3f\]\/20 { background-color: color-mix(in srgb, #8a4a6a 20%, transparent); }
-[data-style="warm"] .bg-\[\#7a5a3f\]\/25 { background-color: color-mix(in srgb, #8a4a6a 25%, transparent); }
-[data-style="warm"] .bg-\[\#7a5a3f\]\/30 { background-color: color-mix(in srgb, #8a4a6a 30%, transparent); }
-[data-style="warm"] .bg-\[\#7a5a3f\]\/40 { background-color: color-mix(in srgb, #8a4a6a 40%, transparent); }
-[data-style="warm"] .bg-\[\#7a5a3f\]\/45 { background-color: color-mix(in srgb, #8a4a6a 45%, transparent); }
-[data-style="warm"] .bg-\[\#7a5a3f\]\/50 { background-color: color-mix(in srgb, #8a4a6a 50%, transparent); }
-[data-style="warm"] .bg-\[\#7a5a3f\]\/60 { background-color: color-mix(in srgb, #8a4a6a 60%, transparent); }
-[data-style="warm"] .bg-\[\#7a5a3f\]\/70 { background-color: color-mix(in srgb, #8a4a6a 70%, transparent); }
-[data-style="warm"] .bg-\[\#7a5a3f\]\/80 { background-color: color-mix(in srgb, #8a4a6a 80%, transparent); }
-[data-style="warm"] .bg-\[\#8a6a4a\] { background-color: #9a5a7a; }
-[data-style="warm"] .hover\:bg-\[\#8a6a4a\]:hover { background-color: #9a5a7a; }
-[data-style="warm"] .text-\[\#8a6a4a\] { color: #9a5a7a; }
-[data-style="warm"] .hover\:text-\[\#8a6a4a\]:hover { color: #9a5a7a; }
-[data-style="warm"] .border-\[\#8a6a4a\] { border-color: #9a5a7a; }
-[data-style="warm"] .hover\:border-\[\#8a6a4a\]:hover { border-color: #9a5a7a; }
-[data-style="warm"] .ring-\[\#8a6a4a\] { --tw-ring-color: #9a5a7a; }
-[data-style="warm"] .from-\[\#8a6a4a\] { --tw-gradient-from: #9a5a7a; }
-[data-style="warm"] .to-\[\#8a6a4a\] { --tw-gradient-to: #9a5a7a; }
-[data-style="warm"] .via-\[\#8a6a4a\] { --tw-gradient-via: #9a5a7a; }
-[data-style="warm"] .bg-\[\#8a6a4a\]\/20 { background-color: color-mix(in srgb, #9a5a7a 20%, transparent); }
-[data-style="warm"] .bg-\[\#8a6a4a\]\/25 { background-color: color-mix(in srgb, #9a5a7a 25%, transparent); }
-[data-style="warm"] .bg-\[\#8a6a4a\]\/30 { background-color: color-mix(in srgb, #9a5a7a 30%, transparent); }
-[data-style="warm"] .bg-\[\#8a6a4a\]\/40 { background-color: color-mix(in srgb, #9a5a7a 40%, transparent); }
-[data-style="warm"] .bg-\[\#8a6a4a\]\/45 { background-color: color-mix(in srgb, #9a5a7a 45%, transparent); }
-[data-style="warm"] .bg-\[\#8a6a4a\]\/50 { background-color: color-mix(in srgb, #9a5a7a 50%, transparent); }
-[data-style="warm"] .bg-\[\#8a6a4a\]\/60 { background-color: color-mix(in srgb, #9a5a7a 60%, transparent); }
-[data-style="warm"] .bg-\[\#8a6a4a\]\/70 { background-color: color-mix(in srgb, #9a5a7a 70%, transparent); }
-[data-style="warm"] .bg-\[\#8a6a4a\]\/80 { background-color: color-mix(in srgb, #9a5a7a 80%, transparent); }
-[data-style="warm"] .bg-\[\#efe7d6\] { background-color: #f8e9ef; }
-[data-style="warm"] .hover\:bg-\[\#efe7d6\]:hover { background-color: #f8e9ef; }
-[data-style="warm"] .text-\[\#efe7d6\] { color: #f8e9ef; }
-[data-style="warm"] .hover\:text-\[\#efe7d6\]:hover { color: #f8e9ef; }
-[data-style="warm"] .border-\[\#efe7d6\] { border-color: #f8e9ef; }
-[data-style="warm"] .hover\:border-\[\#efe7d6\]:hover { border-color: #f8e9ef; }
-[data-style="warm"] .ring-\[\#efe7d6\] { --tw-ring-color: #f8e9ef; }
-[data-style="warm"] .from-\[\#efe7d6\] { --tw-gradient-from: #f8e9ef; }
-[data-style="warm"] .to-\[\#efe7d6\] { --tw-gradient-to: #f8e9ef; }
-[data-style="warm"] .via-\[\#efe7d6\] { --tw-gradient-via: #f8e9ef; }
-[data-style="warm"] .bg-\[\#efe7d6\]\/20 { background-color: color-mix(in srgb, #f8e9ef 20%, transparent); }
-[data-style="warm"] .bg-\[\#efe7d6\]\/25 { background-color: color-mix(in srgb, #f8e9ef 25%, transparent); }
-[data-style="warm"] .bg-\[\#efe7d6\]\/30 { background-color: color-mix(in srgb, #f8e9ef 30%, transparent); }
-[data-style="warm"] .bg-\[\#efe7d6\]\/40 { background-color: color-mix(in srgb, #f8e9ef 40%, transparent); }
-[data-style="warm"] .bg-\[\#efe7d6\]\/45 { background-color: color-mix(in srgb, #f8e9ef 45%, transparent); }
-[data-style="warm"] .bg-\[\#efe7d6\]\/50 { background-color: color-mix(in srgb, #f8e9ef 50%, transparent); }
-[data-style="warm"] .bg-\[\#efe7d6\]\/60 { background-color: color-mix(in srgb, #f8e9ef 60%, transparent); }
-[data-style="warm"] .bg-\[\#efe7d6\]\/70 { background-color: color-mix(in srgb, #f8e9ef 70%, transparent); }
-[data-style="warm"] .bg-\[\#efe7d6\]\/80 { background-color: color-mix(in srgb, #f8e9ef 80%, transparent); }
-[data-style="warm"] .bg-\[\#e7d3b5\] { background-color: #f2d4e0; }
-[data-style="warm"] .hover\:bg-\[\#e7d3b5\]:hover { background-color: #f2d4e0; }
-[data-style="warm"] .text-\[\#e7d3b5\] { color: #f2d4e0; }
-[data-style="warm"] .hover\:text-\[\#e7d3b5\]:hover { color: #f2d4e0; }
-[data-style="warm"] .border-\[\#e7d3b5\] { border-color: #f2d4e0; }
-[data-style="warm"] .hover\:border-\[\#e7d3b5\]:hover { border-color: #f2d4e0; }
-[data-style="warm"] .ring-\[\#e7d3b5\] { --tw-ring-color: #f2d4e0; }
-[data-style="warm"] .from-\[\#e7d3b5\] { --tw-gradient-from: #f2d4e0; }
-[data-style="warm"] .to-\[\#e7d3b5\] { --tw-gradient-to: #f2d4e0; }
-[data-style="warm"] .via-\[\#e7d3b5\] { --tw-gradient-via: #f2d4e0; }
-[data-style="warm"] .bg-\[\#e7d3b5\]\/20 { background-color: color-mix(in srgb, #f2d4e0 20%, transparent); }
-[data-style="warm"] .bg-\[\#e7d3b5\]\/25 { background-color: color-mix(in srgb, #f2d4e0 25%, transparent); }
-[data-style="warm"] .bg-\[\#e7d3b5\]\/30 { background-color: color-mix(in srgb, #f2d4e0 30%, transparent); }
-[data-style="warm"] .bg-\[\#e7d3b5\]\/40 { background-color: color-mix(in srgb, #f2d4e0 40%, transparent); }
-[data-style="warm"] .bg-\[\#e7d3b5\]\/45 { background-color: color-mix(in srgb, #f2d4e0 45%, transparent); }
-[data-style="warm"] .bg-\[\#e7d3b5\]\/50 { background-color: color-mix(in srgb, #f2d4e0 50%, transparent); }
-[data-style="warm"] .bg-\[\#e7d3b5\]\/60 { background-color: color-mix(in srgb, #f2d4e0 60%, transparent); }
-[data-style="warm"] .bg-\[\#e7d3b5\]\/70 { background-color: color-mix(in srgb, #f2d4e0 70%, transparent); }
-[data-style="warm"] .bg-\[\#e7d3b5\]\/80 { background-color: color-mix(in srgb, #f2d4e0 80%, transparent); }
-[data-style="warm"] .bg-\[\#ece2ce\] { background-color: #f6e4ec; }
-[data-style="warm"] .hover\:bg-\[\#ece2ce\]:hover { background-color: #f6e4ec; }
-[data-style="warm"] .text-\[\#ece2ce\] { color: #f6e4ec; }
-[data-style="warm"] .hover\:text-\[\#ece2ce\]:hover { color: #f6e4ec; }
-[data-style="warm"] .border-\[\#ece2ce\] { border-color: #f6e4ec; }
-[data-style="warm"] .hover\:border-\[\#ece2ce\]:hover { border-color: #f6e4ec; }
-[data-style="warm"] .ring-\[\#ece2ce\] { --tw-ring-color: #f6e4ec; }
-[data-style="warm"] .from-\[\#ece2ce\] { --tw-gradient-from: #f6e4ec; }
-[data-style="warm"] .to-\[\#ece2ce\] { --tw-gradient-to: #f6e4ec; }
-[data-style="warm"] .via-\[\#ece2ce\] { --tw-gradient-via: #f6e4ec; }
-[data-style="warm"] .bg-\[\#ece2ce\]\/20 { background-color: color-mix(in srgb, #f6e4ec 20%, transparent); }
-[data-style="warm"] .bg-\[\#ece2ce\]\/25 { background-color: color-mix(in srgb, #f6e4ec 25%, transparent); }
-[data-style="warm"] .bg-\[\#ece2ce\]\/30 { background-color: color-mix(in srgb, #f6e4ec 30%, transparent); }
-[data-style="warm"] .bg-\[\#ece2ce\]\/40 { background-color: color-mix(in srgb, #f6e4ec 40%, transparent); }
-[data-style="warm"] .bg-\[\#ece2ce\]\/45 { background-color: color-mix(in srgb, #f6e4ec 45%, transparent); }
-[data-style="warm"] .bg-\[\#ece2ce\]\/50 { background-color: color-mix(in srgb, #f6e4ec 50%, transparent); }
-[data-style="warm"] .bg-\[\#ece2ce\]\/60 { background-color: color-mix(in srgb, #f6e4ec 60%, transparent); }
-[data-style="warm"] .bg-\[\#ece2ce\]\/70 { background-color: color-mix(in srgb, #f6e4ec 70%, transparent); }
-[data-style="warm"] .bg-\[\#ece2ce\]\/80 { background-color: color-mix(in srgb, #f6e4ec 80%, transparent); }
-[data-style="warm"] .bg-\[\#e5dac4\] { background-color: #efd9e3; }
-[data-style="warm"] .hover\:bg-\[\#e5dac4\]:hover { background-color: #efd9e3; }
-[data-style="warm"] .text-\[\#e5dac4\] { color: #efd9e3; }
-[data-style="warm"] .hover\:text-\[\#e5dac4\]:hover { color: #efd9e3; }
-[data-style="warm"] .border-\[\#e5dac4\] { border-color: #efd9e3; }
-[data-style="warm"] .hover\:border-\[\#e5dac4\]:hover { border-color: #efd9e3; }
-[data-style="warm"] .ring-\[\#e5dac4\] { --tw-ring-color: #efd9e3; }
-[data-style="warm"] .from-\[\#e5dac4\] { --tw-gradient-from: #efd9e3; }
-[data-style="warm"] .to-\[\#e5dac4\] { --tw-gradient-to: #efd9e3; }
-[data-style="warm"] .via-\[\#e5dac4\] { --tw-gradient-via: #efd9e3; }
-[data-style="warm"] .bg-\[\#e5dac4\]\/20 { background-color: color-mix(in srgb, #efd9e3 20%, transparent); }
-[data-style="warm"] .bg-\[\#e5dac4\]\/25 { background-color: color-mix(in srgb, #efd9e3 25%, transparent); }
-[data-style="warm"] .bg-\[\#e5dac4\]\/30 { background-color: color-mix(in srgb, #efd9e3 30%, transparent); }
-[data-style="warm"] .bg-\[\#e5dac4\]\/40 { background-color: color-mix(in srgb, #efd9e3 40%, transparent); }
-[data-style="warm"] .bg-\[\#e5dac4\]\/45 { background-color: color-mix(in srgb, #efd9e3 45%, transparent); }
-[data-style="warm"] .bg-\[\#e5dac4\]\/50 { background-color: color-mix(in srgb, #efd9e3 50%, transparent); }
-[data-style="warm"] .bg-\[\#e5dac4\]\/60 { background-color: color-mix(in srgb, #efd9e3 60%, transparent); }
-[data-style="warm"] .bg-\[\#e5dac4\]\/70 { background-color: color-mix(in srgb, #efd9e3 70%, transparent); }
-[data-style="warm"] .bg-\[\#e5dac4\]\/80 { background-color: color-mix(in srgb, #efd9e3 80%, transparent); }
-[data-style="warm"] .bg-\[\#f5f1e8\] { background-color: #fcf5f6; }
-[data-style="warm"] .hover\:bg-\[\#f5f1e8\]:hover { background-color: #fcf5f6; }
-[data-style="warm"] .text-\[\#f5f1e8\] { color: #fcf5f6; }
-[data-style="warm"] .hover\:text-\[\#f5f1e8\]:hover { color: #fcf5f6; }
-[data-style="warm"] .border-\[\#f5f1e8\] { border-color: #fcf5f6; }
-[data-style="warm"] .hover\:border-\[\#f5f1e8\]:hover { border-color: #fcf5f6; }
-[data-style="warm"] .ring-\[\#f5f1e8\] { --tw-ring-color: #fcf5f6; }
-[data-style="warm"] .from-\[\#f5f1e8\] { --tw-gradient-from: #fcf5f6; }
-[data-style="warm"] .to-\[\#f5f1e8\] { --tw-gradient-to: #fcf5f6; }
-[data-style="warm"] .via-\[\#f5f1e8\] { --tw-gradient-via: #fcf5f6; }
-[data-style="warm"] .bg-\[\#f5f1e8\]\/20 { background-color: color-mix(in srgb, #fcf5f6 20%, transparent); }
-[data-style="warm"] .bg-\[\#f5f1e8\]\/25 { background-color: color-mix(in srgb, #fcf5f6 25%, transparent); }
-[data-style="warm"] .bg-\[\#f5f1e8\]\/30 { background-color: color-mix(in srgb, #fcf5f6 30%, transparent); }
-[data-style="warm"] .bg-\[\#f5f1e8\]\/40 { background-color: color-mix(in srgb, #fcf5f6 40%, transparent); }
-[data-style="warm"] .bg-\[\#f5f1e8\]\/45 { background-color: color-mix(in srgb, #fcf5f6 45%, transparent); }
-[data-style="warm"] .bg-\[\#f5f1e8\]\/50 { background-color: color-mix(in srgb, #fcf5f6 50%, transparent); }
-[data-style="warm"] .bg-\[\#f5f1e8\]\/60 { background-color: color-mix(in srgb, #fcf5f6 60%, transparent); }
-[data-style="warm"] .bg-\[\#f5f1e8\]\/70 { background-color: color-mix(in srgb, #fcf5f6 70%, transparent); }
-[data-style="warm"] .bg-\[\#f5f1e8\]\/80 { background-color: color-mix(in srgb, #fcf5f6 80%, transparent); }
-[data-style="warm"] .bg-\[\#d9bf97\] { background-color: #eab7c9; }
-[data-style="warm"] .hover\:bg-\[\#d9bf97\]:hover { background-color: #eab7c9; }
-[data-style="warm"] .text-\[\#d9bf97\] { color: #eab7c9; }
-[data-style="warm"] .hover\:text-\[\#d9bf97\]:hover { color: #eab7c9; }
-[data-style="warm"] .border-\[\#d9bf97\] { border-color: #eab7c9; }
-[data-style="warm"] .hover\:border-\[\#d9bf97\]:hover { border-color: #eab7c9; }
-[data-style="warm"] .ring-\[\#d9bf97\] { --tw-ring-color: #eab7c9; }
-[data-style="warm"] .from-\[\#d9bf97\] { --tw-gradient-from: #eab7c9; }
-[data-style="warm"] .to-\[\#d9bf97\] { --tw-gradient-to: #eab7c9; }
-[data-style="warm"] .via-\[\#d9bf97\] { --tw-gradient-via: #eab7c9; }
-[data-style="warm"] .bg-\[\#d9bf97\]\/20 { background-color: color-mix(in srgb, #eab7c9 20%, transparent); }
-[data-style="warm"] .bg-\[\#d9bf97\]\/25 { background-color: color-mix(in srgb, #eab7c9 25%, transparent); }
-[data-style="warm"] .bg-\[\#d9bf97\]\/30 { background-color: color-mix(in srgb, #eab7c9 30%, transparent); }
-[data-style="warm"] .bg-\[\#d9bf97\]\/40 { background-color: color-mix(in srgb, #eab7c9 40%, transparent); }
-[data-style="warm"] .bg-\[\#d9bf97\]\/45 { background-color: color-mix(in srgb, #eab7c9 45%, transparent); }
-[data-style="warm"] .bg-\[\#d9bf97\]\/50 { background-color: color-mix(in srgb, #eab7c9 50%, transparent); }
-[data-style="warm"] .bg-\[\#d9bf97\]\/60 { background-color: color-mix(in srgb, #eab7c9 60%, transparent); }
-[data-style="warm"] .bg-\[\#d9bf97\]\/70 { background-color: color-mix(in srgb, #eab7c9 70%, transparent); }
-[data-style="warm"] .bg-\[\#d9bf97\]\/80 { background-color: color-mix(in srgb, #eab7c9 80%, transparent); }
-[data-style="warm"] .bg-\[\#c8a97e\] { background-color: #e39bb4; }
-[data-style="warm"] .hover\:bg-\[\#c8a97e\]:hover { background-color: #e39bb4; }
-[data-style="warm"] .text-\[\#c8a97e\] { color: #e39bb4; }
-[data-style="warm"] .hover\:text-\[\#c8a97e\]:hover { color: #e39bb4; }
-[data-style="warm"] .border-\[\#c8a97e\] { border-color: #e39bb4; }
-[data-style="warm"] .hover\:border-\[\#c8a97e\]:hover { border-color: #e39bb4; }
-[data-style="warm"] .ring-\[\#c8a97e\] { --tw-ring-color: #e39bb4; }
-[data-style="warm"] .from-\[\#c8a97e\] { --tw-gradient-from: #e39bb4; }
-[data-style="warm"] .to-\[\#c8a97e\] { --tw-gradient-to: #e39bb4; }
-[data-style="warm"] .via-\[\#c8a97e\] { --tw-gradient-via: #e39bb4; }
-[data-style="warm"] .bg-\[\#c8a97e\]\/20 { background-color: color-mix(in srgb, #e39bb4 20%, transparent); }
-[data-style="warm"] .bg-\[\#c8a97e\]\/25 { background-color: color-mix(in srgb, #e39bb4 25%, transparent); }
-[data-style="warm"] .bg-\[\#c8a97e\]\/30 { background-color: color-mix(in srgb, #e39bb4 30%, transparent); }
-[data-style="warm"] .bg-\[\#c8a97e\]\/40 { background-color: color-mix(in srgb, #e39bb4 40%, transparent); }
-[data-style="warm"] .bg-\[\#c8a97e\]\/45 { background-color: color-mix(in srgb, #e39bb4 45%, transparent); }
-[data-style="warm"] .bg-\[\#c8a97e\]\/50 { background-color: color-mix(in srgb, #e39bb4 50%, transparent); }
-[data-style="warm"] .bg-\[\#c8a97e\]\/60 { background-color: color-mix(in srgb, #e39bb4 60%, transparent); }
-[data-style="warm"] .bg-\[\#c8a97e\]\/70 { background-color: color-mix(in srgb, #e39bb4 70%, transparent); }
-[data-style="warm"] .bg-\[\#c8a97e\]\/80 { background-color: color-mix(in srgb, #e39bb4 80%, transparent); }
-[data-style="warm"] .bg-\[\#ecdcbf\] { background-color: #f4d9e4; }
-[data-style="warm"] .hover\:bg-\[\#ecdcbf\]:hover { background-color: #f4d9e4; }
-[data-style="warm"] .text-\[\#ecdcbf\] { color: #f4d9e4; }
-[data-style="warm"] .hover\:text-\[\#ecdcbf\]:hover { color: #f4d9e4; }
-[data-style="warm"] .border-\[\#ecdcbf\] { border-color: #f4d9e4; }
-[data-style="warm"] .hover\:border-\[\#ecdcbf\]:hover { border-color: #f4d9e4; }
-[data-style="warm"] .ring-\[\#ecdcbf\] { --tw-ring-color: #f4d9e4; }
-[data-style="warm"] .from-\[\#ecdcbf\] { --tw-gradient-from: #f4d9e4; }
-[data-style="warm"] .to-\[\#ecdcbf\] { --tw-gradient-to: #f4d9e4; }
-[data-style="warm"] .via-\[\#ecdcbf\] { --tw-gradient-via: #f4d9e4; }
-[data-style="warm"] .bg-\[\#ecdcbf\]\/20 { background-color: color-mix(in srgb, #f4d9e4 20%, transparent); }
-[data-style="warm"] .bg-\[\#ecdcbf\]\/25 { background-color: color-mix(in srgb, #f4d9e4 25%, transparent); }
-[data-style="warm"] .bg-\[\#ecdcbf\]\/30 { background-color: color-mix(in srgb, #f4d9e4 30%, transparent); }
-[data-style="warm"] .bg-\[\#ecdcbf\]\/40 { background-color: color-mix(in srgb, #f4d9e4 40%, transparent); }
-[data-style="warm"] .bg-\[\#ecdcbf\]\/45 { background-color: color-mix(in srgb, #f4d9e4 45%, transparent); }
-[data-style="warm"] .bg-\[\#ecdcbf\]\/50 { background-color: color-mix(in srgb, #f4d9e4 50%, transparent); }
-[data-style="warm"] .bg-\[\#ecdcbf\]\/60 { background-color: color-mix(in srgb, #f4d9e4 60%, transparent); }
-[data-style="warm"] .bg-\[\#ecdcbf\]\/70 { background-color: color-mix(in srgb, #f4d9e4 70%, transparent); }
-[data-style="warm"] .bg-\[\#ecdcbf\]\/80 { background-color: color-mix(in srgb, #f4d9e4 80%, transparent); }
-[data-style="warm"] .bg-\[\#9a5b13\] { background-color: #a8527a; }
-[data-style="warm"] .hover\:bg-\[\#9a5b13\]:hover { background-color: #a8527a; }
-[data-style="warm"] .text-\[\#9a5b13\] { color: #a8527a; }
-[data-style="warm"] .hover\:text-\[\#9a5b13\]:hover { color: #a8527a; }
-[data-style="warm"] .border-\[\#9a5b13\] { border-color: #a8527a; }
-[data-style="warm"] .hover\:border-\[\#9a5b13\]:hover { border-color: #a8527a; }
-[data-style="warm"] .ring-\[\#9a5b13\] { --tw-ring-color: #a8527a; }
-[data-style="warm"] .from-\[\#9a5b13\] { --tw-gradient-from: #a8527a; }
-[data-style="warm"] .to-\[\#9a5b13\] { --tw-gradient-to: #a8527a; }
-[data-style="warm"] .via-\[\#9a5b13\] { --tw-gradient-via: #a8527a; }
-[data-style="warm"] .bg-\[\#9a5b13\]\/20 { background-color: color-mix(in srgb, #a8527a 20%, transparent); }
-[data-style="warm"] .bg-\[\#9a5b13\]\/25 { background-color: color-mix(in srgb, #a8527a 25%, transparent); }
-[data-style="warm"] .bg-\[\#9a5b13\]\/30 { background-color: color-mix(in srgb, #a8527a 30%, transparent); }
-[data-style="warm"] .bg-\[\#9a5b13\]\/40 { background-color: color-mix(in srgb, #a8527a 40%, transparent); }
-[data-style="warm"] .bg-\[\#9a5b13\]\/45 { background-color: color-mix(in srgb, #a8527a 45%, transparent); }
-[data-style="warm"] .bg-\[\#9a5b13\]\/50 { background-color: color-mix(in srgb, #a8527a 50%, transparent); }
-[data-style="warm"] .bg-\[\#9a5b13\]\/60 { background-color: color-mix(in srgb, #a8527a 60%, transparent); }
-[data-style="warm"] .bg-\[\#9a5b13\]\/70 { background-color: color-mix(in srgb, #a8527a 70%, transparent); }
-[data-style="warm"] .bg-\[\#9a5b13\]\/80 { background-color: color-mix(in srgb, #a8527a 80%, transparent); }
-[data-style="warm"] .bg-\[\#f5f1e8\]\/90 { background-color: color-mix(in srgb, #fcf5f6 90%, transparent); }
-[data-style="warm"] .bg-\[\#f5f1e8\]\/95 { background-color: color-mix(in srgb, #fcf5f6 95%, transparent); }
-[data-style="warm"] .bg-\[\#efe7d6\]\/90 { background-color: color-mix(in srgb, #f8e9ef 90%, transparent); }
-[data-style="warm"] .bg-\[\#efe7d6\]\/95 { background-color: color-mix(in srgb, #f8e9ef 95%, transparent); }

@@ -3,6 +3,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { LiveEvent } from '../lib/liveStream';
+import { TONE } from './palette';
 
 const bus = new EventTarget();
 
@@ -27,10 +28,10 @@ export function useLiveEvents(handler: (event: LiveEvent) => void, types?: strin
 }
 
 export const LEVEL_STYLE: Record<string, { label: string; color: string; bg: string }> = {
-  none: { label: 'Calm', color: '#5c5142', bg: '#efe7d6' },
-  low: { label: 'Low', color: '#7a5a3f', bg: '#f3e6cf' },
-  moderate: { label: 'Moderate', color: '#8a4b00', bg: '#fbdcae' },
-  high: { label: 'High', color: '#93000a', bg: '#ffdad6' },
+  none: { label: 'Calm', ...TONE.neutral },
+  low: { label: 'Low', ...TONE.low },
+  moderate: { label: 'Moderate', ...TONE.warn },
+  high: { label: 'High', ...TONE.danger },
 };
 
 export const CHANNEL_LABEL: Record<string, { label: string; icon: string }> = {

@@ -47,6 +47,8 @@ export interface SignUpInput {
   consent: Consent;
   gender: Gender | null;
   phone: string;
+  /** The language picked on the welcome screen. */
+  language?: LanguageCode;
 }
 
 export const MIN_PASSWORD_LENGTH = 8;       // matches the backend (monitoring/auth.py)
@@ -83,7 +85,7 @@ async function currentUser(): Promise<SessionUser> {
   return toUser(await api.me());
 }
 
-export async function signUp({ name, username, password, consent, gender, phone }: SignUpInput): Promise<SessionUser> {
+export async function signUp({ name, username, password, consent, gender, phone, language = 'en' }: SignUpInput): Promise<SessionUser> {
   if (!name.trim()) throw new AuthError('Please share a name we can greet you by.');
   if (!gender) throw new AuthError('Please choose how you identify - "Prefer not to say" is fine.');
   const cleanPhone = phone.trim();
@@ -99,7 +101,7 @@ export async function signUp({ name, username, password, consent, gender, phone 
   try {
     await api.register({
       name: name.trim(),
-      language: 'en',
+      language,
       consent,
       username: username.trim(),
       password,

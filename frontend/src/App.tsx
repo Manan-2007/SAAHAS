@@ -1,88 +1,26 @@
-import React, { useCallback, useEffect, useState, lazy, Suspense } from 'react';
-import { AppView, LanguageCode, WellBeingMetric } from './types';
-import { Header } from './components/Header';
-import { BottomNav } from './components/BottomNav';
-import { HomeDashboard } from './components/HomeDashboard';
-import { SafeChat } from './components/SafeChat';
-import { VoiceCompanion } from './components/VoiceCompanion';
-import { VoiceCall } from './components/VoiceCall';
-import { WellBeingTracker } from './components/WellBeingTracker';
-import { Support, SupportTab } from './components/Support';
-import { BreathingSpace, CalmBackdrop } from './components/Calm';
+import React, { Suspense, lazy, useState } from 'react';
+import { QuickExitDecoy } from './components/QuickExitDecoy';
+import { useAuth } from './auth/AuthProvider';
+import { clearSession } from './lib/api';
+import { SurvivorApp } from './survivor/SurvivorApp';
+
 // The counsellor dashboard is a large, separate surface — lazy-load it so the
 // survivor-facing app stays lean and never downloads the admin bundle.
 const AdminApp = lazy(() => import('./admin/AdminApp'));
-import { QuickExitDecoy } from './components/QuickExitDecoy';
-import { CallModal } from './components/CallModal';
-import { useAuth } from './auth/AuthProvider';
-import { Wellbeing, api, clearSession } from './lib/api';
-import { STARTING_METRICS, applyWellbeing } from './lib/wellbeing';
 
 export default function App() {
   const { user, logout, lock } = useAuth();
-  const isVictim = user.role === 'victim';
-  const [currentView, setCurrentView] = useState<AppView>('home-dashboard');
-  const [language, setLanguage] = useState<LanguageCode>(user.language);
   const [isQuickExited, setIsQuickExited] = useState(false);
-  const [isCallOpen, setIsCallOpen] = useState(false);
-  const [selectedMood, setSelectedMood] = useState<string>('');
-  const [metrics, setMetrics] = useState<WellBeingMetric[]>(STARTING_METRICS);
-  const [wellbeingMessage, setWellbeingMessage] = useState<string | null>(null);
-  const [supportTab, setSupportTab] = useState<SupportTab>('counsellor');
-  // 'warm' (more encouraging) or 'calm' - chosen from gender at sign-up, changeable in Settings
-  const uiStyle = user.uiStyle;
-
-  const openSupport = useCallback((tab: SupportTab) => {
-    setSupportTab(tab);
-    setCurrentView('support-network');
-  }, []);
-
-  const navigate = useCallback((view: AppView) => {
-    if (view === 'legal-prep') setSupportTab('court');
-    else if (view === 'support-network') setSupportTab('counsellor');
-    setCurrentView(view);
-  }, []);
-
-  const showWellbeing = useCallback((w: Wellbeing) => {
-    setMetrics((m) => applyWellbeing(m, w));
-    setWellbeingMessage(w.message);
-  }, []);
-
-  // Every screen starts at the top, not wherever the last one was scrolled to.
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [currentView, supportTab]);
-
-  // The home rows come from the victim's own check-ins (trend words, never scores)
-  useEffect(() => {
-    if (!isVictim) return;
-    let live = true;
-    api.wellbeing().then((w) => live && showWellbeing(w)).catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [isVictim, showWellbeing]);
 
   // Quick Safety Exit: the token is wiped at once and the decoy covers the
   // screen. Coming back needs a fresh sign-in, so whoever picks up the phone
-  // next can't just tap back in.
+  // next can't just tap back in. Leaving the survivor app also ends any live
+  // voice session and releases the microphone.
   const handleQuickExit = () => {
     clearSession();
-    setIsCallOpen(false);
     setIsQuickExited(true);
   };
 
-  const handleUpdateMetric = (metricId: string, status: string, description?: string) => {
-    setMetrics(prev =>
-      prev.map(m =>
-        m.id === metricId
-          ? { ...m, trend: status as WellBeingMetric['trend'], ...(description ? { description } : {}) }
-          : m
-      )
-    );
-  };
-
-  // If in emergency quick-exit decoy mode:
   if (isQuickExited) {
     return <QuickExitDecoy onRestoreSanctuary={lock} />;
   }
@@ -93,9 +31,9 @@ export default function App() {
     return (
       <Suspense
         fallback={
-          <div className="min-h-screen bg-[#f5f1e8] flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3 text-[#9c6743]">
-              <div className="w-8 h-8 rounded-full border-2 border-[#e7d3b5] border-t-[#9c6743] animate-spin"></div>
+          <div className="sahaas flex items-center justify-center" role="status">
+            <div className="flex flex-col items-center gap-3 text-ink-2">
+              <div className="w-8 h-8 rounded-full border-2 border-line-strong border-t-sun animate-spin"></div>
               <span className="text-sm font-semibold">Opening Command Centre…</span>
             </div>
           </div>
@@ -106,99 +44,5 @@ export default function App() {
     );
   }
 
-  return (
-    <div data-style={uiStyle}
-         className="relative min-h-screen bg-[#f5f1e8] text-[#352e24] flex flex-col font-sans selection:bg-[#e7d3b5] selection:text-[#7a5a3f]">
-      <CalmBackdrop style={uiStyle} />
-      {/* Top Header */}
-      <Header
-        currentView={currentView}
-        language={language}
-        onLanguageChange={setLanguage}
-        onQuickExit={handleQuickExit}
-        onNavigate={navigate}
-      />
-
-      {/* Main Content Area */}
-      <main className="relative z-10 flex-1 w-full pt-24 pb-24 min-h-screen overflow-x-hidden">
-        {currentView === 'home-dashboard' && (
-          <HomeDashboard
-            language={language}
-            onNavigate={navigate}
-            onOpenSupport={openSupport}
-            onOpenCall={() => setIsCallOpen(true)}
-            selectedMood={selectedMood}
-            onMoodSelect={setSelectedMood}
-            metrics={metrics}
-            wellbeingMessage={wellbeingMessage}
-          />
-        )}
-
-        {currentView === 'safe-chat' && (
-          <SafeChat
-            onBack={() => setCurrentView('home-dashboard')}
-            onOpenCall={() => setIsCallOpen(true)}
-            onOpenSupport={openSupport}
-            onUpdateMetric={handleUpdateMetric}
-          />
-        )}
-
-        {currentView === 'voice-call' && (
-          <VoiceCall
-            onBack={() => setCurrentView('home-dashboard')}
-            onOpenCall={() => setIsCallOpen(true)}
-            onCheckIn={() => setCurrentView('voice-companion')}
-            language={language}
-          />
-        )}
-
-        {currentView === 'voice-companion' && (
-          <VoiceCompanion
-            onBack={() => setCurrentView('home-dashboard')}
-            onTalk={() => setCurrentView('voice-call')}
-            onUpdateMetric={handleUpdateMetric}
-          />
-        )}
-
-        {currentView === 'well-being' && (
-          <WellBeingTracker
-            onBack={() => setCurrentView('home-dashboard')}
-            language={language}
-            onWellbeing={showWellbeing}
-            onOpenCall={() => setIsCallOpen(true)}
-          />
-        )}
-
-        {(currentView === 'support-network' || currentView === 'legal-prep') && (
-          <Support
-            key={supportTab}
-            initialTab={supportTab}
-            language={language}
-            onBack={() => setCurrentView('home-dashboard')}
-            onOpenCall={() => setIsCallOpen(true)}
-          />
-        )}
-      </main>
-
-      {/* Bottom Navigation (Only visible in User views, or accessible always) */}
-      <BottomNav
-        currentView={currentView}
-        language={language}
-        onNavigate={navigate}
-      />
-
-      {/* A breathing space, one tap away on every screen */}
-      <BreathingSpace style={uiStyle} />
-
-      {/* Private Voice Call Modal */}
-      <CallModal
-        isOpen={isCallOpen}
-        onClose={() => setIsCallOpen(false)}
-        onAskCallback={() => {
-          setIsCallOpen(false);
-          openSupport('counsellor');
-        }}
-      />
-    </div>
-  );
+  return <SurvivorApp onQuickExit={handleQuickExit} />;
 }

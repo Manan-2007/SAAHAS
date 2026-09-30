@@ -1,0 +1,131 @@
+/* ------------------------------------------------------------------
+   Survivor surface: motion and tactility. Tokens live in src/index.css.
+
+   Motion should feel like breathing: 200-400 ms, soft easing, small
+   translations. Nothing loops for attention. Everything here switches off
+   under prefers-reduced-motion.
+   ------------------------------------------------------------------ */
+
+.sahaas {
+  min-height: 100dvh;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Devanagari and Gurmukhi sit taller than Latin; give them room to breathe. */
+.sahaas:lang(hi),
+.sahaas:lang(pa) {
+  line-height: 1.6;
+}
+/* Devanagari and Gurmukhi have no italic: a slanted script reads as broken,
+   so the emotional lines stay upright in those languages. */
+.sahaas:lang(hi) .font-serif,
+.sahaas:lang(pa) .font-serif {
+  font-style: normal;
+  font-weight: 400;
+}
+
+.safe-top { padding-top: max(0.5rem, env(safe-area-inset-top)); }
+.safe-bottom { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+
+/* ---------------------------------------------------------------- tactile
+   Objects you can press: a slight lip at the bottom edge that flattens
+   on press, like a physical key. No glow, no gradient. */
+.tactile {
+  box-shadow: inset 0 -3px 0 rgb(0 0 0 / 0.22);
+  transition:
+    transform 180ms var(--ease-soft),
+    box-shadow 180ms var(--ease-soft),
+    background-color 200ms var(--ease-soft),
+    border-color 200ms var(--ease-soft);
+}
+.tactile:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 -1px 0 rgb(0 0 0 / 0.22);
+}
+.tactile-quiet {
+  transition:
+    transform 180ms var(--ease-soft),
+    background-color 200ms var(--ease-soft),
+    border-color 200ms var(--ease-soft);
+}
+.tactile-quiet:active:not(:disabled) {
+  transform: translateY(1px) scale(0.995);
+}
+@media (hover: hover) {
+  .tactile-quiet:hover:not(:disabled) {
+    border-color: var(--color-line-strong);
+    background-color: var(--color-raised);
+  }
+}
+
+/* ---------------------------------------------------------------- entrances
+   A screen settles in: each block rises 6px and fades, staggered by --i. */
+@keyframes settleIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.settle {
+  animation: settleIn 380ms var(--ease-soft) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+@keyframes softFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.soft-fade { animation: softFade 320ms var(--ease-soft) both; }
+
+@keyframes sheetUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: none; }
+}
+.sheet-up { animation: sheetUp 320ms var(--ease-soft) both; }
+
+/* Typing dots in chat: a slow ripple, not a bounce. */
+@keyframes dotBreath {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  50% { opacity: 0.9; transform: translateY(-2px); }
+}
+.dot-breath { animation: dotBreath 1.4s var(--ease-breath) infinite; }
+
+/* Gentle shimmer for loading placeholders. */
+@keyframes hush {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.8; }
+}
+.hush { animation: hush 1.8s var(--ease-breath) infinite; }
+
+/* The breathing orb's scale is driven inline; this keeps it smooth. */
+.breath-disc {
+  transition-property: transform;
+  transition-timing-function: var(--ease-breath);
+  will-change: transform;
+}
+
+/* Long words (Hindi compounds, pasted links) never push the layout sideways.
+   break-word, not anywhere: "anywhere" also shrinks min-content, which lets
+   flex rows squeeze text into a one-word column. */
+.break-soft {
+  overflow-wrap: break-word;
+  word-break: normal;
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settle,
+  .soft-fade,
+  .sheet-up {
+    animation: none;
+  }
+  .dot-breath,
+  .hush {
+    animation: none;
+    opacity: 0.7;
+  }
+  .tactile,
+  .tactile-quiet,
+  .breath-disc {
+    transition: none;
+  }
+}

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ApiError, api } from '../../lib/api';
+import { PageHeader, QuietButton } from './PageHeader';
 
 // A read-only reference for counsellors: how the Distress Score and alerts
 // actually work. The numbers mirror backend/monitoring/scoring.py - change
@@ -98,80 +99,71 @@ const ContactCard: React.FC = () => {
   return (
     <div className={CARD}>
       <h3 className={HEADING}>
-        <span className="material-symbols-outlined text-[#9c6743]">contact_phone</span>
+        <span className="material-symbols-outlined text-sun">contact_phone</span>
         Your contact card (what clients see)
       </h3>
-      <p className="text-[11px] text-[#837562]">
+      <p className="text-[11px] text-ink-2">
         Shown in the client app under Support → My counsellor, next to “Request a call back” and messages. Use a work
         number, not a personal one.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <input value={phone} onChange={(e) => { setPhone(e.target.value); setState('idle'); }} maxLength={20}
-               placeholder="Work phone, e.g. 0120-555-0101" className="px-3 py-2 rounded-lg border border-[#e5dac4] text-xs" />
+               placeholder="Work phone, e.g. 0120-555-0101" className="px-3 py-2 rounded-lg border border-line text-xs" />
         <input value={hours} onChange={(e) => { setHours(e.target.value); setState('idle'); }} maxLength={120}
-               placeholder="Hours, e.g. Mon-Sat 10am-6pm" className="px-3 py-2 rounded-lg border border-[#e5dac4] text-xs" />
+               placeholder="Hours, e.g. Mon-Sat 10am-6pm" className="px-3 py-2 rounded-lg border border-line text-xs" />
       </div>
       <button onClick={save} disabled={state === 'saving' || state === 'loading'}
-              className="px-3.5 py-2 rounded-lg bg-[#9c6743] text-white text-xs font-semibold disabled:opacity-50">
+              className="px-3.5 py-2 rounded-lg bg-ink text-canvas text-xs font-semibold disabled:opacity-50">
         {state === 'saved' ? 'Saved' : state === 'saving' ? 'Saving…' : 'Save contact card'}
       </button>
-      {error && <p className="text-xs text-[#93000a]">{error}</p>}
+      {error && <p className="text-xs text-danger">{error}</p>}
     </div>
   );
 };
 
-const CARD = 'bg-white rounded-xl p-6 shadow-xs border border-[#ece2ce] space-y-4';
-const HEADING = "font-['Plus_Jakarta_Sans'] text-base font-bold text-[#352e24] flex items-center gap-2";
+const CARD = 'bg-surface rounded-tile p-6 border border-line space-y-4';
+const HEADING = " text-base font-bold text-ink flex items-center gap-2";
 
-export const SystemSettingsView: React.FC = () => (
+export const SystemSettingsView: React.FC<{ onOpenHowScoring?: () => void }> = ({ onOpenHowScoring }) => (
   <div className="flex flex-col space-y-6">
-    {/* Header */}
-    <div className="bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce]">
-      <div className="flex items-center gap-2">
-        <span className="material-symbols-outlined text-[#9c6743] text-[24px]">menu_book</span>
-        <h2 className="font-['Plus_Jakarta_Sans'] text-xl text-[#352e24] font-bold">Settings &amp; how SAHAAS scores</h2>
-        <span className="px-2.5 py-0.5 rounded-full bg-[#e5dac4] text-[#352e24] font-['Inter'] text-xs font-bold">
-          Distress Score v1
-        </span>
-      </div>
-      <p className="font-['Plus_Jakarta_Sans'] text-xs text-[#837562] mt-1">
-        A reference for reading the dashboard. The score is recomputed every hour and after every check-in. The weights
-        are fixed and not yet clinically validated; they'll be fitted to pilot data.
-      </p>
-    </div>
+    <PageHeader
+      title="Settings & scoring"
+      description="Your contact card, and a reference for reading the dashboard. The score is recomputed every hour and after every check-in; its weights are fixed and not yet clinically validated."
+      actions={onOpenHowScoring && <QuietButton icon="help" onClick={onOpenHowScoring}>How scoring works</QuietButton>}
+    />
 
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <div className={`lg:col-span-6 ${CARD}`}>
         <h3 className={HEADING}>
-          <span className="material-symbols-outlined text-[#9c6743]">tune</span>
+          <span className="material-symbols-outlined text-sun">tune</span>
           What goes into the score (0-100)
         </h3>
         {WEIGHTS.map((w) => (
           <div key={w.label}>
-            <div className="flex justify-between text-xs font-semibold text-[#352e24]">
+            <div className="flex justify-between text-xs font-semibold text-ink">
               <span>{w.label}</span>
-              <span className="text-[#9c6743] font-mono">{w.weight}%</span>
+              <span className="text-sun font-mono">{w.weight}%</span>
             </div>
-            <div className="h-1.5 rounded-full bg-[#efe7d6] mt-1.5 overflow-hidden">
-              <div className="h-full bg-[#9c6743] rounded-full" style={{ width: `${w.weight}%` }} />
+            <div className="h-1.5 rounded-full bg-raised mt-1.5 overflow-hidden">
+              <div className="h-full bg-ink rounded-full" style={{ width: `${w.weight}%` }} />
             </div>
-            <p className="text-[11px] text-[#837562] mt-1">{w.detail}</p>
+            <p className="text-[11px] text-ink-2 mt-1">{w.detail}</p>
           </div>
         ))}
-        <p className="text-[11px] text-[#837562] pt-2 border-t border-[#efe7d6]">
+        <p className="text-[11px] text-ink-2 pt-2 border-t border-line">
           Signals with no recent data are left out and the rest re-weighted. "Signal coverage" on a case shows how much
           of the score had data.
         </p>
 
         <h3 className={`${HEADING} pt-2`}>
-          <span className="material-symbols-outlined text-[#9c6743]">stacked_bar_chart</span>
+          <span className="material-symbols-outlined text-sun">stacked_bar_chart</span>
           Tiers
         </h3>
         <div className="grid grid-cols-4 gap-2 text-center">
           {TIERS.map((t) => (
-            <div key={t.name} className="p-2 rounded-lg bg-[#f5f1e8] border border-[#e5dac4]">
-              <span className="block text-xs font-bold text-[#352e24]">{t.name}</span>
-              <span className="text-[11px] text-[#837562] font-mono">{t.range}</span>
+            <div key={t.name} className="p-2 rounded-lg bg-canvas border border-line">
+              <span className="block text-xs font-bold text-ink">{t.name}</span>
+              <span className="text-[11px] text-ink-2 font-mono">{t.range}</span>
             </div>
           ))}
         </div>
@@ -181,29 +173,29 @@ export const SystemSettingsView: React.FC = () => (
         <ContactCard />
         <div className={CARD}>
           <h3 className={HEADING}>
-            <span className="material-symbols-outlined text-[#ba1a1a]">notifications</span>
+            <span className="material-symbols-outlined text-danger">notifications</span>
             When an alert is raised
           </h3>
           <div className="space-y-2">
             {ALERTS.map((a) => (
-              <div key={a.name} className="p-2.5 rounded-lg bg-[#f5f1e8] border border-[#e5dac4]">
+              <div key={a.name} className="p-2.5 rounded-lg bg-canvas border border-line">
                 <div className="flex justify-between text-xs">
-                  <span className="font-semibold text-[#352e24]">{a.name}</span>
-                  <span className="font-mono text-[#9c6743]">{a.level}</span>
+                  <span className="font-semibold text-ink">{a.name}</span>
+                  <span className="font-mono text-sun">{a.level}</span>
                 </div>
-                <p className="text-[11px] text-[#5c5142] mt-0.5">{a.when}</p>
+                <p className="text-[11px] text-ink-2 mt-0.5">{a.when}</p>
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-[#837562]">One open alert per reason at a time. Crisis alerts always refresh.</p>
+          <p className="text-[11px] text-ink-2">One open alert per reason at a time. Crisis alerts always refresh.</p>
         </div>
 
         <div className={CARD}>
           <h3 className={HEADING}>
-            <span className="material-symbols-outlined text-[#8a6a4a]">lock</span>
+            <span className="material-symbols-outlined text-ink-2">lock</span>
             Data and privacy
           </h3>
-          <ul className="space-y-1.5 text-xs text-[#5c5142] list-disc pl-4">
+          <ul className="space-y-1.5 text-xs text-ink-2 list-disc pl-4">
             {PRIVACY.map((p) => (
               <li key={p}>{p}</li>
             ))}

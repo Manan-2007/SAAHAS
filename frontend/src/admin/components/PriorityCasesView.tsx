@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { CaseData } from '../types';
+import { PageHeader } from './PageHeader';
+import { needsYou } from '../data/live';
 
 interface PriorityCasesViewProps {
   cases: CaseData[];
@@ -7,190 +9,132 @@ interface PriorityCasesViewProps {
   onNavigateToDetail: (caseId: string) => void;
 }
 
-export const PriorityCasesView: React.FC<PriorityCasesViewProps> = ({
-  cases,
-  onSelectCase,
-  onNavigateToDetail,
-}) => {
-  const [filter, setFilter] = useState<'ALL' | 'HIGH' | 'DETERIORATION' | 'ACOUSTIC' | 'COURT'>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
+type Filter = 'ALL' | 'HIGH' | 'DETERIORATION' | 'ACOUSTIC' | 'COURT';
 
-  const filteredCases = cases.filter((c) => {
-    const matchesSearch =
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.assignedCounsellor.toLowerCase().includes(searchQuery.toLowerCase());
+const FILTERS: { id: Filter; label: string; test: (c: CaseData) => boolean }[] = [
+  { id: 'ALL', label: 'Everyone', test: () => true },
+  { id: 'HIGH', label: 'Need you first', test: needsYou },
+  { id: 'DETERIORATION', label: 'Gone quiet', test: (c) => c.status.includes('Deterioration') },
+  { id: 'ACOUSTIC', label: 'Voice distress', test: (c) => typeof c.fatigueMarker === 'number' && c.fatigueMarker >= 60 },
+  {
+    id: 'COURT',
+    label: 'Court date soon',
+    test: (c) => c.escalationReason.toLowerCase().includes('court') || c.keyHighlight.toLowerCase().includes('hearing'),
+  },
+];
 
-    if (!matchesSearch) return false;
+const TONE_TEXT: Record<CaseData['statusType'], string> = {
+  error: 'text-danger',
+  amber: 'text-warn',
+  success: 'text-ok',
+  info: 'text-ink-2',
+};
+const TONE_DOT: Record<CaseData['statusType'], string> = {
+  error: 'bg-danger',
+  amber: 'bg-warn',
+  success: 'bg-ok',
+  info: 'bg-ink-3',
+};
 
-    if (filter === 'HIGH') return c.escalationRisk === 'HIGH';
-    if (filter === 'DETERIORATION') return c.status.includes('Deterioration');
-    if (filter === 'ACOUSTIC') return typeof c.fatigueMarker === 'number' && c.fatigueMarker >= 60;   // voice signal high
-    if (filter === 'COURT') return c.escalationReason.toLowerCase().includes('court') || c.keyHighlight.toLowerCase().includes('hearing');
+// The caseload as one calm table: who, how they are, what's happening, and
+// the whole row opens their case.
+export const PriorityCasesView: React.FC<PriorityCasesViewProps> = ({ cases, onNavigateToDetail }) => {
+  const [filter, setFilter] = useState<Filter>('ALL');
+  const [query, setQuery] = useState('');
 
-    return true;
-  });
+  const q = query.trim().toLowerCase();
+  const matches = (c: CaseData) =>
+    !q || c.name.toLowerCase().includes(q) || c.number.toLowerCase().includes(q) || c.assignedCounsellor.toLowerCase().includes(q);
+  const active = FILTERS.find((f) => f.id === filter)!;
+  const rows = cases.filter((c) => matches(c) && active.test(c));
 
   return (
-    <div className="flex flex-col space-y-6">
-      {/* Header & Filter bar */}
-      <div className="bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce]">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#ba1a1a] text-[24px]">emergency</span>
-              <h2 className="font-['Plus_Jakarta_Sans'] text-xl text-[#352e24] font-bold">
-                Priority Triage Queue
-              </h2>
-              <span className="px-2.5 py-0.5 rounded-full bg-[#ffdad6] text-[#ba1a1a] font-['Inter'] text-xs font-bold">
-                {cases.filter((c) => c.escalationRisk === 'HIGH').length} High Attention
-              </span>
-            </div>
-            <p className="font-['Plus_Jakarta_Sans'] text-xs text-[#837562] mt-1">
-              Most urgent first: crisis signals, then the highest Distress Score.
-            </p>
-          </div>
+    <div className="flex flex-col gap-5">
+      <PageHeader title="Caseload" description="Everyone in your care, most urgent first: crisis signals, then the highest Distress Score." />
 
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <span className="material-symbols-outlined absolute left-3 top-2.5 text-[#837562] text-[18px]">
-                search
-              </span>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search patient, ID, or counsellor..."
-                className="pl-9 pr-3 py-1.5 rounded-lg border border-[#e5dac4] bg-[#f5f1e8] text-xs text-[#352e24] w-64 focus:outline-none focus:border-[#9c6743]"
-              />
-            </div>
-          </div>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div role="tablist" aria-label="Filter the caseload" className="flex flex-wrap gap-1">
+          {FILTERS.map((f) => {
+            const count = cases.filter((c) => matches(c) && f.test(c)).length;
+            const on = filter === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => setFilter(f.id)}
+                className={`h-8 px-3 rounded-lg text-[13px] transition-colors ${
+                  on ? 'bg-raised text-ink font-semibold' : 'text-ink-2 hover:text-ink hover:bg-raised/60'
+                }`}
+              >
+                {f.label}
+                <span className="ml-1.5 text-ink-2 font-normal tabular-nums">{count}</span>
+              </button>
+            );
+          })}
         </div>
-
-        {/* Filter Pills */}
-        <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-[#efe7d6]">
-          {[
-            { id: 'ALL', label: 'All Cases' },
-            { id: 'HIGH', label: 'High Attention' },
-            { id: 'DETERIORATION', label: 'Silent Deterioration' },
-            { id: 'ACOUSTIC', label: 'Voice Distress' },
-            { id: 'COURT', label: 'Upcoming Court Dates' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setFilter(tab.id as any)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-['Inter'] transition-colors ${
-                filter === tab.id
-                  ? 'bg-[#9c6743] text-white font-semibold shadow-xs'
-                  : 'bg-[#f5f1e8] text-[#837562] hover:bg-[#efe7d6]'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <label className="relative">
+          <span className="sr-only">Search the caseload</span>
+          <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-2 text-[18px]" aria-hidden>
+            search
+          </span>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name or ID"
+            className="h-9 pl-9 pr-3 rounded-lg border border-line bg-surface text-[13px] text-ink placeholder:text-ink-2/70 w-full md:w-64 focus:outline-none focus:border-line-strong"
+          />
+        </label>
       </div>
 
-      {/* Triage Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filteredCases.map((c) => (
-          <div
-            key={c.id}
-            className="bg-white rounded-xl p-5 shadow-xs border border-[#ece2ce] flex flex-col justify-between hover:shadow-md transition-all"
-          >
-            <div>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-11 h-11 rounded-xl flex items-center justify-center font-['Plus_Jakarta_Sans'] text-base font-bold shadow-xs ${
-                      c.statusType === 'error'
-                        ? 'bg-[#ffdad6] text-[#ba1a1a]'
-                        : c.statusType === 'success'
-                        ? 'bg-[#e7d3b5] text-[#7a5a3f]'
-                        : 'bg-[#e5dac4] text-[#352e24]'
-                    }`}
-                  >
-                    {c.initials}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-['Plus_Jakarta_Sans'] text-base font-bold text-[#352e24]">
-                        {c.name}
-                      </h3>
-                      <span className="font-mono text-xs bg-[#efe7d6] px-2 py-0.5 rounded text-[#837562]">
-                        {c.number}
-                      </span>
-                    </div>
-                    <span className="text-xs text-[#837562]">
-                      Assigned: {c.assignedCounsellor} • {c.timeAgo}
-                    </span>
-                  </div>
-                </div>
-
-                <span
-                  className={`px-2.5 py-1 rounded-full text-xs font-['Inter'] font-bold ${
-                    c.escalationRisk === 'HIGH'
-                      ? 'bg-[#ffdad6] text-[#ba1a1a]'
-                      : 'bg-[#e7d3b5] text-[#7a5a3f]'
-                  }`}
-                >
-                  {c.escalationRisk}
-                </span>
-              </div>
-
-              <div className="mt-4 p-3 bg-[#efe7d6] rounded-xl">
-                <span className="font-['Inter'] text-xs font-semibold text-[#ba1a1a] block">
-                  {c.status}
-                </span>
-                <p className="font-['Plus_Jakarta_Sans'] text-xs text-[#5c5142] mt-1">
-                  {c.alertDescription}
-                </p>
-              </div>
-
-              {/* Mini Vitals */}
-              <div className="grid grid-cols-3 gap-2 mt-3 text-center">
-                <div className="p-2 bg-[#f5f1e8] rounded-lg border border-[#e5dac4]">
-                  <span className="text-[10px] text-[#837562] block font-['Inter']">Distress</span>
-                  <span className="font-bold text-sm text-[#352e24]">{c.wellbeingIndex}</span>
-                </div>
-                <div className="p-2 bg-[#f5f1e8] rounded-lg border border-[#e5dac4]">
-                  <span className="text-[10px] text-[#837562] block font-['Inter']">Voice</span>
-                  <span className="font-bold text-sm text-[#352e24]">{c.fatigueMarker}</span>
-                </div>
-                <div className="p-2 bg-[#f5f1e8] rounded-lg border border-[#e5dac4]">
-                  <span className="text-[10px] text-[#837562] block font-['Inter']">Confidence</span>
-                  <span className="font-bold text-sm text-[#8a6a4a]">{c.aiConfidencePct}%</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-[#efe7d6] flex items-center justify-between">
-              <span className="text-xs text-[#837562] flex items-center gap-1 font-medium">
-                <span className="material-symbols-outlined text-[16px] text-[#9c6743]">
-                  {c.keyHighlightIcon}
-                </span>
-                {c.keyHighlight}
-              </span>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => onSelectCase(c.id)}
-                  className="px-3 py-1.5 rounded-lg bg-[#ece2ce] hover:bg-[#e5dac4] text-[#352e24] text-xs font-semibold font-['Inter'] transition-colors"
-                >
-                  Quick Triage
-                </button>
+      <div className="rounded-card border border-line bg-surface overflow-hidden">
+        <div className="hidden md:grid grid-cols-[minmax(0,2.2fr)_minmax(0,2fr)_minmax(0,2.4fr)_70px_70px_28px] gap-4 px-5 py-2.5 border-b border-line text-[12px] text-ink-2">
+          <span>Person</span>
+          <span>Status</span>
+          <span>What's happening</span>
+          <span className="text-right">Score</span>
+          <span className="text-right">Voice</span>
+          <span />
+        </div>
+        {rows.length === 0 ? (
+          <p className="px-5 py-8 text-center text-[14px] text-ink-2">No one matches this view.</p>
+        ) : (
+          <ul>
+            {rows.map((c, i) => (
+              <li key={c.id} className={i > 0 ? 'border-t border-line' : ''}>
                 <button
                   type="button"
                   onClick={() => onNavigateToDetail(c.id)}
-                  className="px-3 py-1.5 rounded-lg bg-[#9c6743] hover:bg-[#b3654a] text-white text-xs font-semibold font-['Inter'] transition-colors"
+                  className="w-full text-left px-5 py-3.5 grid grid-cols-[1fr_auto] md:grid-cols-[minmax(0,2.2fr)_minmax(0,2fr)_minmax(0,2.4fr)_70px_70px_28px] gap-x-4 gap-y-1 items-center hover:bg-raised/60 transition-colors"
                 >
-                  Case Signals
+                  <span className="flex items-center gap-3 min-w-0">
+                    <span className="w-8 h-8 rounded-full bg-soft text-ink grid place-items-center text-[12px] font-bold shrink-0" aria-hidden>
+                      {c.initials}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[14px] font-semibold text-ink truncate">{c.name}</span>
+                      <span className="block text-[12px] text-ink-2">
+                        {c.number} · {c.timeAgo}
+                      </span>
+                    </span>
+                  </span>
+                  <span className={`flex items-center gap-1.5 text-[13px] font-medium min-w-0 ${TONE_TEXT[c.statusType]} max-md:col-start-1`}>
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${TONE_DOT[c.statusType]}`} aria-hidden />
+                    <span className="truncate">{c.status}</span>
+                  </span>
+                  <span className="text-[13px] text-ink-2 truncate max-md:col-start-1">{c.keyHighlight}</span>
+                  <span className="hidden md:block text-right text-[14px] font-semibold text-ink tabular-nums">{c.wellbeingIndex}</span>
+                  <span className="hidden md:block text-right text-[14px] text-ink-2 tabular-nums">{c.fatigueMarker}</span>
+                  <span className="material-symbols-outlined text-[20px] text-ink-3 max-md:row-start-1 max-md:col-start-2 justify-self-end" aria-hidden>
+                    chevron_right
+                  </span>
                 </button>
-              </div>
-            </div>
-          </div>
-        ))}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

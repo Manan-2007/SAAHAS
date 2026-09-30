@@ -1,23 +1,31 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  ArrowRight,
   ArrowLeft,
-  Check,
+  ArrowRight,
+  Clock,
+  Heart,
   MessageCircle,
+  Mic,
   Moon,
+  Music,
+  PenLine,
+  Sparkles,
   Sun,
   Sunrise,
   Sunset,
-  Music,
   Users,
   Wind,
-  Heart,
-  Sparkles,
-  Mic,
-  PenLine,
-  Clock,
 } from 'lucide-react';
-import { AuthError, SessionUser, OnboardingProfile, LanguageCode, saveProfile } from './authStore';
+import { AuthError, LanguageCode, OnboardingProfile, SessionUser, saveProfile } from './authStore';
+import { useLanguage } from '../i18n/LanguageProvider';
+import { EntryShell } from '../survivor/entry/EntryShell';
+import { Button, IconButton } from '../survivor/ui/Button';
+import { LanguageSwitcher, TextField } from '../survivor/ui/forms';
+import { Choice, ChoiceGroup, Notice, ProgressIndicator, Serif } from '../survivor/ui/primitives';
+
+// A gentle baseline, captured once: the person's OWN normal, which later
+// check-ins are read against. One question per screen, nothing is a test,
+// and the answers (the same values as before) are stored encrypted.
 
 interface OnboardingProps {
   user: SessionUser;
@@ -25,329 +33,194 @@ interface OnboardingProps {
 }
 
 type Draft = Omit<OnboardingProfile, 'completedAt'>;
+type Option = { value: string; icon: React.ElementType };
 
-const LANGS: { code: LanguageCode; label: string }[] = [
-  { code: 'en', label: 'English' },
-  { code: 'hi', label: 'हिन्दी' },
-  { code: 'pa', label: 'ਪੰਜਾਬੀ' },
-];
-
-const COPING = [
+const COPING: Option[] = [
   { value: 'Talking it out', icon: MessageCircle },
   { value: 'Quiet time alone', icon: Moon },
   { value: 'Staying busy', icon: Sparkles },
   { value: 'Prayer or faith', icon: Heart },
   { value: 'Listening to music', icon: Music },
 ];
-
-const LOW_TIME = [
+const LOW_TIME: Option[] = [
   { value: 'Mornings', icon: Sunrise },
   { value: 'Afternoons', icon: Sun },
   { value: 'Evenings', icon: Sunset },
   { value: 'Late at night', icon: Moon },
   { value: 'It varies', icon: Clock },
 ];
-
-const CHANNEL = [
+const CHANNEL: Option[] = [
   { value: 'Speaking out loud', icon: Mic },
   { value: 'Writing it down', icon: PenLine },
   { value: 'A bit of both', icon: MessageCircle },
 ];
-
 const MOODS = [
-  { score: 1, label: 'Very heavy' },
-  { score: 2, label: 'Heavy' },
-  { score: 3, label: 'Mixed' },
-  { score: 4, label: 'Mostly okay' },
   { score: 5, label: 'Steady' },
+  { score: 4, label: 'Mostly okay' },
+  { score: 3, label: 'Mixed' },
+  { score: 2, label: 'Heavy' },
+  { score: 1, label: 'Very heavy' },
 ];
-
-const COMFORT = [
+const COMFORT: Option[] = [
   { value: 'Slow breathing', icon: Wind },
   { value: 'Grounding my senses', icon: Sparkles },
   { value: 'Talking to someone', icon: Users },
   { value: 'Music or sound', icon: Music },
 ];
 
-const TOTAL_STEPS = 6;
+const Title = React.forwardRef<HTMLHeadingElement, { children: React.ReactNode; hint?: string }>(({ children, hint }, ref) => (
+  <div>
+    <h1 ref={ref} tabIndex={-1} className="outline-none text-[28px] leading-[1.2] font-semibold tracking-[-0.015em] break-soft">
+      {children}
+    </h1>
+    {hint && <p className="mt-2 text-[16px] text-ink-2 break-soft">{hint}</p>}
+  </div>
+));
+
+const Options: React.FC<{ value: string; options: Option[]; label: string; onSelect: (value: string) => void }> = ({
+  value,
+  options,
+  label,
+  onSelect,
+}) => (
+  <ChoiceGroup label={label}>
+    {options.map((o) => (
+      <Choice key={o.value} icon={o.icon} accent="sage" selected={value === o.value} onSelect={() => onSelect(o.value)}>
+        {o.value}
+      </Choice>
+    ))}
+  </ChoiceGroup>
+);
+
+const TOTAL = 6;
 
 export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
-  const [step, setStep] = useState(1);
+  const { t, language, setLanguage } = useLanguage();
+  const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<Draft>({
     displayName: user.name,
-    language: 'en',
+    language,
     coping: '',
     lowTime: '',
     channel: '',
     baselineMood: 0,
     comfort: '',
   });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    heading.current?.focus();
+  }, [step]);
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }));
-  const next = () => setStep((s) => Math.min(TOTAL_STEPS, s + 1));
-  const back = () => setStep((s) => Math.max(1, s - 1));
-
-  // Pick-and-advance for the single-select steps.
+  const next = () => setStep((s) => Math.min(TOTAL - 1, s + 1));
   const pick = <K extends keyof Draft>(key: K, value: Draft[K]) => {
     set(key, value);
-    setTimeout(next, 140);
+    window.setTimeout(next, 260);
+  };
+  const chooseLanguage = (code: LanguageCode) => {
+    set('language', code);
+    setLanguage(code);
   };
 
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  // Saved to the backend (encrypted), not the browser: it's personal
   const finish = async () => {
     if (saving) return;
     setSaving(true);
-    setSaveError(null);
-    const profile: OnboardingProfile = { ...draft, completedAt: new Date().toISOString() };
+    setError(null);
     try {
-      onComplete(await saveProfile(profile));
+      onComplete(await saveProfile({ ...draft, completedAt: new Date().toISOString() }));
     } catch (err) {
-      setSaveError(err instanceof AuthError ? err.message : 'We couldn’t save that just now. Please try again.');
+      setError(err instanceof AuthError ? err.message : 'We couldn’t save that just now. Please try again.');
       setSaving(false);
     }
   };
 
-  const firstName = (draft.displayName || user.name).split(' ')[0];
-
-  const OptionButton: React.FC<{
-    active: boolean;
-    icon: React.ElementType;
-    label: string;
-    onClick: () => void;
-  }> = ({ active, icon: Icon, label, onClick }) => (
-    <button
-      onClick={onClick}
-      className={`w-full p-3.5 rounded-2xl border text-left text-sm font-medium transition-all active:scale-[0.99] flex items-center gap-3 ${
-        active
-          ? 'border-[#9c6743] bg-[#efe7d6] text-[#7a5a3f]'
-          : 'border-[#e5dac4] bg-white hover:bg-[#f5f1e8] text-[#352e24]'
-      }`}
-    >
-      <span
-        className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-          active ? 'bg-[#9c6743] text-white' : 'bg-[#efe7d6] text-[#9c6743]'
-        }`}
-      >
-        <Icon className="w-4.5 h-4.5" />
-      </span>
-      <span className="flex-1">{label}</span>
-      {active && <Check className="w-4 h-4 text-[#9c6743]" />}
-    </button>
-  );
+  const firstName = (draft.displayName || user.name).trim().split(/\s+/)[0];
 
   return (
-    <div className="min-h-screen bg-[#f5f1e8] text-[#352e24] flex flex-col font-sans relative overflow-hidden">
-      <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-[#e7d3b5]/50 blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-28 -left-24 w-80 h-80 rounded-full bg-[#9fafca]/20 blur-3xl pointer-events-none" />
-
-      {/* Progress */}
-      <div className="relative z-10 px-5 pt-5">
-        <div className="max-w-md mx-auto flex items-center gap-3">
-          {step > 1 ? (
-            <button onClick={back} className="p-1.5 rounded-lg text-[#8a7d68] hover:bg-white/70" aria-label="Back">
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-          ) : (
-            <span className="w-7" />
-          )}
-          <div className="flex-1 h-1.5 rounded-full bg-[#e5dac4] overflow-hidden">
-            <div
-              className="h-full rounded-full bg-[#9c6743] transition-all duration-300"
-              style={{ width: `${(step / TOTAL_STEPS) * 100}%` }}
-            />
+    <EntryShell>
+      <div className="flex flex-col gap-6 pt-2">
+        <div className="flex items-center gap-3">
+          {step > 0 ? <IconButton icon={ArrowLeft} label={t('common.back')} onClick={() => setStep(step - 1)} /> : <span className="w-12" />}
+          <div className="flex-1">
+            <ProgressIndicator current={step + 1} total={TOTAL} accent="sage" label={`Question ${step + 1} of ${TOTAL}`} />
           </div>
-          <span className="text-[11px] font-semibold text-[#8a7d68] w-8 text-right">
-            {step}/{TOTAL_STEPS}
-          </span>
         </div>
-      </div>
 
-      <main className="relative z-10 flex-1 flex items-start justify-center px-4 py-6">
-        <div className="w-full max-w-md animate-fadeIn" key={step}>
-          {/* Step 1 — name + language */}
+        <section key={step} className="flex flex-col gap-6 settle">
+          {step === 0 && (
+            <>
+              <div>
+                <Serif className="text-[20px] text-ink-2">a few gentle questions.</Serif>
+                <Title ref={heading} hint="They help SAHAAS understand your own normal, so it can notice - kindly - when something shifts. Nothing here is a test.">
+                  Let’s get to know you
+                </Title>
+              </div>
+              <TextField label="What should we call you?" value={draft.displayName} onChange={(e) => set('displayName', e.target.value)} maxLength={80} />
+              <div className="flex flex-col gap-2.5">
+                <p className="text-[15px] font-semibold">Which language feels most comfortable?</p>
+                <LanguageSwitcher value={draft.language} onChange={chooseLanguage} label="Language" />
+              </div>
+              <Button variant="accent" accent="sage" size="lg" full iconRight={ArrowRight} disabled={!draft.displayName.trim()} onClick={next}>
+                {t('common.continue')}
+              </Button>
+            </>
+          )}
+
           {step === 1 && (
-            <div className="flex flex-col gap-5">
-              <div className="text-center">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#c8a97e] to-[#9c6743] flex items-center justify-center mx-auto shadow-md">
-                  <Sparkles className="w-7 h-7 text-white" />
-                </div>
-                <h1 className="text-2xl font-bold mt-4">Let’s get to know you</h1>
-                <p className="text-sm text-[#5c5142] mt-1.5 leading-relaxed">
-                  A few gentle questions help SAHAAS understand your own normal — so it can notice, kindly,
-                  when something shifts. Nothing here is a test.
-                </p>
-              </div>
-
-              <div className="bg-white rounded-3xl p-5 border border-[#e5dac4] shadow-sm flex flex-col gap-4">
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-xs font-semibold text-[#5c5142]">What should we call you?</span>
-                  <input
-                    type="text"
-                    value={draft.displayName}
-                    onChange={(e) => set('displayName', e.target.value)}
-                    placeholder="A name you feel safe with"
-                    className="w-full px-3 py-2.5 rounded-xl bg-[#f5f1e8] border border-[#e5dac4] text-sm text-[#352e24] placeholder-[#a89a83] outline-none focus:border-[#9c6743] focus:ring-2 focus:ring-[#9c6743]/20"
-                  />
-                </label>
-
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-xs font-semibold text-[#5c5142]">Which language feels most comfortable?</span>
-                  <div className="grid grid-cols-3 gap-2">
-                    {LANGS.map((l) => (
-                      <button
-                        key={l.code}
-                        onClick={() => set('language', l.code)}
-                        className={`py-2 rounded-xl border text-sm font-semibold transition-all ${
-                          draft.language === l.code
-                            ? 'border-[#9c6743] bg-[#efe7d6] text-[#7a5a3f]'
-                            : 'border-[#e5dac4] bg-white hover:bg-[#f5f1e8] text-[#352e24]'
-                        }`}
-                      >
-                        {l.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={next}
-                disabled={!draft.displayName.trim()}
-                className="w-full py-3 rounded-2xl bg-[#9c6743] text-white font-semibold text-sm shadow-md hover:bg-[#835636] active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
-              >
-                <span>Continue</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
+            <>
+              <Title ref={heading} hint="There’s no right answer.">When things feel heavy, what usually helps, {firstName}?</Title>
+              <Options value={draft.coping} options={COPING} label="What usually helps" onSelect={(v) => pick('coping', v)} />
+            </>
           )}
 
-          {/* Step 2 — coping */}
           {step === 2 && (
-            <StepShell
-              eyebrow="Understanding you"
-              title={`When things feel heavy, what usually helps, ${firstName}?`}
-              subtitle="There is no right answer — this simply helps us support you the way you like."
-            >
-              {COPING.map((o) => (
-                <OptionButton key={o.value} active={draft.coping === o.value} icon={o.icon} label={o.value} onClick={() => pick('coping', o.value)} />
-              ))}
-            </StepShell>
+            <>
+              <Title ref={heading} hint="So check-ins can come at a time that actually helps.">What time of day tends to feel hardest?</Title>
+              <Options value={draft.lowTime} options={LOW_TIME} label="Hardest time of day" onSelect={(v) => pick('lowTime', v)} />
+            </>
           )}
 
-          {/* Step 3 — low time */}
           {step === 3 && (
-            <StepShell
-              eyebrow="Your rhythm"
-              title="What time of day tends to feel hardest?"
-              subtitle="Knowing this lets SAHAAS check in gently, at a time that actually helps."
-            >
-              {LOW_TIME.map((o) => (
-                <OptionButton key={o.value} active={draft.lowTime === o.value} icon={o.icon} label={o.value} onClick={() => pick('lowTime', o.value)} />
-              ))}
-            </StepShell>
+            <>
+              <Title ref={heading} hint="You can always change your mind.">When you share, what feels more natural?</Title>
+              <Options value={draft.channel} options={CHANNEL} label="How you like to share" onSelect={(v) => pick('channel', v)} />
+            </>
           )}
 
-          {/* Step 4 — channel */}
           {step === 4 && (
-            <StepShell
-              eyebrow="How you open up"
-              title="When you share, what feels more natural?"
-              subtitle="You can always change this later. We’ll lead with what’s easiest for you."
-            >
-              {CHANNEL.map((o) => (
-                <OptionButton key={o.value} active={draft.channel === o.value} icon={o.icon} label={o.value} onClick={() => pick('channel', o.value)} />
-              ))}
-            </StepShell>
-          )}
-
-          {/* Step 5 — baseline mood */}
-          {step === 5 && (
-            <StepShell
-              eyebrow="A gentle baseline"
-              title="How has this past week felt for you?"
-              subtitle="Just a soft sense of it. This becomes your personal baseline — never a score against anyone else."
-            >
-              <div className="flex flex-col gap-2">
+            <>
+              <Title ref={heading} hint="Just a soft sense of it. It’s your own baseline, never compared with anyone.">How has this past week felt?</Title>
+              <ChoiceGroup label="How this past week felt">
                 {MOODS.map((m) => (
-                  <button
-                    key={m.score}
-                    onClick={() => pick('baselineMood', m.score)}
-                    className={`w-full p-3.5 rounded-2xl border text-left text-sm font-medium transition-all active:scale-[0.99] flex items-center gap-3 ${
-                      draft.baselineMood === m.score
-                        ? 'border-[#9c6743] bg-[#efe7d6] text-[#7a5a3f]'
-                        : 'border-[#e5dac4] bg-white hover:bg-[#f5f1e8] text-[#352e24]'
-                    }`}
-                  >
-                    <span className="flex gap-1 shrink-0">
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <span
-                          key={i}
-                          className={`w-2 h-6 rounded-full ${i <= m.score ? 'bg-[#9c6743]' : 'bg-[#e5dac4]'}`}
-                        />
-                      ))}
-                    </span>
-                    <span className="flex-1">{m.label}</span>
-                    {draft.baselineMood === m.score && <Check className="w-4 h-4 text-[#9c6743]" />}
-                  </button>
+                  <Choice key={m.score} accent="sage" selected={draft.baselineMood === m.score} onSelect={() => pick('baselineMood', m.score)}>
+                    {m.label}
+                  </Choice>
                 ))}
-              </div>
-            </StepShell>
+              </ChoiceGroup>
+            </>
           )}
 
-          {/* Step 6 — comfort + finish */}
-          {step === 6 && (
-            <StepShell
-              eyebrow="Almost there"
-              title="What helps you feel safe and grounded?"
-              subtitle="We’ll keep this close, so support is one tap away when you need it."
-            >
-              <div className="flex flex-col gap-2">
-                {COMFORT.map((o) => (
-                  <OptionButton
-                    key={o.value}
-                    active={draft.comfort === o.value}
-                    icon={o.icon}
-                    label={o.value}
-                    onClick={() => set('comfort', o.value)}
-                  />
-                ))}
-              </div>
-              {saveError && (
-                <p role="alert" className="mt-3 text-xs text-[#93000a] bg-[#ffdad6]/60 border border-[#ffdad6] rounded-xl px-3 py-2">
-                  {saveError}
-                </p>
-              )}
-              <button
-                onClick={finish}
-                disabled={!draft.comfort || saving}
-                className="mt-4 w-full py-3 rounded-2xl bg-[#9c6743] text-white font-semibold text-sm shadow-md hover:bg-[#835636] active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
-              >
-                <span>{saving ? 'Saving…' : 'Enter my sanctuary'}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </StepShell>
+          {step === 5 && (
+            <>
+              <Title ref={heading} hint="We’ll keep it close, so it’s one tap away when you need it.">What helps you feel safe and grounded?</Title>
+              <Options value={draft.comfort} options={COMFORT} label="What helps you feel safe" onSelect={(v) => set('comfort', v)} />
+              {error && <Notice tone="error">{error}</Notice>}
+              <Button variant="accent" accent="sage" size="lg" full busy={saving} disabled={!draft.comfort} iconRight={ArrowRight} onClick={finish}>
+                Enter SAHAAS
+              </Button>
+            </>
           )}
-        </div>
-      </main>
-    </div>
+
+          {step > 0 && step < 5 && (
+            <Button variant="ghost" onClick={next}>
+              {t('common.skip')}
+            </Button>
+          )}
+        </section>
+      </div>
+    </EntryShell>
   );
 };
-
-const StepShell: React.FC<{
-  eyebrow: string;
-  title: string;
-  subtitle: string;
-  children: React.ReactNode;
-}> = ({ eyebrow, title, subtitle, children }) => (
-  <div className="flex flex-col gap-4">
-    <div>
-      <span className="text-xs font-bold uppercase tracking-wider text-[#9c6743]">{eyebrow}</span>
-      <h1 className="text-xl font-bold text-[#352e24] mt-1 leading-snug">{title}</h1>
-      <p className="text-sm text-[#5c5142] mt-1.5 leading-relaxed">{subtitle}</p>
-    </div>
-    <div className="flex flex-col gap-2">{children}</div>
-  </div>
-);

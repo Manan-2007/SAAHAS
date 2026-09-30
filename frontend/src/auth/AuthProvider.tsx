@@ -1,10 +1,17 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { Loader2, WifiOff } from 'lucide-react';
-import { SessionUser, restoreSession, signOut } from './authStore';
+import React, { Suspense, createContext, lazy, useCallback, useContext, useEffect, useState } from 'react';
+import { CloudOff, Phone } from 'lucide-react';
+import { SessionUser, guestUser, restoreSession, signOut } from './authStore';
 import { clearSession, onSignedOut } from '../lib/api';
-import { AuthScreen } from './AuthScreen';
+import { AuthMode, AuthScreen } from './AuthScreen';
 import { Onboarding } from './Onboarding';
-import { LandingPage } from '../components/LandingPage';
+import { useLanguage } from '../i18n/LanguageProvider';
+import { EntryShell } from '../survivor/entry/EntryShell';
+import { Welcome } from '../survivor/entry/Welcome';
+import { Button } from '../survivor/ui/Button';
+import { Serif } from '../survivor/ui/primitives';
+
+// The pitch page (demos only, at ?about) - loaded on demand so survivors never download it.
+const LandingPage = lazy(() => import('../components/LandingPage').then((m) => ({ default: m.LandingPage })));
 
 interface AuthContextValue {
   user: SessionUser;
@@ -31,8 +38,12 @@ type GateState = { status: 'loading' } | { status: 'offline' } | { status: 'read
 // victim account, and only then the app itself.
 export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<GateState>({ status: 'loading' });
-  // Show the marketing landing page first; "Enter SAHAAS" reveals sign-in.
-  const [showAuth, setShowAuth] = useState(false);
+  // Survivors start at a quiet welcome. The project pitch page (it explains the
+  // Distress Score, so it must never be a survivor's first screen) is kept for
+  // demos at ?about.
+  const [entry, setEntry] = useState<'pitch' | 'welcome' | AuthMode>(() =>
+    new URLSearchParams(window.location.search).has('about') ? 'pitch' : 'welcome',
+  );
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -68,11 +79,19 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
   const { user } = state;
   if (!user) {
-    return showAuth ? (
-      <AuthScreen onAuthenticated={setUser} />
-    ) : (
-      <LandingPage onEnter={() => setShowAuth(true)} />
-    );
+    if (entry === 'pitch') {
+      return (
+        <Suspense fallback={<Splash />}>
+          <LandingPage onEnter={() => setEntry('welcome')} />
+        </Suspense>
+      );
+    }
+    if (entry === 'welcome') {
+      return (
+        <Welcome onStart={() => setEntry('signup')} onSignIn={() => setEntry('signin')} onGuest={() => setUser(guestUser())} />
+      );
+    }
+    return <AuthScreen mode={entry} onAuthenticated={setUser} onBack={() => setEntry('welcome')} onSwitch={setEntry} />;
   }
   if (user.role === 'victim' && !user.onboarded) return <Onboarding user={user} onComplete={setUser} />;
 
@@ -84,6 +103,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
     },
     lock: () => {
       clearSession();
+      setEntry('welcome');
       setUser(null);
     },
     updateUser: setUser,
@@ -97,34 +117,35 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
   );
 };
 
-const Splash: React.FC = () => (
-  <div className="min-h-screen bg-[#f5f1e8] flex items-center justify-center">
-    <div className="flex flex-col items-center gap-3 text-[#9c6743]">
-      <Loader2 className="w-7 h-7 animate-spin" />
-      <span className="text-sm font-semibold">Opening your space…</span>
-    </div>
-  </div>
-);
-
-const Offline: React.FC<{ onRetry: () => void; onSignInAgain: () => void }> = ({ onRetry, onSignInAgain }) => (
-  <div className="min-h-screen bg-[#f5f1e8] text-[#352e24] flex items-center justify-center px-4">
-    <div className="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#e5dac4] shadow-sm flex flex-col items-center text-center gap-3">
-      <div className="w-12 h-12 rounded-2xl bg-[#efe7d6] text-[#9c6743] flex items-center justify-center">
-        <WifiOff className="w-6 h-6" />
+const Splash: React.FC = () => {
+  const { t } = useLanguage();
+  return (
+    <div className="sahaas grid place-items-center" role="status">
+      <div className="flex flex-col items-center gap-5">
+        <span aria-hidden className="w-14 h-14 rounded-full bg-sage/80 hush" />
+        <Serif className="text-[20px] text-ink-2">{t('splash.opening')}</Serif>
       </div>
-      <h1 className="text-lg font-bold">We can't reach SAHAAS right now</h1>
-      <p className="text-sm text-[#5c5142] leading-relaxed">
-        Please check your connection. If you need help right now, call 112 (emergency) or Tele-MANAS 14416.
-      </p>
-      <button
-        onClick={onRetry}
-        className="mt-1 w-full py-3 rounded-2xl bg-[#9c6743] text-white font-semibold text-sm shadow-md hover:bg-[#835636] transition-all"
-      >
-        Try again
-      </button>
-      <button onClick={onSignInAgain} className="text-xs font-semibold text-[#9c6743] hover:underline">
-        Sign in again
-      </button>
     </div>
-  </div>
-);
+  );
+};
+
+const Offline: React.FC<{ onRetry: () => void; onSignInAgain: () => void }> = ({ onRetry, onSignInAgain }) => {
+  const { t } = useLanguage();
+  return (
+    <EntryShell>
+      <div className="flex flex-col gap-6 pt-10">
+        <CloudOff className="w-10 h-10 text-ink-2" aria-hidden />
+        <div>
+          <h1 className="text-[28px] leading-[1.2] font-semibold break-soft">{t('offline.title')}</h1>
+          <p className="mt-3 text-[17px] text-ink-2 break-soft">{t('offline.sub')}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button href="tel:112" variant="accent" accent="coral" size="lg" icon={Phone}>112</Button>
+          <Button href="tel:14416" variant="accent" accent="coral" size="lg" icon={Phone}>14416</Button>
+        </div>
+        <Button variant="solid" size="lg" full onClick={onRetry}>{t('offline.retry')}</Button>
+        <Button variant="ghost" onClick={onSignInAgain}>{t('offline.signin')}</Button>
+      </div>
+    </EntryShell>
+  );
+};
