@@ -1,7 +1,5 @@
-import React, { Suspense, lazy, useState } from 'react';
-import { QuickExitDecoy } from './components/QuickExitDecoy';
+import React, { Suspense, lazy } from 'react';
 import { useAuth } from './auth/AuthProvider';
-import { clearSession } from './lib/api';
 import { SurvivorApp } from './survivor/SurvivorApp';
 
 // The counsellor dashboard is a large, separate surface — lazy-load it so the
@@ -10,20 +8,6 @@ const AdminApp = lazy(() => import('./admin/AdminApp'));
 
 export default function App() {
   const { user, logout, lock } = useAuth();
-  const [isQuickExited, setIsQuickExited] = useState(false);
-
-  // Quick Safety Exit: the token is wiped at once and the decoy covers the
-  // screen. Coming back needs a fresh sign-in, so whoever picks up the phone
-  // next can't just tap back in. Leaving the survivor app also ends any live
-  // voice session and releases the microphone.
-  const handleQuickExit = () => {
-    clearSession();
-    setIsQuickExited(true);
-  };
-
-  if (isQuickExited) {
-    return <QuickExitDecoy onRestoreSanctuary={lock} />;
-  }
 
   // Counsellors sign in to the Command Centre: a full-screen dashboard with its
   // own sidebar and header. Victims never reach it - it shows scores.
@@ -44,5 +28,7 @@ export default function App() {
     );
   }
 
-  return <SurvivorApp onQuickExit={handleQuickExit} />;
+  // The survivor "Exit" button signs out: it wipes the session on this device
+  // and returns to the welcome / sign-in screen (no decoy).
+  return <SurvivorApp onQuickExit={lock} />;
 }

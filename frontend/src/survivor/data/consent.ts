@@ -42,7 +42,7 @@ export const CONSENT_OPTIONS: ConsentOption[] = [
   },
   {
     key: 'share_insights',
-    title: 'Let SAHAAS tell my counsellor how I’m doing',
+    title: 'Let SAAHAS tell my counsellor how I’m doing',
     hint: 'A short summary of feelings and problems after a conversation - never your exact words.',
     later: 'After a conversation, a short summary goes to your counsellor - never your exact words.',
   },

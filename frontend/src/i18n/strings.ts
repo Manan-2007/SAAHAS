@@ -14,9 +14,9 @@ import type { LanguageCode } from '../types';
 
 const en = {
   // ---------------------------------------------------------------- shell
-  'app.name': 'SAHAAS',
+  'app.name': 'SAAHAS',
   'exit.label': 'Exit',
-  'exit.aria': 'Quick exit. Hides SAHAAS and signs you out on this phone.',
+  'exit.aria': 'Quick exit. Hides SAAHAS and signs you out on this phone.',
   'breathe.shortcut': 'Take a breath',
   'common.back': 'Back',
   'common.close': 'Close',
@@ -60,7 +60,7 @@ const en = {
   'home.breatheHint': 'a minute, no words needed',
   'home.comingUp': 'coming up',
   'home.prepare': 'Here’s what to expect',
-  'home.guest': 'You’re using SAHAAS without an account. Nothing is saved.',
+  'home.guest': 'You’re using SAAHAS without an account. Nothing is saved.',
   'home.guestCta': 'Create an account',
 
   // ---------------------------------------------------------------- upcoming & entitlements
@@ -105,7 +105,7 @@ const en = {
   'checkin.prev': 'Previous question',
   'checkin.thanks': 'thank you for checking in.',
   'checkin.thanksHint': 'It’s saved to your journey, and your counsellor can see you checked in.',
-  'checkin.thanksGuest': 'Nothing was saved, because you’re using SAHAAS without an account.',
+  'checkin.thanksGuest': 'Nothing was saved, because you’re using SAAHAS without an account.',
   'checkin.next.breathe': 'Take a breath',
   'checkin.next.talk': 'Talk it through',
   'checkin.next.home': 'Back home',
@@ -180,7 +180,7 @@ const en = {
   'crisis.dismiss': 'Hide this for now',
 
   // ---------------------------------------------------------------- offline & empty
-  'offline.title': 'We couldn’t reach SAHAAS right now.',
+  'offline.title': 'We couldn’t reach SAAHAS right now.',
   'offline.sub': 'Your privacy and safety come first. If you need help now, call 112 or Tele-MANAS 14416.',
   'offline.retry': 'Try again',
   'offline.signin': 'Sign in again',

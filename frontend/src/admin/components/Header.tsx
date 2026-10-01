@@ -44,7 +44,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, onQuickLo
         >
           <span className="material-symbols-outlined text-[22px]" aria-hidden>menu</span>
         </button>
-        <span className="lg:hidden text-[14px] font-extrabold tracking-[0.2em] text-ink">SAHAAS</span>
+        <span className="lg:hidden text-[14px] font-extrabold tracking-[0.2em] text-ink">SAAHAS</span>
         <span
           className="hidden lg:inline-flex items-center gap-2 text-[13px] text-ink-2"
           title={live ? 'New check-ins and messages appear as they happen' : 'Reconnecting - the page refreshes every two minutes meanwhile'}

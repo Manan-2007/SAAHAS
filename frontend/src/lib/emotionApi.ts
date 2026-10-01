@@ -227,7 +227,7 @@ export interface ChatResponse {
   safety?: boolean;
 }
 
-// Replies from the SAHAAS chat model (fine-tuned with backend/train_chat.sh).
+// Replies from the SAAHAS chat model (fine-tuned with backend/train_chat.sh).
 // tone: the emotion detected in the person's latest voice note, if any.
 export async function chatReply(messages: ChatTurn[], tone?: Emotion | null): Promise<ChatResponse> {
   const res = await fetch(httpUrl('/chat'), {

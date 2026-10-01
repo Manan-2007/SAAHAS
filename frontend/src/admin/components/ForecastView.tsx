@@ -8,7 +8,7 @@ interface ForecastViewProps {
 }
 
 const errorText = (err: unknown) =>
-  err instanceof ApiError ? err.message : "Can't reach the SAHAAS backend. Check that it's running.";
+  err instanceof ApiError ? err.message : "Can't reach the SAAHAS backend. Check that it's running.";
 
 const peakDate = (iso: string) =>
   new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -44,7 +44,7 @@ export const ForecastView: React.FC<ForecastViewProps> = ({ onOpenCase }) => {
     <div className="flex flex-col gap-5 animate-fadeIn">
       <PageHeader
         title="This week"
-        description="Hearings are often what makes distress spike. When one is close, SAHAAS forecasts the peak so you can reach out first. Sorted by the predicted peak."
+        description="Hearings are often what makes distress spike. When one is close, SAAHAS forecasts the peak so you can reach out first. Sorted by the predicted peak."
       />
 
       {/* Body */}

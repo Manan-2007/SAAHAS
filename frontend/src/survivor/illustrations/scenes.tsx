@@ -1,6 +1,6 @@
 import React from 'react';
 
-// SAHAAS's own illustration kit: flat, geometric, big fields of colour, people
+// SAAHAS's own illustration kit: flat, geometric, big fields of colour, people
 // in ordinary rooms. Nobody performs happiness - they sit, read, rest, keep
 // each other company. Limbs are round-capped strokes, heads are circles, faces
 // are left to the reader. All scenes are decorative (aria-hidden) and scale to

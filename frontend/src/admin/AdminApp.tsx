@@ -44,7 +44,7 @@ const TOAST_FOR: Record<string, (e: LiveEvent, name: string) => string | null> =
 };
 
 const errorText = (err: unknown) =>
-  err instanceof ApiError ? err.message : "Can't reach the SAHAAS backend. Check that it's running.";
+  err instanceof ApiError ? err.message : "Can't reach the SAAHAS backend. Check that it's running.";
 
 // "YYYY-MM-DD" whatever the date input gave us
 const isoDay = (value: string) =>

@@ -155,7 +155,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
             <>
               <div>
                 <Serif className="text-[20px] text-ink-2">a few gentle questions.</Serif>
-                <Title ref={heading} hint="They help SAHAAS understand your own normal, so it can notice - kindly - when something shifts. Nothing here is a test.">
+                <Title ref={heading} hint="They help SAAHAS understand your own normal, so it can notice - kindly - when something shifts. Nothing here is a test.">
                   Let’s get to know you
                 </Title>
               </div>
@@ -210,7 +210,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ user, onComplete }) => {
               <Options value={draft.comfort} options={COMFORT} label="What helps you feel safe" onSelect={(v) => set('comfort', v)} />
               {error && <Notice tone="error">{error}</Notice>}
               <Button variant="accent" accent="sage" size="lg" full busy={saving} disabled={!draft.comfort} iconRight={ArrowRight} onClick={finish}>
-                Enter SAHAAS
+                Enter SAAHAS
               </Button>
             </>
           )}

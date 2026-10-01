@@ -11,7 +11,7 @@ export const QuickExitDecoy: React.FC<QuickExitDecoyProps> = ({ onRestoreSanctua
   const [tapCount, setTapCount] = useState(0);
 
   // The tab title is visible too: while the decoy is up it says what the page
-  // appears to be, not "SAHAAS".
+  // appears to be, not "SAAHAS".
   useEffect(() => {
     const previous = document.title;
     document.title = 'Everyday Digest & Weather';
@@ -51,7 +51,7 @@ export const QuickExitDecoy: React.FC<QuickExitDecoyProps> = ({ onRestoreSanctua
         <div className="bg-emerald-50 border-b border-emerald-200 p-3 flex items-center justify-between text-xs text-emerald-900 animate-fadeIn">
           <div className="flex items-center gap-1.5 font-medium">
             <Eye className="w-4 h-4 text-emerald-600" />
-            <span>Safety Mode Active. Tap restore to re-open SAHAAS Sanctuary.</span>
+            <span>Safety Mode Active. Tap restore to re-open SAAHAS Sanctuary.</span>
           </div>
           <div className="flex items-center gap-2">
             <button

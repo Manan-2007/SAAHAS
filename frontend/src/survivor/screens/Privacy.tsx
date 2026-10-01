@@ -13,7 +13,7 @@ import { Button, IconButton } from '../ui/Button';
 import { ConsentCard, LanguageSwitcher, TextField, ThemeSwitcher } from '../ui/forms';
 import { Choice, ChoiceGroup, Notice, ScreenHeader, Stack } from '../ui/primitives';
 
-// Privacy you can understand: what SAHAAS keeps, in plain words, each with a
+// Privacy you can understand: what SAAHAS keeps, in plain words, each with a
 // real switch. The escape hatches - sign out a phone someone else has, forget
 // the conversation, delete everything - are on the page, not buried.
 
@@ -252,7 +252,7 @@ export const Privacy: React.FC = () => {
 
       {error && <Notice tone="error">{error}</Notice>}
 
-      <Section title="Language" hint={langSaving ? t('common.saving') : 'SAHAAS speaks and replies in this language.'}>
+      <Section title="Language" hint={langSaving ? t('common.saving') : 'SAAHAS speaks and replies in this language.'}>
         <LanguageSwitcher value={language} onChange={changeLanguage} label="Language" disabled={langSaving} />
         {language !== 'en' && (
           <p className="text-sm text-ink-2">Some screens are still in English while translations are reviewed.</p>
@@ -267,14 +267,14 @@ export const Privacy: React.FC = () => {
       </Section>
 
       {isGuest ? (
-        <Section title="What SAHAAS keeps">
+        <Section title="What SAAHAS keeps">
           <Notice action={<Button variant="ghost" onClick={lock}>{t('home.guestCta')}</Button>}>
             Nothing. Without an account, what you say isn’t saved, and it’s gone when you leave.
           </Notice>
         </Section>
       ) : (
         <div className="flex flex-col gap-7">
-          <Section title="What SAHAAS keeps" hint="Change any of these whenever you like.">
+          <Section title="What SAAHAS keeps" hint="Change any of these whenever you like.">
             {CONSENT_OPTIONS.filter((o) => !o.required).map((o) => (
               <ConsentCard
                 key={o.key}
@@ -350,7 +350,7 @@ export const Privacy: React.FC = () => {
                   </Choice>
                 ))}
               </ChoiceGroup>
-              <ChoiceGroup label="How SAHAAS feels" className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <ChoiceGroup label="How SAAHAS feels" className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {STYLES.map((st) => (
                   <Choice key={st.id} selected={user.uiStyle === st.id} disabled={savingMe} hint={st.hint} onSelect={() => saveSettings({ ui_style: st.id })} accent="sage">
                     <span className="text-[15px]">{st.label}</span>
@@ -428,7 +428,7 @@ export const Privacy: React.FC = () => {
           {user.hasPassword && (
             <Section
               title="Safety password"
-              hint="If someone ever makes you open SAHAAS, sign in with this instead of your password. The app opens looking new and empty, and your counsellor is quietly told you may need help. Nothing on the screen shows it."
+              hint="If someone ever makes you open SAAHAS, sign in with this instead of your password. The app opens looking new and empty, and your counsellor is quietly told you may need help. Nothing on the screen shows it."
             >
               {duress.done && <Notice>{duress.done}</Notice>}
               {duress.open ? (

@@ -3,7 +3,7 @@ import { ApiError, ContactRequestView, CounsellorMessage, InboxRow, api } from '
 import { timeShort, useLiveEvents } from '../liveBus';
 import { PageHeader } from './PageHeader';
 
-const errorText = (err: unknown) => (err instanceof ApiError ? err.message : "Can't reach the SAHAAS backend.");
+const errorText = (err: unknown) => (err instanceof ApiError ? err.message : "Can't reach the SAAHAS backend.");
 const TIME_LABEL: Record<string, string> = { asap: 'As soon as possible', morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' };
 const KIND_LABEL: Record<string, string> = { callback: 'Asked for a call back', talk_soon: 'Wants to talk soon', ivrs_callback: 'Asked for a call back on the check-in call' };
 

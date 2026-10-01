@@ -45,7 +45,7 @@ function voiceNoteReply(s: SessionSummary | null): string {
   return `Thank you for sharing your voice. ${reflectionFor(s)} ${TONE_FOLLOW_UPS[s.emotion]}`;
 }
 
-const OFFLINE_REPLY = 'SAHAAS couldn’t answer that one. Try again in a moment.';
+const OFFLINE_REPLY = 'SAAHAS couldn’t answer that one. Try again in a moment.';
 
 const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 const atTime = (iso: string) => {
@@ -56,7 +56,7 @@ const atTime = (iso: string) => {
 const fromStored = (turn: ConversationTurn, i: number): ChatMessage => ({
   id: `past-${i}`,
   sender: turn.role === 'user' ? 'user' : 'sahaas',
-  senderName: turn.role === 'user' ? 'You' : 'SAHAAS',
+  senderName: turn.role === 'user' ? 'You' : 'SAAHAS',
   text: turn.content,
   timestamp: atTime(turn.at),
 });
@@ -136,7 +136,7 @@ export function useSafeChat({
       append({
         id: `${notice ? 'note' : 'bot'}-${Date.now()}-${messagesRef.current.length}`,
         sender: 'sahaas',
-        senderName: 'SAHAAS',
+        senderName: 'SAAHAS',
         text,
         timestamp: now(),
       }),

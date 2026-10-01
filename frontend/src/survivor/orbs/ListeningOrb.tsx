@@ -8,7 +8,7 @@ import { usePrefersReducedMotion } from './usePrefersReducedMotion';
 //   listening  slow breathing expansion, waiting
 //   (voice)    while the mic hears speech, it swells and trembles with it
 //   thinking   a slow turn of the outer ring
-//   replying   SAHAAS is speaking: a softer, slower wave from the outside in
+//   replying   SAAHAS is speaking: a softer, slower wave from the outside in
 //   finished   settles back down and stops
 //   offline    grey, still
 //

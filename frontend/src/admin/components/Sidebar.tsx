@@ -73,7 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }`}
       >
         <div className="h-16 px-5 flex items-center shrink-0">
-          <span className="text-[14px] font-extrabold tracking-[0.2em] text-ink">SAHAAS</span>
+          <span className="text-[14px] font-extrabold tracking-[0.2em] text-ink">SAAHAS</span>
           <span className="ml-2 text-[12px] text-ink-2">counsellor</span>
         </div>
 

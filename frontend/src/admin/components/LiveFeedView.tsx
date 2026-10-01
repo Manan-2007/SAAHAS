@@ -22,7 +22,7 @@ export const LiveFeedView: React.FC<LiveFeedViewProps> = ({ onOpenCase, connecte
 
   const load = useCallback(() => {
     api.feed(200).then((r) => { setReadings(r); setError(null); })
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Can't reach the SAHAAS backend."));
+      .catch((e) => setError(e instanceof ApiError ? e.message : "Can't reach the SAAHAS backend."));
   }, []);
   useEffect(load, [load]);
 

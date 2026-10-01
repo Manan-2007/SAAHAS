@@ -61,7 +61,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
       <header className="sticky top-0 z-40 bg-[#f5f1e8]/85 backdrop-blur-md border-b border-[#e5dac4]/70">
         <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-xl font-bold tracking-tight text-[#9c6743]">SAHAAS</span>
+            <span className="text-xl font-bold tracking-tight text-[#9c6743]">SAAHAS</span>
             <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/70 text-[#7a5a3f] text-[11px] font-semibold">
               <Lock className="w-3 h-3" /> Private &amp; Safe
             </span>
@@ -78,7 +78,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
               onClick={onEnter}
               className="px-4 py-2 rounded-xl bg-[#9c6743] text-white text-sm font-semibold hover:bg-[#835636] transition-colors shadow-sm"
             >
-              Enter SAHAAS
+              Enter SAAHAS
             </button>
           </div>
         </div>
@@ -99,7 +99,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
               <span className="text-[#9c6743]">Nobody should carry it alone.</span>
             </h1>
             <p className="text-base sm:text-lg text-[#5c5142] leading-relaxed max-w-xl">
-              SAHAAS <span className="text-[#7a5a3f] font-semibold">(साहस — courage)</span> is a calm, private
+              SAAHAS <span className="text-[#7a5a3f] font-semibold">(साहस — courage)</span> is a calm, private
               companion for survivors of atrocities. It checks in gently, senses distress from how you speak and what
               you share, and quietly alerts a human counsellor <span className="font-semibold">before</span> a crisis —
               across the whole justice journey.
@@ -146,7 +146,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
             <p className="text-sm text-[#5c5142] mt-3 leading-relaxed">
               Helplines like NHAA 14566 have logged <strong>6.5+ lakh calls</strong> since 2021 — but they stop at
               registering a complaint. Through years of hearings, delays and intimidation,
-              <strong> nobody monitors the victim's mental state.</strong> SAHAAS adds exactly that.
+              <strong> nobody monitors the victim's mental state.</strong> SAAHAS adds exactly that.
             </p>
           </div>
           <div className="md:col-span-2 grid sm:grid-cols-3 gap-4">
@@ -167,7 +167,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
       {/* Dynamic Distress Score */}
       <section className="max-w-6xl mx-auto px-5 py-16">
         <div className="text-center max-w-2xl mx-auto">
-          <span className="text-xs font-bold uppercase tracking-wider text-[#9c6743]">The heart of SAHAAS</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-[#9c6743]">The heart of SAAHAS</span>
           <h2 className="text-3xl font-bold mt-2">A Dynamic Distress Score</h2>
           <p className="text-sm text-[#5c5142] mt-3 leading-relaxed">
             One 0–100 index per person, recomputed after every check-in from voice, words and engagement — measured
@@ -291,7 +291,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
             onClick={onEnter}
             className="px-7 py-3.5 rounded-2xl bg-[#9c6743] text-white font-semibold text-sm shadow-md hover:bg-[#835636] active:scale-[0.99] transition-all flex items-center gap-2"
           >
-            Enter SAHAAS <ArrowRight className="w-4 h-4" />
+            Enter SAAHAS <ArrowRight className="w-4 h-4" />
           </button>
           <div className="flex items-center gap-1.5 text-xs text-[#8a7d68] pt-1">
             <Phone className="w-3.5 h-3.5" /> In crisis now? Call 112 · Women's Helpline 181 · Tele-MANAS 14416
@@ -302,7 +302,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onEnter }) => {
       {/* Footer */}
       <footer className="border-t border-[#e5dac4]/70 bg-[#efe7d6]/40">
         <div className="max-w-6xl mx-auto px-5 py-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#8a7d68]">
-          <span className="font-semibold text-[#7a5a3f]">SAHAAS · साहस</span>
+          <span className="font-semibold text-[#7a5a3f]">SAAHAS · साहस</span>
           <span className="text-center">
             AI-Powered Dynamic Mental-Health Monitoring for Victims of Atrocities · SIH PS 26094 · Ministry of Social
             Justice &amp; Empowerment

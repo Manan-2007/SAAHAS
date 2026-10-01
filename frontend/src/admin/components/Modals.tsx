@@ -288,7 +288,7 @@ export const AuditTrailModal: React.FC<AuditTrailModalProps> = ({
     api
       .victim(currentCase.id)
       .then((d) => live && setItems(historyOf(d)))
-      .catch((err) => live && setError(err instanceof ApiError ? err.message : "Can't reach the SAHAAS backend."));
+      .catch((err) => live && setError(err instanceof ApiError ? err.message : "Can't reach the SAAHAS backend."));
     return () => {
       live = false;
     };

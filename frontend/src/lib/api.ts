@@ -1,4 +1,4 @@
-// SAHAAS backend client: the sign-in token, authenticated requests, and the
+// SAAHAS backend client: the sign-in token, authenticated requests, and the
 // monitoring API (accounts, check-ins, the counsellor dashboard).
 //
 // The token lives in sessionStorage only - never localStorage - so it ends
@@ -593,7 +593,7 @@ export interface SupportInfo {
   unread_messages: number;
   requests: ContactRequestView[];
   helplines: Helpline[];
-  /** Ring this number and hang up; SAHAAS calls back. null until a number is set up. */
+  /** Ring this number and hang up; SAAHAS calls back. null until a number is set up. */
   missed_call: { number: string; enabled: boolean } | null;
 }
 

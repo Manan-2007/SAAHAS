@@ -12,7 +12,7 @@ const STATUS: Record<CheckinCall['status'], { label: string; color: string; bg: 
   cancelled: { label: 'Cancelled (checked in)', ...TONE.neutral },
 };
 
-const errorText = (err: unknown) => (err instanceof ApiError ? err.message : "Can't reach the SAHAAS backend.");
+const errorText = (err: unknown) => (err instanceof ApiError ? err.message : "Can't reach the SAAHAS backend.");
 
 // Three kinds of call: a missed check-in, a callback after the person rang the
 // missed-call number, and an evening check-in after a court date.
@@ -53,7 +53,7 @@ export const OutreachView: React.FC<{ onOpenCase: (id: string) => void }> = ({ o
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Check-in calls"
-        description="SAHAAS calls people who opted in (9am-8pm) with four keypad questions: when they miss a check-in, when they ring the missed-call number, and on the evening of a court date. A missed check-in can be moved twice, within 72 hours. No answer after three tries: you get an alert to reach them yourself."
+        description="SAAHAS calls people who opted in (9am-8pm) with four keypad questions: when they miss a check-in, when they ring the missed-call number, and on the evening of a court date. A missed check-in can be moved twice, within 72 hours. No answer after three tries: you get an alert to reach them yourself."
       />
       <div className="flex gap-1.5">
         {(['active', 'all'] as const).map((s) => (

@@ -36,7 +36,7 @@ export function useRemote<T>(load: () => Promise<T>, deps: unknown[], enabled = 
         setState((s) => ({
           status: 'error',
           offline,
-          message: err instanceof ApiError ? err.message : 'We couldn’t reach SAHAAS right now.',
+          message: err instanceof ApiError ? err.message : 'We couldn’t reach SAAHAS right now.',
           data: 'data' in s ? s.data : undefined,
         }));
       });

@@ -35,7 +35,7 @@ export const Prepare: React.FC = () => {
     setChecked((c) => {
       const next = { ...c, [id]: !c[id] };
       try {
-        // This tab only: gone when SAHAAS closes, and wiped by Quick Exit.
+        // This tab only: gone when SAAHAS closes, and wiped by Quick Exit.
         sessionStorage.setItem(CHECKLIST_KEY, JSON.stringify(next));
       } catch {
         /* private mode: kept for this visit */
@@ -81,7 +81,7 @@ export const Prepare: React.FC = () => {
       <section aria-labelledby="bring" className="rounded-card bg-surface border border-line p-5 flex flex-col gap-3">
         <div>
           <h2 id="bring" className="text-[18px] font-semibold">What you may want to bring</h2>
-          <p className="text-sm text-ink-2">Ticks stay on this phone only until SAHAAS closes.</p>
+          <p className="text-sm text-ink-2">Ticks stay on this phone only until SAAHAS closes.</p>
         </div>
         <ul className="flex flex-col gap-2">
           {WHAT_TO_BRING.map((item) => {

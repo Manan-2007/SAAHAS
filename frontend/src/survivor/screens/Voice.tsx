@@ -84,7 +84,7 @@ export const Voice: React.FC = () => {
           ) : call.phase === 'idle' ? (
             <>
               <Serif as="h2" className="text-[30px] leading-[1.15] text-ink">i’m here when you’re ready.</Serif>
-              <p className="text-[15px] text-ink-2 max-w-[34ch]">Speak, pause, and SAHAAS answers out loud. You can talk over it any time.</p>
+              <p className="text-[15px] text-ink-2 max-w-[34ch]">Speak, pause, and SAAHAS answers out loud. You can talk over it any time.</p>
             </>
           ) : call.phase === 'ended' ? (
             <>
@@ -141,7 +141,7 @@ export const Voice: React.FC = () => {
             <ConsentCard
               accent="lilac"
               title="Let me interrupt"
-              hint="Speak any time and SAHAAS stops to listen. On laptop speakers it may hear itself - headphones help, or turn this off."
+              hint="Speak any time and SAAHAS stops to listen. On laptop speakers it may hear itself - headphones help, or turn this off."
               on={call.bargeIn}
               onToggle={() => call.setBargeIn(!call.bargeIn)}
             />
@@ -190,7 +190,7 @@ export const Voice: React.FC = () => {
                       c.who === 'you' ? 'self-end rounded-tile rounded-br-[5px] bg-lilac text-on-accent' : 'self-start rounded-tile rounded-bl-[5px] bg-raised text-ink'
                     }`}
                   >
-                    <span className="sr-only">{c.who === 'you' ? 'You: ' : 'SAHAAS: '}</span>
+                    <span className="sr-only">{c.who === 'you' ? 'You: ' : 'SAAHAS: '}</span>
                     {c.text}
                   </p>
                 ),

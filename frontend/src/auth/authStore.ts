@@ -1,4 +1,4 @@
-// Sign-in against the SAHAAS backend (/auth, /me).
+// Sign-in against the SAAHAS backend (/auth, /me).
 //
 // The token itself lives in lib/api: sessionStorage only, never localStorage,
 // so nothing outlives the browser session on a shared phone. Nothing about
@@ -10,7 +10,7 @@ import type { LanguageCode } from '../types';
 export type { LanguageCode };
 
 // A gentle "getting to know you" baseline, captured once at sign-up. It gives
-// SAHAAS the person's OWN normal to measure future mood shifts against - the
+// SAAHAS the person's OWN normal to measure future mood shifts against - the
 // same baseline idea the Dynamic Distress Score relies on.
 export interface OnboardingProfile {
   displayName: string;
@@ -57,7 +57,7 @@ export const MIN_PASSWORD_LENGTH = 8;       // matches the backend (monitoring/a
 
 export class AuthError extends Error {}
 
-const OFFLINE_MESSAGE = "We can't reach SAHAAS right now. Please check your connection and try again.";
+const OFFLINE_MESSAGE = "We can't reach SAAHAS right now. Please check your connection and try again.";
 
 function toUser(me: Me): SessionUser {
   return {
@@ -130,7 +130,7 @@ export class WrongDoorError extends AuthError {
     super(
       door === 'counsellor'
         ? 'This is a counsellor account. Please use the counsellor sign-in page.'
-        : 'This page is for counsellors. Survivors sign in from the SAHAAS home screen.',
+        : 'This page is for counsellors. Survivors sign in from the SAAHAS home screen.',
     );
   }
 }
@@ -196,7 +196,7 @@ export async function refreshUser(): Promise<SessionUser> {
   return currentUser();
 }
 
-// Using SAHAAS without an account: chat and voice work, nothing is stored.
+// Using SAAHAS without an account: chat and voice work, nothing is stored.
 export function guestUser(): SessionUser {
   return {
     id: 'guest',

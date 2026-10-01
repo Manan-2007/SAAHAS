@@ -1,8 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-// Light or dark. By default SAHAAS follows the phone; a choice made in the app
+// Light or dark. By default SAAHAS follows the phone; a choice made in the app
 // lasts for this browser session only (sessionStorage, like the language), so
-// nothing about SAHAAS is left behind on a shared phone and Quick Exit wipes it.
+// nothing about SAAHAS is left behind on a shared phone and Quick Exit wipes it.
 // index.html applies the same rule before first paint, so there's no flash.
 
 export type ThemePreference = 'system' | 'light' | 'dark';

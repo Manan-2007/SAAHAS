@@ -4,7 +4,7 @@ import { CHANNEL_LABEL, LEVEL_STYLE, timeShort, useLiveEvents } from '../liveBus
 import { CHART } from '../palette';
 
 const CARD = 'bg-surface rounded-tile p-5 border border-line';
-const errorText = (err: unknown) => (err instanceof ApiError ? err.message : "Can't reach the SAHAAS backend.");
+const errorText = (err: unknown) => (err instanceof ApiError ? err.message : "Can't reach the SAAHAS backend.");
 const PEAK: Record<string, string> = { calm: 'none', low: 'low', moderate: 'moderate', high: 'high' };
 
 export const InsightCard: React.FC<{ insight: Insight }> = ({ insight: i }) => {
@@ -21,7 +21,7 @@ export const InsightCard: React.FC<{ insight: Insight }> = ({ insight: i }) => {
               Peak: {peak.label}
             </span>
           )}
-          <span className="text-[10px] text-ink-2" title={i.generator === 'model' ? 'Written by the SAHAAS model' : 'Model unavailable: built from readings and detection'}>
+          <span className="text-[10px] text-ink-2" title={i.generator === 'model' ? 'Written by the SAAHAS model' : 'Model unavailable: built from readings and detection'}>
             {i.generator === 'model' ? 'AI summary' : 'Rule-based'}
           </span>
         </div>
@@ -86,7 +86,7 @@ export const InsightsPanel: React.FC<{ victimId: string; name: string; shares: b
         <div>
           <h3 className="text-base font-bold text-ink">How conversations went</h3>
           <p className="text-xs text-ink-2 max-w-xl">
-            After each chat, voice call or check-in, SAHAAS writes a short note for you: emotions, worries, case problems and
+            After each chat, voice call or check-in, SAAHAS writes a short note for you: emotions, worries, case problems and
             a suggested next step. It never passes on {name}’s exact words.
           </p>
         </div>

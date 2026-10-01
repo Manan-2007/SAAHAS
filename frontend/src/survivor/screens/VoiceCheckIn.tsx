@@ -81,7 +81,7 @@ export const VoiceCheckIn: React.FC = () => {
             <>
               <Serif as="h2" className="text-[28px] leading-[1.15]">say how it’s been, out loud.</Serif>
               <p className="text-[15px] text-ink-2 max-w-[34ch]">
-                One minute, one way. Speak, or just breathe - SAHAAS gently notices how your voice sounds.
+                One minute, one way. Speak, or just breathe - SAAHAS gently notices how your voice sounds.
               </p>
             </>
           ) : c.phase === 'done' ? null : (

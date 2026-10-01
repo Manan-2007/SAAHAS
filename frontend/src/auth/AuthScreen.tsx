@@ -104,7 +104,7 @@ const SignUp: React.FC<AuthScreenProps> = ({ onAuthenticated, onBack, onSwitch }
                   </Choice>
                 ))}
               </ChoiceGroup>
-              <p className="text-sm text-ink-2">Kept private and encrypted. It sets how SAHAAS speaks to you, and you can change it later.</p>
+              <p className="text-sm text-ink-2">Kept private and encrypted. It sets how SAAHAS speaks to you, and you can change it later.</p>
             </div>
           </section>
         )}
@@ -112,7 +112,7 @@ const SignUp: React.FC<AuthScreenProps> = ({ onAuthenticated, onBack, onSwitch }
         {step === 1 && (
           <section key="consent" className="flex flex-col gap-5 settle">
             <div>
-              <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.015em]">What SAHAAS may keep</h1>
+              <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.015em]">What SAAHAS may keep</h1>
               <p className="mt-2 text-[17px] text-ink-2">You decide. Everything here can be changed later, and deleted any time.</p>
             </div>
             <div className="flex flex-col gap-2.5">
@@ -135,7 +135,7 @@ const SignUp: React.FC<AuthScreenProps> = ({ onAuthenticated, onBack, onSwitch }
                   </Button>
                 }
               >
-                Without this there’s no account. You can still use SAHAAS without one - chat and voice work, and nothing is saved.
+                Without this there’s no account. You can still use SAAHAS without one - chat and voice work, and nothing is saved.
               </Notice>
             )}
           </section>
@@ -287,7 +287,7 @@ const StaffSignIn: React.FC<AuthScreenProps> = ({ onAuthenticated, onBack }) => 
   return (
     <div className="sahaas min-h-dvh grid lg:grid-cols-2">
       <aside className="hidden lg:flex flex-col justify-between p-12 bg-surface border-r border-line">
-        <span className="text-[15px] font-extrabold tracking-[0.2em]">SAHAAS <span className="ml-1 font-semibold tracking-normal text-ink-2">counsellor</span></span>
+        <span className="text-[15px] font-extrabold tracking-[0.2em]">SAAHAS <span className="ml-1 font-semibold tracking-normal text-ink-2">counsellor</span></span>
         <div className="max-w-[420px]">
           <h2 className="text-[28px] leading-[1.2] font-semibold">See who needs you first, and why.</h2>
           <ul className="mt-6 flex flex-col gap-3 text-[15px] text-ink-2">
@@ -300,7 +300,7 @@ const StaffSignIn: React.FC<AuthScreenProps> = ({ onAuthenticated, onBack }) => 
       </aside>
       <main className="flex flex-col justify-center px-4 sm:px-6 py-10">
         <form onSubmit={submit} className="w-full max-w-[400px] mx-auto flex flex-col gap-6" noValidate>
-          <div className="lg:hidden text-[15px] font-extrabold tracking-[0.2em]">SAHAAS <span className="ml-1 font-semibold tracking-normal text-ink-2">counsellor</span></div>
+          <div className="lg:hidden text-[15px] font-extrabold tracking-[0.2em]">SAAHAS <span className="ml-1 font-semibold tracking-normal text-ink-2">counsellor</span></div>
           <div>
             <span className="inline-flex items-center gap-2 text-sm font-semibold text-ink-2">
               <BriefcaseMedical className="w-4 h-4" aria-hidden /> For counsellors and case workers
@@ -316,10 +316,10 @@ const StaffSignIn: React.FC<AuthScreenProps> = ({ onAuthenticated, onBack }) => 
             Sign in
           </Button>
           <p className="text-sm text-ink-2">
-            No account yet? A colleague who already uses SAHAAS can add you from <strong className="text-ink">Settings → Team</strong>.
+            No account yet? A colleague who already uses SAAHAS can add you from <strong className="text-ink">Settings → Team</strong>.
           </p>
           <Button variant="ghost" onClick={onBack}>
-            Not a counsellor? Go to the SAHAAS app
+            Not a counsellor? Go to the SAAHAS app
           </Button>
         </form>
       </main>

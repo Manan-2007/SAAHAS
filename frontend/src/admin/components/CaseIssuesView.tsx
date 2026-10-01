@@ -19,7 +19,7 @@ const STATUS_STYLE: Record<IssueStatus, { label: string; color: string; bg: stri
   dismissed: { label: 'Dismissed', ...TONE.neutral },
 };
 
-const errorText = (err: unknown) => (err instanceof ApiError ? err.message : "Can't reach the SAHAAS backend.");
+const errorText = (err: unknown) => (err instanceof ApiError ? err.message : "Can't reach the SAAHAS backend.");
 
 let legalCache: LegalActions | null = null;
 function useLegal() {

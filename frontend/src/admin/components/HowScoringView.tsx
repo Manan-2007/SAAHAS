@@ -38,7 +38,7 @@ export const HowScoringView: React.FC = () => (
   <div className="flex flex-col gap-5 max-w-4xl animate-fadeIn">
     <PageHeader
       title="How scoring works"
-      description="One 0–100 Distress Score per person, recomputed after every check-in and read against their own baseline, not a population average. Built only from what they consented to share. SAHAAS triages; you decide."
+      description="One 0–100 Distress Score per person, recomputed after every check-in and read against their own baseline, not a population average. Built only from what they consented to share. SAAHAS triages; you decide."
     />
 
     {/* Signals + weights */}
@@ -109,7 +109,7 @@ export const HowScoringView: React.FC = () => (
           <h2 className=" text-base font-bold text-ink">The calendar is the stressor</h2>
         </div>
         <p className="text-xs text-ink-2 mt-2 leading-relaxed">
-          Court dates are known in advance, so distress around them is forecastable. When a hearing is near, SAHAAS
+          Court dates are known in advance, so distress around them is forecastable. When a hearing is near, SAAHAS
           projects a <strong>predicted peak</strong> before it happens — a dotted continuation on the timeline and the
           “This Week” list — so a phone call can land before the spike, not after it.
         </p>

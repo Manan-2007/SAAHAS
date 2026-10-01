@@ -107,7 +107,7 @@ export const Chat: React.FC = () => {
             ))}
           </div>
           <p className="text-sm text-ink-2 max-w-[38ch] pt-2">
-            SAHAAS is an AI companion, not a counsellor. A real person is always one tap away, up top.
+            SAAHAS is an AI companion, not a counsellor. A real person is always one tap away, up top.
           </p>
         </section>
       )}
@@ -121,7 +121,7 @@ export const Chat: React.FC = () => {
           <Bubble key={m.id} message={m} discreet={discreet} />
         ))}
         {chat.typing && (
-          <li className="self-start rounded-card rounded-bl-[6px] bg-surface border border-line px-4 py-4 flex gap-1.5" aria-label="SAHAAS is writing">
+          <li className="self-start rounded-card rounded-bl-[6px] bg-surface border border-line px-4 py-4 flex gap-1.5" aria-label="SAAHAS is writing">
             {[0, 1, 2].map((i) => (
               <span key={i} className="dot-breath w-2 h-2 rounded-full bg-ink-2" style={{ animationDelay: `${i * 0.18}s` }} />
             ))}
@@ -131,7 +131,7 @@ export const Chat: React.FC = () => {
 
       {chat.offline && (
         <Notice tone="offline" action={<Button variant="ghost" onClick={() => navigate('support')}>{t('nav.support')}</Button>}>
-          SAHAAS can’t be reached right now. If you need a person, your counsellor and the free helplines are always in Support.
+          SAAHAS can’t be reached right now. If you need a person, your counsellor and the free helplines are always in Support.
         </Notice>
       )}
       {chat.notice && <Notice tone="info">{chat.notice}</Notice>}
@@ -212,7 +212,7 @@ const Bubble: React.FC<{ message: ChatMessage; discreet: boolean }> = ({ message
 
   return (
     <li className={`soft-fade flex flex-col gap-1 max-w-[86%] ${mine ? 'self-end items-end' : 'self-start items-start'}`}>
-      <span className="sr-only">{mine ? 'You said' : 'SAHAAS said'}:</span>
+      <span className="sr-only">{mine ? 'You said' : 'SAAHAS said'}:</span>
       <div
         tabIndex={discreet ? 0 : undefined}
         onClick={() => discreet && setRevealed((r) => !r)}

@@ -95,7 +95,7 @@ const LEVEL_DOT: Record<Alert['level'], string> = {
 const when = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
-const errorText = (err: unknown) => (err instanceof ApiError ? err.message : "Can't reach the SAHAAS backend.");
+const errorText = (err: unknown) => (err instanceof ApiError ? err.message : "Can't reach the SAAHAS backend.");
 
 const CARD = 'bg-surface rounded-tile p-5 border border-line';
 
@@ -531,7 +531,7 @@ export const CaseDetailView: React.FC<CaseDetailViewProps> = ({
                         />
                         <span>
                           <strong>Victim has been given notice (s.15A).</strong> Notice before a bail or parole hearing is
-                          mandatory; if it isn't recorded and the hearing is within 7 days, SAHAAS raises a legal alert.
+                          mandatory; if it isn't recorded and the hearing is within 7 days, SAAHAS raises a legal alert.
                         </span>
                       </label>
                     )}
